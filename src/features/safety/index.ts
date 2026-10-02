@@ -1,1 +1,1 @@
-export {};
+export { TeacherGuide } from './TeacherGuide';

@@ -1,0 +1,319 @@
+.board-tabs .ui-tabs-list {
+  display: grid;
+  width: 100%;
+  height: 56px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.board-tabs .ui-tabs-trigger {
+  display: flex;
+  min-width: 80px;
+  height: 56px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  border-bottom: 2px solid var(--color-border-default);
+  color: #000000;
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 24px;
+  text-align: center;
+}
+
+.board-tabs .ui-tabs-trigger.is-active {
+  border-bottom-color: var(--color-border-strong);
+}
+
+.board-tabs .ui-tabs-panel {
+  outline: 0;
+}
+
+.board-tab-label {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.board-tab-label span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-tab-label span:last-child {
+  display: grid;
+  min-width: 24px;
+  height: 24px;
+  place-items: center;
+  padding: 0 7px;
+  border-radius: 8px;
+  background: var(--color-bg-canvas);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.board-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  margin-top: 33px;
+}
+
+.board-filter-select {
+  width: 204px;
+  min-width: 204px;
+}
+
+.board-filter-select .ui-dropdown-button,
+.board-search-field .ui-input-shell {
+  height: 47px;
+  min-height: 47px;
+  border: var(--border-default);
+  border-radius: 8px;
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-size: 16px;
+  font-weight: 400;
+}
+
+.board-filter-select .ui-dropdown-button {
+  gap: 10px;
+  padding: 0 18px;
+}
+
+.board-filter-select .ui-dropdown-value {
+  flex: 1 0 auto;
+  min-width: max-content;
+  overflow: visible;
+}
+
+.board-filter-select .ui-dropdown-button:hover {
+  background: var(--color-bg-canvas);
+}
+
+.board-filter-select .ui-dropdown-option.is-selected {
+  background: transparent;
+}
+
+.board-filter-select .ui-dropdown-option:hover,
+.board-filter-select .ui-dropdown-option:focus-visible,
+.board-filter-select .ui-dropdown-option.is-selected:hover,
+.board-filter-select .ui-dropdown-option.is-selected:focus-visible {
+  background: var(--color-bg-canvas);
+}
+
+.board-search-field {
+  width: 300px;
+}
+
+.board-search-field .ui-input-shell {
+  padding: 0 20px;
+}
+
+.board-search-field .ui-field-icon {
+  width: 17px;
+  height: 16px;
+}
+
+.board-search-field .ui-field-control::placeholder {
+  color: var(--color-text-primary);
+}
+
+.board-thread-list {
+  display: grid;
+  width: 100%;
+  margin-top: 48px;
+}
+
+.board-thread-row {
+  display: grid;
+  min-height: 112px;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 20px;
+  border-top: 0.7px solid var(--color-border-default);
+}
+
+.board-thread-row:last-child {
+  border-bottom: 0.7px solid var(--color-border-default);
+}
+
+.board-thread-star-button {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  color: var(--color-border-default);
+}
+
+.board-thread-star {
+  width: 24px;
+  height: 24px;
+  color: currentcolor;
+}
+
+.board-thread-star.is-filled {
+  color: var(--color-yellow-2);
+}
+
+.board-thread-button {
+  display: grid;
+  min-width: 0;
+  min-height: 112px;
+  grid-template-columns: minmax(238px, 264px) minmax(320px, 1fr) 94px 164px;
+  align-items: center;
+  gap: 16px;
+  padding: 0 16px 0 0;
+  border-radius: 8px;
+  color: inherit;
+  text-align: left;
+}
+
+.board-thread-button:hover,
+.board-thread-button.is-selected {
+  background: var(--color-bg-canvas);
+}
+
+.board-thread-parent {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 80px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+}
+
+.board-avatar {
+  width: 80px;
+  height: 80px;
+  flex: 0 0 auto;
+}
+
+.board-parent-copy,
+.board-thread-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.board-parent-copy strong,
+.board-thread-copy strong,
+.board-card-profile strong,
+.board-card-topic strong {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 24px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-parent-copy span,
+.board-thread-copy > span:not(.board-thread-title-row),
+.board-card-profile small,
+.board-card-topic span {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-thread-title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.board-thread-title-row > strong {
+  min-width: 0;
+}
+
+.board-thread-title-dot {
+  width: 2px;
+  height: 2px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #484848;
+}
+
+.board-thread-attention-alert {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  gap: 6px;
+  color: #fd2d27;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 19px;
+  white-space: nowrap;
+}
+
+.board-thread-attention-icon {
+  display: grid;
+  width: 23px;
+  height: 20px;
+  flex: 0 0 auto;
+  place-items: center;
+}
+
+.board-thread-attention-icon svg {
+  width: 23px;
+  height: 20px;
+}
+
+.board-thread-status {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+}
+
+.board-status-chip {
+  width: 83px;
+  height: 37px;
+  min-width: 83px;
+  min-height: 37px;
+  padding: 0 8px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.board-status-chip.ui-status-chip--pending {
+  color: var(--color-text-primary);
+  background: var(--color-bg-canvas);
+}
+
+.board-status-chip.ui-status-chip--progress {
+  color: var(--color-text-primary);
+  background: var(--color-primary-subtle);
+}
+
+.board-status-chip.ui-status-chip--complete {
+  color: var(--color-text-inverse);
+  background: var(--color-primary);
+}
+
+.board-thread-time {
+  color: var(--color-text-secondary);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.board-empty-state {
+  width: 100%;
+  margin-top: 63px;
+  padding: 36px 20px;
+  border-top: 0.7px solid var(--color-border-default);
+  border-bottom: 0.7px solid var(--color-border-default);
+}

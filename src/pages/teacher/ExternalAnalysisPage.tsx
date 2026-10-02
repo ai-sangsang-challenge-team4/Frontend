@@ -1,9 +1,5 @@
-import { PageHeader } from '../../shared/components';
+import { TeacherGuide } from '../../features/safety';
 
 export function ExternalAnalysisPage() {
-  return (
-    <section className="page">
-      <PageHeader eyebrow="Teacher" title="외부 메시지 분석" />
-    </section>
-  );
+  return <TeacherGuide />;
 }

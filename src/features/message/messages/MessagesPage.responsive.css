@@ -1,0 +1,407 @@
+@media (max-width: 1240px) {
+  .board-list-page,
+  .board-detail-page {
+    padding-right: 24px;
+    padding-left: 48px;
+  }
+
+  .board-list-panel,
+  .board-detail {
+    width: 100%;
+  }
+
+  .board-thread-button {
+    grid-template-columns: minmax(228px, 248px) minmax(240px, 1fr) 94px 142px;
+    gap: 14px;
+  }
+}
+
+@media (max-width: 980px) {
+  .board-inbox-page,
+  .board-inbox-page.is-sidebar-collapsed {
+    grid-template-columns: 1fr;
+  }
+
+  .board-list-page,
+  .board-detail-page {
+    padding: 48px 24px 72px;
+  }
+
+  .board-list-panel {
+    margin-top: 40px;
+  }
+
+  .board-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .board-thread-row {
+    grid-template-columns: 32px minmax(0, 1fr);
+    gap: 16px;
+    padding: 16px 0;
+  }
+
+  .board-thread-button {
+    min-height: auto;
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .board-thread-status {
+    display: flex;
+    align-items: center;
+  }
+
+  .board-thread-time {
+    text-align: left;
+  }
+
+  .board-parent-card {
+    grid-template-columns: 1fr;
+  }
+
+  .board-detail-page-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .board-page-nav {
+    flex-wrap: wrap;
+    white-space: normal;
+  }
+
+  .board-risk-section-header,
+  .board-risk-review-footer,
+  .board-student-safety-row,
+  .board-original-viewer-info,
+  .board-original-viewer-header,
+  .board-reply-compose-actions,
+  .board-reply-compose-actions > div,
+  .board-reply-context-heading,
+  .board-reply-compose-header,
+  .board-reply-bottom-actions,
+  .board-composer-action-group,
+  .board-risk-lock-review {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .board-reply-check-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .board-reply-check-toggle {
+    width: 100%;
+  }
+
+  .board-reply-check-content {
+    grid-template-columns: 1fr;
+    row-gap: 22px;
+  }
+
+  .board-reply-check-content article {
+    grid-row: auto;
+    grid-column: 1;
+    min-height: auto;
+    padding: 0 0 22px;
+    border-right: 0;
+    border-bottom: 1px solid var(--color-border-default);
+  }
+
+  .board-reply-check-content::before,
+  .board-reply-check-content::after {
+    display: none;
+  }
+
+  .board-reply-check-content article:last-child {
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+
+  .board-risk-guide-copy {
+    grid-template-columns: 25px minmax(0, 1fr) max-content;
+  }
+
+  .board-risk-guide-button {
+    grid-column: 3;
+    justify-self: end;
+  }
+
+  .board-activity-list li {
+    grid-template-columns: 140px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 620px) {
+  .board-list-page,
+  .board-detail-page {
+    padding: 36px 16px 56px;
+  }
+
+  .board-tabs .ui-tabs-list {
+    height: auto;
+    grid-template-columns: 1fr;
+  }
+
+  .board-tabs .ui-tabs-trigger {
+    height: 48px;
+  }
+
+  .board-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .board-detail {
+    gap: 32px;
+  }
+
+  .board-detail-tabs {
+    height: auto;
+    grid-template-columns: 1fr;
+  }
+
+  .board-detail-tabs button {
+    height: 48px;
+    font-size: 18px;
+  }
+
+  .board-filter-select,
+  .board-search-field {
+    width: 100%;
+  }
+
+  .board-confirm-modal-content {
+    padding-right: 28px;
+    padding-left: 28px;
+  }
+
+  .board-detail-heading,
+  .board-answer-box.is-locked,
+  .board-moderation-card,
+  .board-answer-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .board-answer-box.is-locked {
+    grid-template-columns: 1fr;
+  }
+
+  .board-risk-review-button {
+    width: 100%;
+    justify-self: stretch;
+  }
+
+  .board-conversation {
+    --board-conversation-x-padding: 20px;
+    --board-chat-edge-offset: 0px;
+
+    padding: 20px;
+  }
+
+  .board-reply-row {
+    max-width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .board-moderation-row {
+    flex-direction: column;
+    align-items: flex-start;
+    margin-left: 0;
+  }
+
+  .board-moderation-card {
+    width: 100%;
+  }
+
+  .board-reply-parent .board-reply-row {
+    margin-left: 0;
+  }
+
+  .board-reply-teacher .board-reply-row {
+    align-items: flex-end;
+  }
+
+  .board-reply-teacher .board-reply-bubble,
+  .board-reply-parent .board-reply-bubble {
+    width: 100%;
+  }
+
+  .board-risk-guide,
+  .board-risk-evidence-panel,
+  .board-risk-workflow-panel,
+  .board-original-viewer-panel,
+  .board-activity-panel,
+  .board-student-safety-card,
+  .board-reply-check-panel,
+  .board-reply-context-panel,
+  .board-reply-helper-panel,
+  .board-reply-compose-panel,
+  .board-risk-review-panel,
+  .board-risk-lock-review {
+    padding: 20px;
+  }
+
+  .board-risk-review-panel {
+    gap: 36px;
+  }
+
+  .board-risk-review-slider {
+    --board-risk-review-thumb-size: 34px;
+  }
+
+  .board-risk-review-control,
+  .board-risk-review-range,
+  .board-risk-review-range::-webkit-slider-runnable-track,
+  .board-risk-review-range::-moz-range-track {
+    height: 38px;
+  }
+
+  .board-risk-review-thumb {
+    top: 2px;
+    width: 34px;
+    height: 34px;
+  }
+
+  .board-risk-review-range::-webkit-slider-thumb {
+    width: 34px;
+    height: 34px;
+  }
+
+  .board-risk-review-range::-moz-range-thumb {
+    width: 34px;
+    height: 34px;
+  }
+
+  .board-risk-review-textarea-shell {
+    padding: 18px 20px;
+  }
+
+  .board-risk-lock-review p,
+  .board-risk-lock-actions {
+    padding-left: 0;
+  }
+
+  .board-risk-guide-copy {
+    grid-template-columns: 25px minmax(0, 1fr);
+    column-gap: 16px;
+    font-size: 18px;
+    line-height: 28px;
+  }
+
+  .board-risk-guide-copy > strong {
+    line-height: 28px;
+  }
+
+  .board-risk-section-header h2 {
+    line-height: 28px;
+  }
+
+  .board-risk-guide-button {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+    justify-self: stretch;
+    margin-top: 8px;
+  }
+
+  .board-risk-guide-copy > span,
+  .board-risk-guide-procedure {
+    grid-column: 1 / -1;
+  }
+
+  .board-original-viewer {
+    gap: 24px;
+  }
+
+  .board-original-viewer-panel {
+    gap: 24px;
+  }
+
+  .board-original-viewer-info p,
+  .board-original-viewer-message,
+  .board-original-risk-detail strong,
+  .board-original-risk-detail p {
+    font-size: 18px;
+    line-height: 30px;
+  }
+
+  .board-original-risk-evidence .board-original-highlight {
+    font-size: 18px;
+    line-height: 1.25;
+  }
+
+  .board-original-viewer-message {
+    padding: 22px 20px;
+  }
+
+  .board-original-risk-detail {
+    padding-left: 0;
+  }
+
+  .board-activity-list li {
+    grid-template-columns: 1fr;
+  }
+
+  .board-risk-factor-accordion .ui-accordion-trigger {
+    min-height: 144px;
+    align-items: flex-start;
+  }
+
+  .board-risk-factor-title {
+    grid-template-columns: 25px minmax(0, 1fr);
+  }
+
+  .board-risk-factor-accordion .ui-accordion-panel {
+    margin-left: 45px;
+  }
+
+  .board-risk-guide-button,
+  .board-risk-section-header .board-outline-button,
+  .board-original-risk-toggle,
+  .board-student-safety-row .board-risk-action-button,
+  .board-risk-review-submit,
+  .board-risk-recheck-button,
+  .board-reply-compose-button,
+  .board-reply-compose-actions button,
+  .board-reply-send-button,
+  .board-reference-button,
+  .board-composer-action-button {
+    width: 100%;
+  }
+
+  .board-reply-check-alert {
+    align-items: flex-start;
+  }
+
+  .board-reply-check-alert p {
+    font-size: 18px;
+    line-height: 28px;
+  }
+
+  .board-reply-check-content {
+    padding: 20px;
+  }
+
+  .board-reply-compose-panel--ai textarea {
+    min-height: 260px;
+  }
+
+  .board-reply-bottom-actions {
+    padding-top: 2px;
+  }
+
+  .board-composer-action-group {
+    gap: 8px;
+  }
+
+  .board-composer-action-button,
+  .board-composer-action-button--primary {
+    height: 42px;
+    font-size: 14px;
+    line-height: 20px;
+  }
+}

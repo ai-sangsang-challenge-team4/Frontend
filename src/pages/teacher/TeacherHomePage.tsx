@@ -1,9 +1,5 @@
-import { PageHeader } from '../../shared/components';
+import { Navigate } from 'react-router-dom';
 
 export function TeacherHomePage() {
-  return (
-    <section className="page">
-      <PageHeader eyebrow="Teacher" title="교사 홈" />
-    </section>
-  );
+  return <Navigate to="/teacher/messages" replace />;
 }

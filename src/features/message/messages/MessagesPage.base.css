@@ -1,0 +1,78 @@
+.board-inbox-page {
+  --board-content-left: 100px;
+  --board-content-max: 1188px;
+  --board-content-right: 56px;
+  --board-page-header-height: 36px;
+  --board-page-top-offset: 88px;
+  --board-sidebar-width: 297px;
+
+  display: grid;
+  width: 100%;
+  min-height: 1015px;
+  grid-template-columns: var(--board-sidebar-width) minmax(0, 1fr);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-family:
+    Pretendard, Inter, ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+  transition: grid-template-columns 200ms ease;
+}
+
+.board-inbox-page.is-sidebar-collapsed {
+  --board-content-left: 72px;
+  --board-sidebar-width: 100px;
+}
+
+.board-inbox-page,
+.board-inbox-page *,
+.board-inbox-page *::before,
+.board-inbox-page *::after {
+  box-sizing: border-box;
+}
+
+.board-avatar,
+.board-mini-avatar {
+  display: block;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.board-list-page,
+.board-detail-page {
+  min-width: 0;
+  padding-left: var(--board-content-left);
+  transition: padding-left 200ms ease;
+}
+
+.board-list-page {
+  padding-top: var(--board-page-top-offset);
+}
+
+.board-detail-page {
+  padding-top: var(--board-page-top-offset);
+  padding-right: var(--board-content-right);
+  padding-bottom: 72px;
+}
+
+.board-page-title {
+  display: flex;
+  min-height: var(--board-page-header-height);
+  align-items: center;
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 36px;
+}
+
+.board-list-panel {
+  width: min(
+    var(--board-content-max),
+    calc(
+      100vw - var(--board-sidebar-width) - var(--board-content-left)
+        - var(--board-content-right)
+    )
+  );
+  margin-top: 48px;
+  transition: width 200ms ease;
+}

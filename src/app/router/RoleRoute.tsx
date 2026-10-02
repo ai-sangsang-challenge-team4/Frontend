@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
+import { getDefaultRolePath, useAuth } from '../../features/auth/mockAuth';
 import type { UserRole } from '../../shared/types';
 
 type RoleRouteProps = {

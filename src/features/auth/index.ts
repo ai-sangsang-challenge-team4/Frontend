@@ -1,1 +1,1 @@
-export {};
+export { TeacherSettingsPanel } from './TeacherSettingsPanel';
