@@ -1,0 +1,61 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+language: "ko-KR"
+tone_instructions: "한국어로 간결하고 실무적인 톤으로 리뷰합니다. 중요한 버그, 접근성, 타입 안정성, 사용자 경험 이슈를 우선합니다."
+
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  review_details: true
+  changed_files_summary: true
+  sequence_diagrams: false
+
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - "dev"
+    ignore_title_keywords:
+      - "WIP"
+      - "[skip review]"
+
+  path_filters:
+    - "!dist/**"
+    - "!build/**"
+    - "!coverage/**"
+    - "!node_modules/**"
+    - "!.vite/**"
+    - "!*.tsbuildinfo"
+    - "!package-lock.json"
+    - "!**/*.png"
+    - "!**/*.jpg"
+    - "!**/*.jpeg"
+    - "!**/*.gif"
+    - "!**/*.webp"
+    - "!**/*.svg"
+
+  path_instructions:
+    - path: "src/**/*.tsx"
+      instructions: "React 19, TypeScript, Vite 기반 컴포넌트입니다. 기존 컴포넌트 구조와 스타일 규칙을 우선하고, props와 상태의 타입 안정성, 조건부 렌더링, 접근성 속성, 키보드 사용성, 불필요한 리렌더링 가능성을 함께 확인합니다."
+    - path: "src/**/*.ts"
+      instructions: "불필요한 any, 암묵적인 런타임 가정, 처리되지 않은 에러, 사용하지 않는 코드, 브라우저 환경에서 깨질 수 있는 API 사용 여부를 확인합니다."
+    - path: "src/**/*.css"
+      instructions: "전역 CSS와 컴포넌트 CSS가 함께 쓰이는 구조입니다. 기존 색상/간격 톤과 반응형 규칙을 우선하고, 텍스트 겹침, 모바일 폭 깨짐, 접근성 대비, 과도한 specificity, 불필요한 중첩 카드 스타일을 중점적으로 확인합니다."
+    - path: "vite.config.ts"
+      instructions: "Vite 개발 서버와 React 플러그인 설정입니다. 로컬 개발 편의성과 배포 빌드에 영향을 주는 변경인지 확인하고, dev server host/port 변경은 의도와 보안 영향을 함께 검토합니다."
+    - path: "eslint.config.js"
+      instructions: "Flat config 기반 ESLint 설정입니다. TypeScript/React Hooks/React Refresh 규칙이 유지되는지 확인하고, lint 범위나 ignore 변경이 실제 코드 품질 검사를 약화하지 않는지 검토합니다."
+    - path: "package.json"
+      instructions: "React 19, TypeScript, Vite 프로젝트의 의존성과 스크립트입니다. 새 의존성의 필요성, 보안/유지보수 리스크, npm script가 README와 CI 흐름에 맞는지 확인합니다."
+
+  tools:
+    eslint:
+      enabled: true
+      config_file: "eslint.config.js"
+
+chat:
+  auto_reply: true
+  art: false
