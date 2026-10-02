@@ -8,7 +8,9 @@ export function AdminLayout() {
           Admin
         </NavLink>
         <nav className="role-nav" aria-label="관리자 메뉴">
-          <NavLink to="/admin">홈</NavLink>
+          <NavLink end to="/admin">
+            홈
+          </NavLink>
           <NavLink to="/admin/messages">공유 메시지</NavLink>
         </nav>
       </aside>
