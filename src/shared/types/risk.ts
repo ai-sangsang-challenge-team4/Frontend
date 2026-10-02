@@ -1,0 +1,13 @@
+export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'EMERGENCY';
+
+export type RiskTagCode =
+  | 'EMOTIONAL_EXPRESSION'
+  | 'PERSONAL_ATTACK'
+  | 'THREAT'
+  | 'LEGAL_ADMINISTRATIVE_ACTION'
+  | 'PUBLIC_DISCLOSURE_THREAT'
+  | 'REPETITION'
+  | 'UNREASONABLE_DEMAND'
+  | 'PERSONAL_INFORMATION_RISK';
+
+export type RiskFactorStatus = 'PRESENT' | 'ABSENT' | 'BOUNDARY' | 'UNKNOWN';
