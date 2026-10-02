@@ -73,6 +73,24 @@
   background: #152033;
 }
 
+.text-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  border: 1px solid #d0d7e2;
+  border-radius: 8px;
+  padding: 0 14px;
+  background: #ffffff;
+  color: #364152;
+  font-weight: 800;
+}
+
+.text-button:hover {
+  border-color: #aeb9c8;
+  color: #111827;
+}
+
 .app-shell__content {
   width: min(100%, 1120px);
   margin: 0 auto;
@@ -96,6 +114,28 @@
   border-right: 1px solid #e0e4ea;
   padding: 28px 20px;
   background: #ffffff;
+}
+
+.role-sidebar__footer {
+  display: grid;
+  gap: 12px;
+  margin-top: auto;
+}
+
+.role-user {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  color: #111827;
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.role-user span:last-child {
+  color: #667085;
+  font-size: 0.82rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
 .role-nav {
@@ -166,6 +206,95 @@
   font-weight: 700;
 }
 
+.auth-page {
+  display: grid;
+  gap: 28px;
+}
+
+.auth-form {
+  display: grid;
+  max-width: 560px;
+  gap: 18px;
+}
+
+.auth-fieldset {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.auth-fieldset legend,
+.auth-field span {
+  color: #364152;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.auth-role-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.auth-role-option {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  border: 1px solid #d9e0e8;
+  border-radius: 8px;
+  padding: 14px;
+  background: #ffffff;
+  color: #364152;
+}
+
+.auth-role-option--selected {
+  border-color: #253347;
+  background: #f0f3f7;
+  color: #111827;
+}
+
+.auth-role-option input {
+  accent-color: #253347;
+}
+
+.auth-role-option__title {
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.auth-role-option__meta {
+  color: #667085;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.auth-field {
+  display: grid;
+  gap: 8px;
+}
+
+.auth-field input {
+  min-height: 44px;
+  min-width: 0;
+  border: 1px solid #ccd5df;
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #ffffff;
+  color: #111827;
+}
+
+.auth-field input:focus {
+  border-color: #253347;
+  outline: 3px solid rgba(37, 51, 71, 0.14);
+}
+
+.auth-submit {
+  width: fit-content;
+}
+
 @media (max-width: 760px) {
   .topbar {
     min-height: auto;
@@ -208,5 +337,9 @@
 
   .page-header h1 {
     font-size: 1.9rem;
+  }
+
+  .auth-role-grid {
+    grid-template-columns: 1fr;
   }
 }
