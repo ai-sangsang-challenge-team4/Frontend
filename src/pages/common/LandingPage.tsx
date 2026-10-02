@@ -1,7 +1,18 @@
-import { Link } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { getDefaultRolePath, useAuth } from '../../features/auth';
 import { PageHeader } from '../../shared/components';
 
 export function LandingPage() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (user) {
+      navigate(getDefaultRolePath(user.role), { replace: true });
+    }
+  }, [navigate, user]);
+
   return (
     <section className="page page--center">
       <PageHeader
