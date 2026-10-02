@@ -17,9 +17,13 @@ export function ParentLayout() {
           Parent
         </NavLink>
         <nav className="role-nav" aria-label="학부모 메뉴">
-          <NavLink to="/parent">홈</NavLink>
+          <NavLink end to="/parent">
+            홈
+          </NavLink>
           <NavLink to="/parent/messages/new">메시지 작성</NavLink>
-          <NavLink to="/parent/messages">메시지 이력</NavLink>
+          <NavLink end to="/parent/messages">
+            메시지 이력
+          </NavLink>
         </nav>
         <div className="role-sidebar__footer">
           {user ? (
