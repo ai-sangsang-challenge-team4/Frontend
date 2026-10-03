@@ -15,10 +15,12 @@ import { MessageHistoryPage } from '../../pages/parent/MessageHistoryPage';
 import { MessageReviewPage } from '../../pages/parent/MessageReviewPage';
 import { MessageWritePage } from '../../pages/parent/MessageWritePage';
 import { ParentHomePage } from '../../pages/parent/ParentHomePage';
+import { AdminSharePage as TeacherAdminSharePage } from '../../pages/teacher/AdminSharePage';
 import { ExternalAnalysisPage } from '../../pages/teacher/ExternalAnalysisPage';
 import { MessageDetailPage as TeacherMessageDetailPage } from '../../pages/teacher/MessageDetailPage';
 import { MessageListPage } from '../../pages/teacher/MessageListPage';
 import { ResponseWritePage } from '../../pages/teacher/ResponseWritePage';
+import { SettingsPage as TeacherSettingsPage } from '../../pages/teacher/SettingsPage';
 import { TeacherHomePage } from '../../pages/teacher/TeacherHomePage';
 import { ProtectedRoute } from './ProtectedRoute';
 import { RoleRoute } from './RoleRoute';
@@ -64,7 +66,10 @@ export function AppRouter() {
         <Route path="messages" element={<MessageListPage />} />
         <Route path="messages/:messageId" element={<TeacherMessageDetailPage />} />
         <Route path="messages/:messageId/response" element={<ResponseWritePage />} />
-        <Route path="external-analysis" element={<ExternalAnalysisPage />} />
+        <Route path="guide" element={<ExternalAnalysisPage />} />
+        <Route path="admin-share" element={<TeacherAdminSharePage />} />
+        <Route path="settings" element={<TeacherSettingsPage />} />
+        <Route path="external-analysis" element={<Navigate to="/teacher/guide" replace />} />
         <Route path="*" element={<Navigate to="/teacher" replace />} />
       </Route>
 

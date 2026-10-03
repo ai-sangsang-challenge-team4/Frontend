@@ -7,7 +7,6 @@ type ProtectedRouteProps = {
 };
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  // TODO: 서버 인증 연동 전까지 보호된 라우트에 실제 데이터를 노출하지 않는다.
   const { isAuthenticated } = useAuth();
   const location = useLocation();
 

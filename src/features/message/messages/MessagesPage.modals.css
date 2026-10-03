@@ -1,0 +1,126 @@
+.board-primary-button {
+  display: grid;
+  width: 83px;
+  height: 37px;
+  min-height: 37px;
+  place-items: center;
+  padding: 4px 6px;
+  border-radius: 8px;
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+}
+
+.board-primary-button:disabled {
+  background: var(--color-bg-canvas);
+  color: var(--color-text-muted);
+}
+
+.board-confirm-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(58 58 58 / 40%);
+}
+
+.board-confirm-modal {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  width: min(400px, calc(100vw - 32px));
+  min-height: 180px;
+  max-height: calc(100vh - 32px);
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--color-bg-canvas);
+  box-shadow: var(--shadow-sm);
+}
+
+.board-confirm-modal-content {
+  display: grid;
+  min-height: 124px;
+  place-items: center;
+  overflow: auto;
+  padding: 48px 40px 22px;
+}
+
+.board-confirm-modal-title {
+  margin: 0;
+  color: #000000;
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.board-confirm-modal-copy {
+  margin: 0;
+  color: #000000;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.55;
+  text-align: center;
+  word-break: keep-all;
+}
+
+.board-confirm-modal-close {
+  position: absolute;
+  top: 18px;
+  right: 14px;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: var(--radius-xs);
+  color: var(--color-border-default);
+}
+
+.board-confirm-modal-close:hover {
+  background: var(--color-border-divider);
+  color: var(--color-text-secondary);
+}
+
+.board-confirm-modal-close svg {
+  width: 16px;
+  height: 16px;
+}
+
+.board-confirm-modal-actions {
+  display: flex;
+  width: 100%;
+  border-top: 1px solid #f0f0f0;
+}
+
+.board-confirm-modal-action {
+  display: grid;
+  min-height: 56px;
+  flex: 1 1 0;
+  place-items: center;
+  padding: 12px 16px;
+  color: var(--color-text-secondary);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.board-confirm-modal-action + .board-confirm-modal-action {
+  border-left: 1px solid #f0f0f0;
+}
+
+.board-confirm-modal-action:hover {
+  background: #f0f0f0;
+}
+
+.board-confirm-modal-action--danger {
+  color: var(--color-text-danger);
+}
+
+.board-confirm-modal-action--primary {
+  color: var(--color-primary);
+}

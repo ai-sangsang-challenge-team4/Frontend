@@ -1,1 +1,1 @@
-export {};
+export { TeacherMessages } from './TeacherMessages';

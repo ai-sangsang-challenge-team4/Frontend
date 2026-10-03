@@ -1,1 +1,1 @@
-export {};
+export { AdminSharePanel } from './AdminSharePanel';
