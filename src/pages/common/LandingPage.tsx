@@ -20,15 +20,15 @@ export function LandingPage() {
         title="학부모 메시지부터 교사 응답까지 한 흐름으로 관리합니다"
         description="역할별 화면과 공통 메시지 도메인을 하나의 앱에서 다룹니다."
       />
-      <div className="action-row" aria-label="역할별 시작 경로">
-        <Link className="button-link" to="/parent">
-          학부모
+      <div className="action-row landing-actions" aria-label="서비스 시작 경로">
+        <Link className="button-link" to="/signup?role=PARENT">
+          학부모로 시작
         </Link>
-        <Link className="button-link" to="/teacher">
-          교사
+        <Link className="button-link" to="/signup?role=TEACHER">
+          교사로 시작
         </Link>
-        <Link className="button-link" to="/admin">
-          관리자
+        <Link className="text-button" to="/login">
+          로그인
         </Link>
       </div>
     </section>

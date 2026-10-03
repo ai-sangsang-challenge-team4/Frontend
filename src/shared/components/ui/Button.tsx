@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import { NavLink, type NavLinkProps } from 'react-router-dom';
 import { classNames } from './classNames';
 
 export type ButtonVariant =
@@ -60,5 +61,32 @@ export function Button({
         </span>
       ) : null}
     </button>
+  );
+}
+
+export type ButtonLinkProps = Omit<NavLinkProps, 'children' | 'className'> &
+  Pick<ButtonProps, 'children' | 'className' | 'fullWidth' | 'size' | 'variant'>;
+
+export function ButtonLink({
+  children,
+  className,
+  fullWidth = false,
+  size = 'md',
+  variant = 'primary',
+  ...props
+}: ButtonLinkProps) {
+  return (
+    <NavLink
+      {...props}
+      className={classNames(
+        'ui-button',
+        `ui-button--${variant}`,
+        `ui-button--${size}`,
+        fullWidth && 'ui-button--full',
+        className,
+      )}
+    >
+      <span className="ui-button-label">{children}</span>
+    </NavLink>
   );
 }

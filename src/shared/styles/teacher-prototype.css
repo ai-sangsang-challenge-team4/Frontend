@@ -1034,6 +1034,20 @@ ol {
   gap: var(--space-3);
 }
 
+.teacher-logout-button {
+  min-height: 40px;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-4);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.teacher-logout-button:hover {
+  background: var(--color-bg-canvas);
+}
+
 .messages-page {
   display: grid;
 }

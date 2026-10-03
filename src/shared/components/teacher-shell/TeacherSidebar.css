@@ -152,7 +152,7 @@
 
 .sidebar-link-label,
 .sidebar-badge,
-.sidebar-profile span:last-child {
+.sidebar-profile-copy {
   opacity: 1;
 }
 
@@ -212,9 +212,9 @@
   object-fit: cover;
 }
 
-.sidebar-profile span:last-child {
+.sidebar-profile-copy {
   display: grid;
-  gap: 9px;
+  gap: 6px;
   justify-self: start;
 }
 
@@ -233,12 +233,45 @@
   white-space: nowrap;
 }
 
-.sidebar-shell.is-collapsed .sidebar-profile span:last-child {
+.sidebar-logout-button {
+  width: fit-content;
+  min-height: 28px;
+  padding: 0;
+  color: var(--color-primary);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.sidebar-logout-button:hover {
+  color: var(--color-primary-active);
+}
+
+.sidebar-mobile-logout.ui-button {
+  display: none;
+}
+
+.sidebar-profile-logout.ui-button {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  justify-self: center;
+}
+
+.sidebar-shell.is-collapsed .sidebar-profile-copy {
   opacity: 0;
   pointer-events: none;
 }
 
 @media (max-width: 980px) {
+  .sidebar-mobile-logout.ui-button {
+    display: flex;
+    min-height: 44px;
+    margin-top: 12px;
+    margin-left: auto;
+  }
+
   .sidebar-shell {
     position: relative;
     top: auto;
@@ -350,7 +383,7 @@
     bottom: 24px;
   }
 
-  .sidebar-profile span:last-child {
+  .sidebar-profile-copy {
     gap: 5px;
   }
 
@@ -422,7 +455,7 @@
     bottom: 8px;
   }
 
-  .sidebar-profile span:last-child {
+  .sidebar-profile-copy {
     gap: 2px;
   }
 
