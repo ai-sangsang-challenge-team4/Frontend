@@ -484,7 +484,7 @@
   line-height: 20px;
 }
 
-.guide-post-attachments button {
+.guide-post-attachments a {
   display: inline-flex;
   width: 106px;
   height: 37px;
@@ -498,6 +498,7 @@
   color: var(--color-text-primary);
   font-size: 16px;
   font-weight: 500;
+  text-decoration: none;
 }
 
 .guide-post-attachments svg {

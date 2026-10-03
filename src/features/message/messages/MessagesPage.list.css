@@ -164,7 +164,7 @@
   display: grid;
   min-width: 0;
   min-height: 112px;
-  grid-template-columns: minmax(238px, 264px) minmax(320px, 1fr) 94px 164px;
+  grid-template-columns: minmax(0, 264px) minmax(0, 1fr) 94px 164px;
   align-items: center;
   gap: 16px;
   padding: 0 16px 0 0;

@@ -11,8 +11,18 @@
   }
 
   .board-thread-button {
-    grid-template-columns: minmax(228px, 248px) minmax(240px, 1fr) 94px 142px;
+    min-height: auto;
+    grid-template-columns: minmax(0, 1fr);
     gap: 14px;
+  }
+
+  .board-thread-status {
+    display: flex;
+    align-items: center;
+  }
+
+  .board-thread-time {
+    text-align: left;
   }
 }
 
@@ -39,21 +49,6 @@
     grid-template-columns: 32px minmax(0, 1fr);
     gap: 16px;
     padding: 16px 0;
-  }
-
-  .board-thread-button {
-    min-height: auto;
-    grid-template-columns: 1fr;
-    gap: 14px;
-  }
-
-  .board-thread-status {
-    display: flex;
-    align-items: center;
-  }
-
-  .board-thread-time {
-    text-align: left;
   }
 
   .board-parent-card {
@@ -100,7 +95,10 @@
     row-gap: 22px;
   }
 
-  .board-reply-check-content article {
+  .board-reply-check-content article,
+  .board-reply-check-content article:nth-of-type(1),
+  .board-reply-check-content article:nth-of-type(2),
+  .board-reply-check-content article:nth-of-type(3) {
     grid-row: auto;
     grid-column: 1;
     min-height: auto;

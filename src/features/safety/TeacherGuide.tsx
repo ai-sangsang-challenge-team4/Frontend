@@ -25,6 +25,7 @@ type GuidePostContent = {
 };
 
 type GuideAttachment = {
+  downloadUrl?: string;
   fileName: string;
   id: string;
 };
@@ -514,6 +515,15 @@ function getGuideAttachments(post: GuidePost): GuideAttachment[] {
   ];
 }
 
+function hasDownloadUrl(
+  attachment: GuideAttachment,
+): attachment is GuideAttachment & { downloadUrl: string } {
+  return (
+    typeof attachment.downloadUrl === 'string' &&
+    attachment.downloadUrl.trim().length > 0
+  );
+}
+
 function GuidePostRow({
   indexLabel,
   onSelect,
@@ -563,7 +573,7 @@ function GuidePostDetail({
   post: GuidePost;
 }) {
   const content = getGuidePostContent(post);
-  const attachments = getGuideAttachments(post);
+  const downloadableAttachments = getGuideAttachments(post).filter(hasDownloadUrl);
   const postIndex = allGuidePosts.findIndex(
     (currentPost) => currentPost.id === post.id,
   );
@@ -603,20 +613,22 @@ function GuidePostDetail({
         </section>
       </div>
 
-      <section className="guide-post-attachments" aria-label="첨부 파일">
-        <h3>첨부 파일</h3>
-        <ul>
-          {attachments.map((attachment) => (
-            <li key={attachment.id}>
-              <span>{attachment.fileName}</span>
-              <button type="button">
-                <span>다운로드</span>
-                <DownloadIcon />
-              </button>
-            </li>
-          ))}
-        </ul>
-      </section>
+      {downloadableAttachments.length > 0 ? (
+        <section className="guide-post-attachments" aria-label="첨부 파일">
+          <h3>첨부 파일</h3>
+          <ul>
+            {downloadableAttachments.map((attachment) => (
+              <li key={attachment.id}>
+                <span>{attachment.fileName}</span>
+                <a href={attachment.downloadUrl} download>
+                  <span>다운로드</span>
+                  <DownloadIcon />
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <nav className="guide-post-sibling-nav" aria-label="이전글과 다음글">
         <button
