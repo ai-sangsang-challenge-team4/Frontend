@@ -6,6 +6,7 @@ import {
   type ReactNode,
   type SVGProps,
 } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Sidebar } from '../../shared/components/teacher-shell/TeacherSidebar';
 import { SearchIcon, StarIcon } from '../../shared/components/teacher-shell/icons';
 import {
@@ -22,6 +23,7 @@ import {
   emergencyOfficialProcedurePostId,
   replyReferenceGuidePostId,
 } from '../safety/guidePostIds';
+import { useAuth } from '../auth';
 import { BufferedSummaryCard } from './components/BufferedSummaryCard';
 import {
   BreadcrumbSeparator,
@@ -2252,6 +2254,12 @@ export function TeacherMessages({
   initialThreadId = null,
   initialView = null,
 }: TeacherMessagesProps) {
+  const { logout, user } = useAuth();
+  const navigate = useNavigate();
+  const handleLogout = () => {
+    logout();
+    navigate('/login', { replace: true });
+  };
   const initialMessagesRouteState = getMessagesRouteStateFromLocation({
     initialThreadId,
     initialView,
@@ -2870,6 +2878,9 @@ export function TeacherMessages({
           defaultCollapsed={isSidebarCollapsed}
           messageCount={2}
           onCollapsedChange={setIsSidebarCollapsed}
+          onLogout={handleLogout}
+          profileMeta={user?.email}
+          profileName={user?.name}
         />
         <main className="board-detail-page">
           <ReplyComposerPage
@@ -2908,6 +2919,9 @@ export function TeacherMessages({
           defaultCollapsed={isSidebarCollapsed}
           messageCount={2}
           onCollapsedChange={setIsSidebarCollapsed}
+          onLogout={handleLogout}
+          profileMeta={user?.email}
+          profileName={user?.name}
         />
         <main className="board-detail-page">
           <ThreadDetail
@@ -2952,6 +2966,9 @@ export function TeacherMessages({
         defaultCollapsed={isSidebarCollapsed}
         messageCount={2}
         onCollapsedChange={setIsSidebarCollapsed}
+        onLogout={handleLogout}
+        profileMeta={user?.email}
+        profileName={user?.name}
       />
       <main className="board-list-page">
         <h1 className="board-page-title" id="board-page-title">

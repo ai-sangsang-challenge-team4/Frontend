@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { LogOut } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import defaultProfileImage from '../../assets/profile.png';
+import { Button } from '../ui/Button';
 import {
   SidebarCollapseIcon,
   SidebarGuideIcon,
@@ -18,6 +20,9 @@ type SidebarProps = {
   defaultCollapsed?: boolean;
   messageCount?: number;
   onCollapsedChange?: (isCollapsed: boolean) => void;
+  onLogout?: () => void;
+  profileMeta?: string;
+  profileName?: string;
 };
 
 const navItems = [
@@ -51,6 +56,9 @@ export function Sidebar({
   defaultCollapsed = true,
   messageCount = 0,
   onCollapsedChange,
+  onLogout,
+  profileMeta = 'teacher@example.com',
+  profileName = '교사 사용자',
 }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
   const isSettingsActive = activeItem === 'settings';
@@ -105,6 +113,18 @@ export function Sidebar({
         })}
       </nav>
 
+      {onLogout ? (
+        <Button
+          className="sidebar-mobile-logout"
+          leftIcon={<LogOut size={20} aria-hidden="true" />}
+          onClick={onLogout}
+          size="sm"
+          variant="ghost"
+        >
+          로그아웃
+        </Button>
+      ) : null}
+
       <div className="sidebar-divider" aria-hidden="true" />
 
       <NavLink
@@ -119,15 +139,36 @@ export function Sidebar({
       </NavLink>
 
       <div className="sidebar-profile">
-        <img
-          alt=""
-          aria-hidden="true"
-          className="sidebar-profile-avatar"
-          src={defaultProfileImage}
-        />
-        <span>
-          <strong>조예인 선생님</strong>
-          <small>숙명초등학교</small>
+        {isCollapsed && onLogout ? (
+          <Button
+            aria-label="로그아웃"
+            className="sidebar-profile-logout"
+            leftIcon={<LogOut size={20} aria-hidden="true" />}
+            onClick={onLogout}
+            size="sm"
+            title="로그아웃"
+            variant="ghost"
+          />
+        ) : (
+          <img
+            alt=""
+            aria-hidden="true"
+            className="sidebar-profile-avatar"
+            src={defaultProfileImage}
+          />
+        )}
+        <span className="sidebar-profile-copy">
+          <strong>{profileName}</strong>
+          <small>{profileMeta}</small>
+          {onLogout ? (
+            <button
+              className="sidebar-logout-button"
+              onClick={onLogout}
+              type="button"
+            >
+              로그아웃
+            </button>
+          ) : null}
         </span>
       </div>
     </aside>

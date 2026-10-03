@@ -1,84 +1,171 @@
 import { type FormEvent, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
+  getAuthErrorMessage,
   getDefaultRolePath,
-  ROLE_LABEL,
+  isValidEmail,
   useAuth,
 } from '../../features/auth';
-import { PageHeader } from '../../shared/components';
+import { PasswordField } from '../../features/auth/components';
+import { Button, TextField } from '../../shared/components/ui';
 import type { UserRole } from '../../shared/types';
 
-const ROLE_OPTIONS: UserRole[] = ['PARENT', 'TEACHER', 'ADMIN'];
+type LoginFormErrors = Partial<Record<'email' | 'password' | 'submit', string>>;
+
+type LoginLocationState = {
+  from?: string;
+  notice?: string;
+  registeredEmail?: string;
+};
 
 export function LoginPage() {
-  const [role, setRole] = useState<UserRole>('PARENT');
-  const [email, setEmail] = useState('');
-  const { login, user } = useAuth();
+  const location = useLocation();
   const navigate = useNavigate();
+  const { authNotice, isLoading, login, user } = useAuth();
+  const locationState = location.state as LoginLocationState | null;
+  const [email, setEmail] = useState(locationState?.registeredEmail ?? '');
+  const [password, setPassword] = useState('');
+  const [formErrors, setFormErrors] = useState<LoginFormErrors>({});
 
   useEffect(() => {
     if (user) {
-      navigate(getDefaultRolePath(user.role), { replace: true });
+      navigate(getLoginRedirectPath(user.role, locationState?.from), { replace: true });
     }
-  }, [navigate, user]);
+  }, [locationState?.from, navigate, user]);
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const nextUser = login({
-      role,
-      email,
-    });
+    if (isLoading) return;
 
-    navigate(getDefaultRolePath(nextUser.role), { replace: true });
+    const nextErrors: LoginFormErrors = {};
+
+    if (!isValidEmail(email)) {
+      nextErrors.email = '이메일 형식으로 입력해 주세요.';
+    }
+
+    if (!password) {
+      nextErrors.password = '비밀번호를 입력해 주세요.';
+    }
+
+    setFormErrors(nextErrors);
+
+    if (Object.keys(nextErrors).length > 0) {
+      return;
+    }
+
+    try {
+      await login({
+        email: email.trim(),
+        password,
+      });
+    } catch (error) {
+      setFormErrors({
+        submit: getAuthErrorMessage(
+          error,
+          '로그인에 실패했습니다. 잠시 후 다시 시도해 주세요.',
+        ),
+      });
+    }
   };
 
   return (
-    <section className="page auth-page">
-      <PageHeader eyebrow="Account" title="로그인" description="계정 역할을 선택해 접속합니다." />
+    <section className="auth-screen" aria-labelledby="login-title">
+      <div className="auth-inner auth-inner--login">
+        <header className="auth-heading">
+          <h1 id="login-title">로그인</h1>
+          <p>가입 시 사용한 이메일과 비밀번호로 로그인해주세요.</p>
+        </header>
 
-      <form className="auth-form" onSubmit={handleSubmit}>
-        <fieldset className="auth-fieldset">
-          <legend>역할</legend>
-          <div className="auth-role-grid">
-            {ROLE_OPTIONS.map((option) => (
-              <label
-                className={
-                  role === option
-                    ? 'auth-role-option auth-role-option--selected'
-                    : 'auth-role-option'
-                }
-                key={option}
-              >
-                <input
-                  checked={role === option}
-                  name="role"
-                  onChange={() => setRole(option)}
-                  type="radio"
-                  value={option}
-                />
-                <span className="auth-role-option__title">{ROLE_LABEL[option]}</span>
-                <span className="auth-role-option__meta">{option}</span>
-              </label>
-            ))}
+        <form className="auth-form auth-form--login" onSubmit={handleSubmit}>
+          {authNotice ? (
+            <p className="auth-alert auth-alert--danger" role="alert">
+              {authNotice}
+            </p>
+          ) : null}
+          {locationState?.notice ? (
+            <p className="auth-alert auth-alert--success" role="status">
+              {locationState.notice}
+            </p>
+          ) : null}
+          {formErrors.submit ? (
+            <p className="auth-alert auth-alert--danger" role="alert">
+              {formErrors.submit}
+            </p>
+          ) : null}
+
+          <div className="auth-field-list">
+            <TextField
+              autoComplete="email"
+              error={formErrors.email}
+              fieldSize="lg"
+              label={<RequiredLabel>아이디</RequiredLabel>}
+              name="email"
+              onChange={(event) => {
+                setEmail(event.target.value);
+                setFormErrors((errors) => ({ ...errors, email: '', submit: '' }));
+              }}
+              placeholder="회원가입 시 설정한 아이디를 입력해주세요."
+              type="email"
+              value={email}
+            />
+
+            <PasswordField
+              autoComplete="current-password"
+              error={formErrors.password}
+              fieldSize="lg"
+              label={<RequiredLabel>비밀번호</RequiredLabel>}
+              name="password"
+              onChange={(event) => {
+                setPassword(event.target.value);
+                setFormErrors((errors) => ({
+                  ...errors,
+                  password: '',
+                  submit: '',
+                }));
+              }}
+              placeholder="비밀번호를 입력해주세요."
+              value={password}
+            />
           </div>
-        </fieldset>
 
-        <label className="auth-field">
-          <span>이메일</span>
-          <input
-            autoComplete="email"
-            onChange={(event) => setEmail(event.target.value)}
-            placeholder="name@example.com"
-            type="email"
-            value={email}
-          />
-        </label>
+          <div className="auth-submit-row">
+            <Button
+              className="auth-submit-button"
+              isLoading={isLoading}
+              size="lg"
+              type="submit"
+            >
+              로그인
+            </Button>
+          </div>
+        </form>
 
-        <button className="button-link auth-submit" type="submit">
-          로그인
-        </button>
-      </form>
+        <nav className="auth-account-links" aria-label="계정 도움말">
+          <Link to="/forgot-password">비밀번호 찾기</Link>
+          <span aria-hidden="true">|</span>
+          <Link to="/signup">회원가입</Link>
+        </nav>
+      </div>
     </section>
   );
+}
+
+function RequiredLabel({ children }: { children: string }) {
+  return (
+    <span>
+      {children} <span className="auth-required">*</span>
+    </span>
+  );
+}
+
+function getLoginRedirectPath(role: UserRole, from?: string) {
+  const defaultPath = getDefaultRolePath(role);
+
+  if (!from) {
+    return defaultPath;
+  }
+
+  return from === defaultPath || from.startsWith(`${defaultPath}/`) || from.startsWith(`${defaultPath}?`)
+    ? from : defaultPath;
 }
