@@ -7,21 +7,8 @@
 
 .board-tabs .ui-tabs-trigger {
   display: flex;
-  min-width: 80px;
-  height: 56px;
   align-items: center;
   justify-content: center;
-  padding: 0 8px;
-  border-bottom: 2px solid var(--color-border-default);
-  color: #000000;
-  font-size: 20px;
-  font-weight: 500;
-  line-height: 24px;
-  text-align: center;
-}
-
-.board-tabs .ui-tabs-trigger.is-active {
-  border-bottom-color: var(--color-border-strong);
 }
 
 .board-tabs .ui-tabs-panel {
@@ -197,32 +184,6 @@
   display: grid;
   min-width: 0;
   gap: 4px;
-}
-
-.board-parent-copy strong,
-.board-thread-copy strong,
-.board-card-profile strong,
-.board-card-topic strong {
-  overflow: hidden;
-  color: var(--color-text-primary);
-  font-size: 20px;
-  font-weight: 500;
-  line-height: 24px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.board-parent-copy span,
-.board-thread-copy > span:not(.board-thread-title-row),
-.board-card-profile small,
-.board-card-topic span {
-  overflow: hidden;
-  color: var(--color-text-secondary);
-  font-size: 16px;
-  font-weight: 500;
-  line-height: 24px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .board-thread-title-row {

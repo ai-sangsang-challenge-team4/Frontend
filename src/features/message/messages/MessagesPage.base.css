@@ -58,11 +58,6 @@
   display: flex;
   min-height: var(--board-page-header-height);
   align-items: center;
-  margin: 0;
-  color: var(--color-text-primary);
-  font-size: 28px;
-  font-weight: 700;
-  line-height: 36px;
 }
 
 .board-list-panel {

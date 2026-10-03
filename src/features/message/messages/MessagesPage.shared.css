@@ -1,0 +1,135 @@
+.board-page-title,
+.board-detail-page-header h1 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 36px;
+}
+
+.board-tabs .ui-tabs-trigger,
+.board-detail-tabs button {
+  min-width: 80px;
+  height: 56px;
+  padding: 0 8px;
+  border-bottom: 2px solid var(--color-border-default);
+  color: #000000;
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 24px;
+  text-align: center;
+}
+
+.board-tabs .ui-tabs-trigger.is-active,
+.board-detail-tabs button.is-active {
+  border-bottom-color: var(--color-border-strong);
+}
+
+.board-parent-copy strong,
+.board-thread-copy strong,
+.board-card-profile strong,
+.board-card-topic strong {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 24px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-parent-copy span,
+.board-thread-copy > span:not(.board-thread-title-row),
+.board-card-profile small,
+.board-card-topic span {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-moderation-actions button,
+.board-outline-button,
+.board-risk-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 37px;
+  padding: 4px 12px;
+  border: 0.7px solid var(--color-border-default);
+  border-radius: 8px;
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.board-reply-check-heading,
+.board-reply-context-heading,
+.board-reply-compose-header,
+.board-reply-bottom-actions,
+.board-risk-section-header,
+.board-original-viewer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.board-detail-title-group,
+.board-reply-check-alert {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.board-risk-section-header > div,
+.board-original-viewer-header > div {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 20px;
+}
+
+.board-reply-context-panel h2,
+.board-student-safety-copy h2 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 28px;
+}
+
+.board-reply-context-panel p,
+.board-answer-cta-copy p,
+.board-risk-workflow-panel > p,
+.board-risk-guide-procedure li,
+.board-risk-guide-procedure p {
+  color: var(--color-text-secondary);
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.board-reply-context-panel p,
+.board-answer-cta-copy p,
+.board-risk-workflow-panel > p {
+  margin: 0;
+}
+
+.board-send-confirm-summary span,
+.board-activity-list span {
+  color: var(--color-text-muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.board-send-confirm-summary strong,
+.board-risk-guide-procedure > strong {
+  color: var(--color-text-primary);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+}

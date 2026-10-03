@@ -86,25 +86,11 @@
   line-height: 24px;
 }
 
-.board-risk-guide-procedure > strong {
-  color: var(--color-text-primary);
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 24px;
-}
-
 .board-risk-guide-procedure ol {
   display: grid;
   gap: 6px;
   margin: 0;
   padding-left: 20px;
-}
-
-.board-risk-guide-procedure li,
-.board-risk-guide-procedure p {
-  color: var(--color-text-secondary);
-  font-size: 16px;
-  line-height: 24px;
 }
 
 .board-risk-guide-procedure p {
@@ -123,7 +109,8 @@
 }
 
 .board-risk-guide-button svg,
-.board-risk-section-header .board-outline-button svg {
+.board-risk-section-header .board-outline-button svg,
+.board-risk-action-button svg {
   width: 13px;
   height: 13px;
   flex: 0 0 auto;
@@ -131,30 +118,13 @@
 }
 
 .board-risk-action-button {
-  display: inline-flex;
   width: 149px;
   height: 37px;
-  min-height: 37px;
   flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
   padding: 4px 6px;
   border: 0;
-  border-radius: 8px;
   outline: 0.7px solid var(--color-border-default);
   outline-offset: -0.35px;
-  background: var(--color-bg-surface);
-  color: var(--color-text-primary);
-  font-size: 16px;
-  font-weight: 500;
-}
-
-.board-risk-action-button svg {
-  width: 13px;
-  height: 13px;
-  flex: 0 0 auto;
-  color: #333f49;
 }
 
 .board-risk-action-button[aria-expanded="true"] {
@@ -167,25 +137,19 @@
   justify-content: center;
 }
 
-.board-risk-evidence-panel {
+.board-risk-evidence-panel,
+.board-activity-panel {
   display: grid;
   gap: 24px;
   padding: 30px 32px;
   border-radius: 12px;
+}
+
+.board-risk-evidence-panel {
   background: var(--color-bg-canvas);
 }
 
 .board-risk-section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-}
-
-.board-risk-section-header > div {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
   gap: 20px;
 }
 
@@ -229,13 +193,6 @@
   padding: 26px 32px;
   border-radius: 12px;
   background: var(--color-bg-canvas);
-}
-
-.board-risk-workflow-panel > p {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 16px;
-  line-height: 24px;
 }
 
 .board-risk-factor-accordion .ui-accordion-item {
@@ -305,14 +262,6 @@
   color: var(--color-bg-icon);
 }
 
-.board-risk-factor-title--detected .board-risk-factor-icon {
-  color: var(--color-bg-icon);
-}
-
-.board-risk-factor-title--boundary .board-risk-factor-icon {
-  color: var(--color-bg-icon);
-}
-
 .board-risk-factor-copy {
   display: grid;
   min-width: 0;
@@ -356,20 +305,27 @@
   margin: 0;
 }
 
-.board-risk-review-panel {
+.board-risk-review-panel,
+.board-student-safety-card {
   display: flex;
   width: 100%;
   flex-direction: column;
   align-items: flex-end;
   justify-content: center;
-  gap: 60px;
   padding: 20px 32px;
   border-radius: 12px;
+}
+
+.board-risk-review-panel {
+  gap: 60px;
   background: var(--color-bg-surface);
   box-shadow: 0 0 10px rgb(0 0 0 / 10%);
 }
 
-.board-risk-review-overview {
+.board-risk-review-overview,
+.board-risk-review-reason,
+.board-risk-lock-content,
+.board-student-safety-content {
   display: flex;
   width: 100%;
   flex-direction: column;
@@ -377,7 +333,8 @@
   gap: 20px;
 }
 
-.board-risk-review-copy {
+.board-risk-review-copy,
+.board-student-safety-copy {
   display: flex;
   width: 100%;
   flex-direction: column;
@@ -639,14 +596,6 @@
   cursor: default;
 }
 
-.board-risk-review-reason {
-  display: flex;
-  width: 100%;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 20px;
-}
-
 .board-risk-review-reason label {
   display: block;
   width: 100%;
@@ -763,14 +712,6 @@
   box-shadow: 0 0 10px rgb(0 0 0 / 10%);
 }
 
-.board-risk-lock-content {
-  display: flex;
-  width: 100%;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 20px;
-}
-
 .board-risk-lock-notice {
   display: flex;
   width: 100%;
@@ -830,40 +771,8 @@
 }
 
 .board-student-safety-card {
-  display: flex;
-  width: 100%;
-  flex-direction: column;
-  align-items: flex-end;
-  justify-content: center;
   gap: 40px;
-  padding: 20px 32px;
-  border-radius: 12px;
   background: var(--color-bg-canvas);
-}
-
-.board-student-safety-content {
-  display: flex;
-  width: 100%;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 20px;
-}
-
-.board-student-safety-copy {
-  display: flex;
-  width: 100%;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 12px 0;
-}
-
-.board-student-safety-copy h2 {
-  margin: 0;
-  color: var(--color-text-primary);
-  font-size: 20px;
-  font-weight: 600;
-  line-height: 28px;
 }
 
 .board-student-safety-row {
@@ -885,10 +794,6 @@
 }
 
 .board-activity-panel {
-  display: grid;
-  gap: 24px;
-  padding: 30px 32px;
-  border-radius: 12px;
   background: var(--color-bg-surface);
   box-shadow: var(--shadow-sm);
 }
@@ -934,12 +839,6 @@
   line-height: 24px;
 }
 
-.board-activity-list span {
-  color: var(--color-text-muted);
-  font-size: 14px;
-  line-height: 20px;
-}
-
 .board-activity-list p {
   margin: 4px 0 0;
   color: var(--color-text-secondary);
@@ -980,17 +879,7 @@
 }
 
 .board-original-viewer-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   gap: 24px;
-}
-
-.board-original-viewer-header > div {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: 20px;
 }
 
 .board-original-viewer-header svg {

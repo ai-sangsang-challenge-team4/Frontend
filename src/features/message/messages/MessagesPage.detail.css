@@ -19,12 +19,6 @@
   gap: 32px;
 }
 
-.board-detail-title-group {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-}
-
 .board-back-button {
   display: grid;
   width: 24px;
@@ -40,23 +34,6 @@
 .board-back-button svg {
   width: 16px;
   height: 15px;
-}
-
-.board-detail-page-header p,
-.board-detail-heading p {
-  margin: 0 0 6px;
-  color: var(--color-text-muted);
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 24px;
-}
-
-.board-detail-page-header h1 {
-  margin: 0;
-  color: var(--color-text-primary);
-  font-size: 28px;
-  font-weight: 700;
-  line-height: 36px;
 }
 
 .board-page-nav {
@@ -110,35 +87,7 @@
 
 .board-detail-tabs button {
   display: grid;
-  height: 56px;
-  min-width: 80px;
   place-items: center;
-  padding: 0 8px;
-  border-bottom: 2px solid var(--color-border-default);
-  color: #000000;
-  font-size: 20px;
-  font-weight: 500;
-  line-height: 24px;
-  text-align: center;
-}
-
-.board-detail-tabs button.is-active {
-  border-bottom-color: var(--color-border-strong);
-}
-
-.board-detail-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.board-detail-heading h2 {
-  margin: 0;
-  color: var(--color-text-primary);
-  font-size: 28px;
-  font-weight: 700;
-  line-height: 36px;
 }
 
 .board-risk-badge {
@@ -282,7 +231,6 @@
 }
 
 .board-reply-context-panel,
-.board-reply-helper-panel,
 .board-reply-compose-panel {
   display: grid;
   gap: 16px;
@@ -292,42 +240,8 @@
   box-shadow: var(--shadow-sm);
 }
 
-.board-reply-context-panel h2,
-.board-reply-helper-panel h2 {
-  margin: 0;
-  color: var(--color-text-primary);
-  font-size: 20px;
-  font-weight: 600;
-  line-height: 28px;
-}
-
-.board-reply-context-panel p,
-.board-reply-helper-panel li {
-  color: var(--color-text-secondary);
-  font-size: 16px;
-  line-height: 24px;
-}
-
-.board-reply-context-panel p {
-  margin: 0;
-}
-
-.board-reply-context-panel blockquote {
-  margin: 0;
-  padding: 18px 20px;
-  border-left: 4px solid var(--color-primary);
-  border-radius: 8px;
-  background: var(--color-bg-canvas);
-  color: var(--color-text-primary);
-  font-size: 16px;
-  line-height: 26px;
-}
-
-.board-reply-helper-panel ul {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding-left: 20px;
+.board-reply-compose-panel {
+  gap: 18px;
 }
 
 .board-reply-compose-panel label {
@@ -349,7 +263,7 @@
 }
 
 .board-reply-compose-panel textarea {
-  min-height: 220px;
+  min-height: 320px;
   padding: 18px 20px;
   border: var(--border-default);
   border-radius: 12px;
@@ -372,33 +286,6 @@
   box-shadow: var(--shadow-focus);
 }
 
-.board-reply-compose-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.board-reply-compose-actions > span {
-  color: var(--color-text-secondary);
-  font-size: 14px;
-  line-height: 20px;
-}
-
-.board-reply-compose-actions > div {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.board-reply-send-button {
-  width: 83px;
-}
-
-.board-ai-reply-composer {
-  gap: 24px;
-}
-
 .board-reply-check-panel {
   display: grid;
   gap: 24px;
@@ -408,16 +295,7 @@
 }
 
 .board-reply-check-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   gap: 24px;
-}
-
-.board-reply-check-alert {
-  display: flex;
-  align-items: center;
-  gap: 20px;
 }
 
 .board-reply-check-alert-icon {
@@ -569,23 +447,7 @@
   gap: 12px;
 }
 
-.board-reply-check-reference-button {
-  width: auto;
-  height: 30px;
-  min-height: 30px;
-  padding: 0 10px;
-  font-size: 12px;
-  font-weight: 400;
-}
-
-.board-reply-context-panel--compact {
-  box-shadow: var(--shadow-sm);
-}
-
 .board-reply-context-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   gap: 16px;
 }
 
@@ -613,14 +475,7 @@
   color: #333f49;
 }
 
-.board-reply-compose-panel--ai {
-  gap: 18px;
-}
-
 .board-reply-compose-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   gap: 16px;
 }
 
@@ -629,10 +484,6 @@
   font-size: 14px;
   font-weight: 600;
   line-height: 20px;
-}
-
-.board-reply-compose-panel--ai textarea {
-  min-height: 320px;
 }
 
 .board-reply-ai-note {
@@ -644,9 +495,6 @@
 }
 
 .board-reply-bottom-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   gap: 14px;
   padding-top: 2px;
 }
@@ -712,19 +560,6 @@
   padding: 14px 16px;
   border-radius: 8px;
   background: var(--color-bg-canvas);
-}
-
-.board-send-confirm-summary span {
-  color: var(--color-text-muted);
-  font-size: 14px;
-  line-height: 20px;
-}
-
-.board-send-confirm-summary strong {
-  color: var(--color-text-primary);
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 24px;
 }
 
 .board-send-confirm-preview {
