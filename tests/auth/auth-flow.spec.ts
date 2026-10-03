@@ -38,7 +38,21 @@ async function readSession(page: Page): Promise<AuthSession | null> {
 }
 
 async function fillLogin(page: Page, email: string, password: string) {
-  await page.getByRole('heading', { name: '로그인', exact: true }).waitFor();
+  await page.getByRole('heading', { name: /로그인/ }).waitFor();
+  if (await page.locator('input[name="email"]').count() === 0) {
+    const account = accounts.find((entry) => entry.email === email);
+
+    if (account?.role === 'ADMIN') {
+      await page.goto('/login?role=ADMIN');
+    } else {
+      await page
+        .getByRole('link', {
+          name: account?.role === 'TEACHER' ? '선생님 · 교직원 로그인' : '학부모 로그인',
+        })
+        .click();
+    }
+  }
+  await page.getByRole('heading', { name: /로그인/ }).waitFor();
   await page.locator('input[name="email"]').fill(email);
   await page.locator('input[name="password"]').fill(password);
 }
@@ -112,7 +126,7 @@ for (const role of ['PARENT', 'TEACHER'] as const) {
     await page.locator('input[name="password"]').fill('newpassword123');
     await page.locator('input[name="passwordConfirmation"]').fill('newpassword123');
     await page.getByRole('button', { name: '회원가입', exact: true }).click();
-    await expect(page).toHaveURL(/\/login$/);
+    await expect(page).toHaveURL(new RegExp(`/login\\?role=${role}$`));
     await expect(page.getByRole('status')).toHaveText('회원가입이 완료되었습니다. 로그인해 주세요.');
     await expect(page.locator('input[name="email"]')).toHaveValue(email);
     await page.locator('input[name="password"]').fill('newpassword123');
