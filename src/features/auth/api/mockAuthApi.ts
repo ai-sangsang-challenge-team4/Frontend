@@ -8,7 +8,13 @@ import {
   type ResetPasswordInput,
   type VerificationCodeResult,
 } from './authApiContract';
-import { readStoredJson, removeStoredValue, writeStoredJson } from './authStorage';
+import {
+  clearAuthSession,
+  readAuthSession,
+  readStoredJson,
+  removeStoredValue,
+  writeStoredJson,
+} from './authStorage';
 
 type AuthAccount = User & { password: string };
 type IssuedSession = Omit<AuthSession, 'user'> & { userId: number };
@@ -81,6 +87,7 @@ async function getCurrentUser(accessToken: string) {
 }
 
 async function logout(accessToken: string) {
+  await waitForRequest('logout');
   writeStoredJson(ISSUED_SESSION_STORAGE_KEY,
     readIssuedSessions().filter((entry) => entry.accessToken !== accessToken),
   );
@@ -155,9 +162,19 @@ async function resetPassword(input: ResetPasswordInput) {
   writeStoredJson(ACCOUNT_STORAGE_KEY,
     accounts.map((entry) => entry.userId === account.userId ? { ...entry, password: input.newPassword } : entry),
   );
+  const issuedSessions = readIssuedSessions();
+  const currentSession = readAuthSession();
   writeStoredJson(ISSUED_SESSION_STORAGE_KEY,
-    readIssuedSessions().filter((entry) => entry.userId !== account.userId),
+    issuedSessions.filter((entry) => entry.userId !== account.userId),
   );
+  if (
+    currentSession &&
+    issuedSessions.some((entry) =>
+      entry.userId === account.userId && entry.accessToken === currentSession.accessToken,
+    )
+  ) {
+    clearAuthSession();
+  }
   removeStoredValue(PASSWORD_RESET_STORAGE_KEY);
   return true;
 }
