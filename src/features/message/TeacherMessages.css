@@ -1,4 +1,5 @@
 @import "./messages/MessagesPage.base.css";
+@import "./messages/MessagesPage.shared.css";
 @import "./messages/MessagesPage.list.css";
 @import "./messages/MessagesPage.detail.css";
 @import "./messages/MessagesPage.conversation.css";
