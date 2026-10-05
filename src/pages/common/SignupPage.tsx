@@ -91,7 +91,7 @@ export function SignupPage() {
         password,
         role,
       });
-      navigate('/login', {
+      navigate(`/login?role=${role}`, {
         replace: true,
         state: {
           notice: '회원가입이 완료되었습니다. 로그인해 주세요.',
@@ -112,7 +112,7 @@ export function SignupPage() {
     <section className="auth-screen auth-screen--signup" aria-labelledby="signup-title">
       <div className="auth-inner auth-inner--signup">
         <header className="auth-heading">
-          <h1 id="signup-title">회원가입</h1>
+          <h1 id="signup-title">{ROLE_LABEL[role]} 회원가입</h1>
           <p>간단한 회원가입 후, Teacher Hub 서비스를 이용해보세요.</p>
         </header>
 
@@ -354,7 +354,7 @@ export function SignupPage() {
 
         <nav className="auth-account-links" aria-label="계정 이동">
           <span>이미 계정이 있으신가요?</span>
-          <Link to="/login">로그인</Link>
+          <Link to={`/login?role=${role}`}>로그인</Link>
         </nav>
       </div>
     </section>

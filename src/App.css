@@ -344,6 +344,10 @@
   margin: 0 auto;
 }
 
+.auth-inner--role-select {
+  width: min(100%, 1030px);
+}
+
 .auth-heading {
   display: grid;
   justify-items: center;
@@ -646,6 +650,18 @@
 .auth-dev-code strong,
 .auth-verification-help strong {
   color: #fd2d27;
+}
+
+.auth-role-select {
+  margin-top: 64px;
+}
+
+.auth-role-select .landing-role-grid {
+  gap: 72px;
+}
+
+.auth-role-select .landing-role-card {
+  min-height: 360px;
 }
 
 .auth-submit-row {
@@ -1298,12 +1314,175 @@
     font-size: 1.9rem;
   }
 
+  .landing-container {
+    width: min(calc(100% - 32px), 1030px);
+  }
+
+  .landing-mobile-break {
+    display: inline;
+  }
+
+  .landing-hero__copy,
+  .landing-section-heading,
+  .landing-step-card__copy p {
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+  }
+
+  .landing-hero {
+    min-height: auto;
+    padding: 64px 0 56px;
+  }
+
+  .landing-hero__inner {
+    gap: 44px;
+  }
+
+  .auth-role-select {
+    margin-top: 48px;
+  }
+
+  .landing-hero__copy {
+    gap: 12px;
+  }
+
+  .landing-hero__copy h1 {
+    font-size: 24px;
+    line-height: 1.35;
+  }
+
+  .landing-hero__copy p {
+    font-size: 16px;
+  }
+
+  .landing-role-grid {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  .auth-role-select .landing-role-grid {
+    gap: 24px;
+  }
+
+  .landing-role-card {
+    min-height: auto;
+    padding: 28px 22px;
+  }
+
+  .auth-role-select .landing-role-card {
+    min-height: auto;
+  }
+
+  .landing-role-card__image {
+    width: min(100%, 220px);
+  }
+
+  .landing-intro {
+    padding: 72px 0;
+  }
+
+  .landing-intro__grid {
+    min-height: auto;
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+
+  .landing-intro__grid h2 {
+    padding-top: 0;
+    font-size: 30px;
+  }
+
+  .landing-intro__grid p {
+    margin: 0;
+    border-top: 1px solid #d8dde8;
+    padding: 28px 0 0;
+    font-size: 17px;
+  }
+
+  .landing-intro__grid::before {
+    content: none;
+  }
+
+  .landing-features,
+  .landing-workflow {
+    padding: 76px 0;
+  }
+
+  .landing-section-heading {
+    gap: 12px;
+    margin-bottom: 40px;
+  }
+
+  .landing-section-heading p {
+    font-size: 17px;
+  }
+
+  .landing-section-heading h2 {
+    font-size: 26px;
+    line-height: 1.35;
+  }
+
+  .landing-features .landing-section-heading h2,
+  .landing-workflow .landing-section-heading h2 {
+    font-size: 24px;
+  }
+
+  .landing-section-heading span {
+    font-size: 15px;
+  }
+
+  .landing-feature-grid {
+    grid-template-columns: 1fr;
+    gap: 36px;
+  }
+
+  .landing-feature img {
+    width: 156px;
+    height: 158px;
+  }
+
+  .landing-feature h3 {
+    font-size: 22px;
+  }
+
+  .landing-feature p {
+    max-width: 260px;
+  }
+
+  .landing-step-list {
+    gap: 24px;
+  }
+
+  .landing-step-card {
+    min-height: auto;
+    grid-template-columns: 1fr;
+    gap: 28px;
+    padding: 28px 22px;
+  }
+
+  .landing-step-card__copy {
+    gap: 14px;
+  }
+
+  .landing-step-card__copy h3 {
+    font-size: 24px;
+  }
+
+  .landing-step-card__copy p {
+    font-size: 15px;
+  }
+
+  .landing-step-card__image {
+    width: 100%;
+    justify-self: center;
+  }
+
   .auth-role-grid {
     grid-template-columns: 1fr;
   }
 
   .auth-screen {
-    min-height: calc(100vh - 118px);
+    min-height: calc(100vh - 72px);
     padding: 64px 16px 80px;
   }
 

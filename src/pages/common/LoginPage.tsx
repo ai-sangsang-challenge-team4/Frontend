@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
+  ROLE_LABEL,
   getAuthErrorMessage,
   getDefaultRolePath,
   isValidEmail,
@@ -9,6 +10,7 @@ import {
 import { PasswordField } from '../../features/auth/components';
 import { Button, TextField } from '../../shared/components/ui';
 import type { UserRole } from '../../shared/types';
+import { LandingRoleGrid } from './LandingRoleGrid';
 
 type LoginFormErrors = Partial<Record<'email' | 'password' | 'submit', string>>;
 
@@ -18,12 +20,19 @@ type LoginLocationState = {
   registeredEmail?: string;
 };
 
+const LOGIN_DESCRIPTION: Record<UserRole, string> = {
+  PARENT: '로그인 후 선생님께 전달할 메시지를 작성하고, 전송 전 표현을 확인해보세요.',
+  TEACHER: '교사 계정으로 로그인하고, 학부모 메시지를 확인하며 상황에 맞게 대응해보세요.',
+  ADMIN: '관리자 계정으로 로그인하고, 공유된 메시지와 운영 현황을 확인해보세요.',
+};
+
 export function LoginPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { isLoading, login, user } = useAuth();
   const locationState = location.state as LoginLocationState | null;
+  const selectedRole = getSelectedLoginRole(searchParams.get('role'));
   const [email, setEmail] = useState(locationState?.registeredEmail ?? '');
   const [password, setPassword] = useState('');
   const [formErrors, setFormErrors] = useState<LoginFormErrors>({});
@@ -99,8 +108,8 @@ export function LoginPage() {
     <section className="auth-screen" aria-labelledby="login-title">
       <div className="auth-inner auth-inner--login">
         <header className="auth-heading">
-          <h1 id="login-title">로그인</h1>
-          <p>가입 시 사용한 이메일과 비밀번호로 로그인해주세요.</p>
+          <h1 id="login-title">{ROLE_LABEL[selectedRole]} 로그인</h1>
+          <p>{LOGIN_DESCRIPTION[selectedRole]}</p>
         </header>
 
         <form className="auth-form auth-form--login" onSubmit={handleSubmit}>
@@ -165,7 +174,9 @@ export function LoginPage() {
         <nav className="auth-account-links" aria-label="계정 도움말">
           <Link to="/forgot-password">비밀번호 찾기</Link>
           <span aria-hidden="true">|</span>
-          <Link to="/signup">회원가입</Link>
+          <Link to={selectedRole === 'ADMIN' ? '/signup' : `/signup?role=${selectedRole}`}>
+            회원가입
+          </Link>
         </nav>
       </div>
     </section>
@@ -189,4 +200,12 @@ function getLoginRedirectPath(role: UserRole, from?: string) {
 
   return from === defaultPath || from.startsWith(`${defaultPath}/`) || from.startsWith(`${defaultPath}?`)
     ? from : defaultPath;
+}
+
+function getSelectedLoginRole(roleParam: string | null): UserRole | null {
+  if (roleParam === 'TEACHER' || roleParam === 'PARENT' || roleParam === 'ADMIN') {
+    return roleParam;
+  }
+
+  return null;
 }
