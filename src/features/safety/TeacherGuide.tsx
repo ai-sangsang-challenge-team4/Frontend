@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState, type SVGProps } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../auth';
 import { Sidebar } from '../../shared/components/teacher-shell/TeacherSidebar';
 import { SearchIcon } from '../../shared/components/teacher-shell/icons';
 import { Button, EmptyState, TextField } from '../../shared/components/ui';
@@ -674,6 +676,8 @@ function GuidePostDetail({
 }
 
 export function TeacherGuide() {
+  const { logout, user } = useAuth();
+  const navigate = useNavigate();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [query, setQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -721,6 +725,11 @@ export function TeacherGuide() {
     isSidebarCollapsed ? ' is-sidebar-collapsed' : ''
   }`;
 
+  const handleLogout = () => {
+    logout();
+    navigate('/login', { replace: true });
+  };
+
   const handleQueryChange = (value: string) => {
     setQuery(value);
     setCurrentPage(1);
@@ -761,24 +770,13 @@ export function TeacherGuide() {
         defaultCollapsed={isSidebarCollapsed}
         messageCount={2}
         onCollapsedChange={setIsSidebarCollapsed}
+        onLogout={handleLogout}
+        profileMeta={user?.email}
+        profileName={user?.name}
       />
 
       <main className="guide-page-main">
         <header className="guide-page-header">
-          <div className="guide-page-title-group">
-            {shouldShowPageBack ? (
-              <button
-                className="guide-back-link"
-                onClick={handlePageBack}
-                type="button"
-                aria-label="이전 화면으로 돌아가기"
-              >
-                <BackIcon />
-              </button>
-            ) : null}
-            <h1 id="guide-page-title">대응 가이드</h1>
-          </div>
-
           <nav aria-label="현재 위치" className="guide-page-nav">
             <a href="/teacher/messages">홈</a>
             <BreadcrumbSeparator />
@@ -794,6 +792,19 @@ export function TeacherGuide() {
               <span aria-current="page">대응 가이드</span>
             )}
           </nav>
+          <div className="guide-page-title-group">
+            {shouldShowPageBack ? (
+              <button
+                className="guide-back-link"
+                onClick={handlePageBack}
+                type="button"
+                aria-label="이전 화면으로 돌아가기"
+              >
+                <BackIcon />
+              </button>
+            ) : null}
+            <h1 id="guide-page-title">대응 가이드</h1>
+          </div>
         </header>
 
         {selectedPost ? (

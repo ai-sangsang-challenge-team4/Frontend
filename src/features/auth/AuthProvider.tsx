@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Toast } from '../../shared/components/ui';
 import {
   AUTH_SESSION_STORAGE_KEY,
   AuthApiError,
@@ -27,6 +28,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const sessionRef = useRef<AuthSession | null>(null);
   const requestRevision = useRef(0);
   const isRequestPending = useRef(false);
+
+  const dismissAuthNotice = useCallback(() => setAuthNotice(null), []);
 
   const invalidateSession = useCallback((notice: string | null = null) => {
     requestRevision.current += 1;
@@ -109,7 +112,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const checkExpiration = () => {
       const remaining = session.expiresAt - Date.now();
       if (remaining <= 0) {
-        invalidateSession('로그인 시간이 만료되었습니다. 다시 로그인해 주세요.');
+        invalidateSession('세션이 만료되었습니다. 다시 로그인해 주세요.');
       } else {
         timer = window.setTimeout(checkExpiration, Math.min(remaining, 2_147_483_647));
       }
@@ -174,12 +177,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
     isInitializing,
     isLoading,
     sessionError,
-    authNotice,
     login,
     signup,
     logout,
     retrySession,
-  }), [user, isInitializing, isLoading, sessionError, authNotice, login, signup, logout, retrySession]);
+  }), [user, isInitializing, isLoading, sessionError, login, signup, logout, retrySession]);
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+      {authNotice ? <Toast message={authNotice} onClose={dismissAuthNotice} /> : null}
+    </AuthContext.Provider>
+  );
 }

@@ -21,7 +21,8 @@ type LoginLocationState = {
 export function LoginPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { authNotice, isLoading, login, user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const { isLoading, login, user } = useAuth();
   const locationState = location.state as LoginLocationState | null;
   const [email, setEmail] = useState(locationState?.registeredEmail ?? '');
   const [password, setPassword] = useState('');
@@ -69,6 +70,31 @@ export function LoginPage() {
     }
   };
 
+  if (!selectedRole) {
+    return (
+      <section className="auth-screen" aria-labelledby="login-title">
+        <div className="auth-inner auth-inner--role-select">
+          <header className="auth-heading">
+            <h1 id="login-title">로그인</h1>
+            <p>로그인할 계정 유형을 선택해주세요.</p>
+          </header>
+
+          <div className="auth-role-select">
+            {locationState?.notice ? (
+              <p className="auth-alert auth-alert--success" role="status">
+                {locationState.notice}
+              </p>
+            ) : null}
+            <LandingRoleGrid
+              ariaLabel="로그인할 계정 유형"
+              linkState={locationState ?? undefined}
+            />
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="auth-screen" aria-labelledby="login-title">
       <div className="auth-inner auth-inner--login">
@@ -78,11 +104,6 @@ export function LoginPage() {
         </header>
 
         <form className="auth-form auth-form--login" onSubmit={handleSubmit}>
-          {authNotice ? (
-            <p className="auth-alert auth-alert--danger" role="alert">
-              {authNotice}
-            </p>
-          ) : null}
           {locationState?.notice ? (
             <p className="auth-alert auth-alert--success" role="status">
               {locationState.notice}

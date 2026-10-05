@@ -76,7 +76,7 @@ async function getCurrentUser(accessToken: string) {
     throw unauthorized('INVALID_TOKEN', '인증 정보가 유효하지 않습니다. 다시 로그인해 주세요.');
   }
   if (session.expiresAt <= Date.now()) {
-    throw unauthorized('TOKEN_EXPIRED', '로그인 시간이 만료되었습니다. 다시 로그인해 주세요.');
+    throw unauthorized('TOKEN_EXPIRED', '세션이 만료되었습니다. 다시 로그인해 주세요.');
   }
 
   const account = readAccounts().find((entry) => entry.userId === session.userId);

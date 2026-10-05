@@ -1,8 +1,9 @@
-import { useState } from 'react';
-import { LogOut } from 'lucide-react';
-import { NavLink } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { LogOut, Menu } from 'lucide-react';
+import { NavLink, useLocation } from 'react-router-dom';
 import defaultProfileImage from '../../assets/profile.png';
 import { Button } from '../ui/Button';
+import { Modal } from '../ui/Modal';
 import {
   SidebarCollapseIcon,
   SidebarGuideIcon,
@@ -51,6 +52,11 @@ const navItems = [
   label: string;
 }[];
 
+const mobileNavItems = [
+  ...navItems,
+  { href: '/teacher/settings', icon: SidebarSettingsIcon, key: 'settings', label: '설정/도움말' },
+] as const;
+
 export function Sidebar({
   activeItem = 'messages',
   defaultCollapsed = true,
@@ -60,6 +66,7 @@ export function Sidebar({
   profileMeta = 'teacher@example.com',
   profileName = '교사 사용자',
 }: SidebarProps) {
+  const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
   const isSettingsActive = activeItem === 'settings';
 
@@ -75,6 +82,14 @@ export function Sidebar({
       className={`sidebar-shell${isCollapsed ? ' is-collapsed' : ''}`}
       aria-label="교사 메뉴"
     >
+      <MobileSidebarMenu
+        activeItem={activeItem}
+        key={location.key}
+        messageCount={messageCount}
+        onLogout={onLogout}
+        profileMeta={profileMeta}
+        profileName={profileName}
+      />
       <div className="sidebar-brand">
         <span className="sidebar-logo">(로고)</span>
         <strong>Teacher Hub</strong>
@@ -112,18 +127,6 @@ export function Sidebar({
           );
         })}
       </nav>
-
-      {onLogout ? (
-        <Button
-          className="sidebar-mobile-logout"
-          leftIcon={<LogOut size={20} aria-hidden="true" />}
-          onClick={onLogout}
-          size="sm"
-          variant="ghost"
-        >
-          로그아웃
-        </Button>
-      ) : null}
 
       <div className="sidebar-divider" aria-hidden="true" />
 
@@ -172,5 +175,100 @@ export function Sidebar({
         </span>
       </div>
     </aside>
+  );
+}
+
+function MobileSidebarMenu({
+  activeItem,
+  messageCount,
+  onLogout,
+  profileMeta,
+  profileName,
+}: Pick<SidebarProps, 'activeItem' | 'messageCount' | 'onLogout' | 'profileMeta' | 'profileName'>) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    const mobileViewport = window.matchMedia('(max-width: 980px)');
+    const handleViewportChange = (event: MediaQueryListEvent) => {
+      if (!event.matches) setIsOpen(false);
+    };
+
+    mobileViewport.addEventListener('change', handleViewportChange);
+    return () => mobileViewport.removeEventListener('change', handleViewportChange);
+  }, []);
+
+  const closeMenu = () => setIsOpen(false);
+  const brand = (
+    <NavLink className="sidebar-mobile-brand" onClick={closeMenu} to="/teacher/messages">
+      <span aria-hidden="true" className="sidebar-mobile-brand-mark">TH</span>
+      Teacher Hub
+    </NavLink>
+  );
+
+  return (
+    <>
+      <header className="sidebar-mobile-header">
+        {brand}
+        <button
+          aria-expanded={isOpen}
+          aria-haspopup="dialog"
+          aria-label="교사 메뉴 더보기"
+          className="sidebar-mobile-toggle"
+          onClick={() => setIsOpen(true)}
+          title="교사 메뉴 더보기"
+          type="button"
+        >
+          <Menu aria-hidden="true" size={24} />
+        </button>
+      </header>
+      <Modal
+        className="teacher-mobile-menu"
+        onOpenChange={setIsOpen}
+        open={isOpen}
+        title={<>{brand}<span className="sr-only">교사 메뉴</span></>}
+      >
+        <nav aria-label="모바일 교사 메뉴" className="sidebar-mobile-nav">
+          {mobileNavItems.map(({ href, icon: Icon, key, label }) => (
+            <NavLink
+              aria-current={activeItem === key ? 'page' : undefined}
+              aria-label={label}
+              className={`sidebar-mobile-link${activeItem === key ? ' is-active' : ''}`}
+              key={key}
+              onClick={closeMenu}
+              to={href}
+            >
+              <Icon className="sidebar-link-icon" />
+              <span>{label}</span>
+              {key === 'messages' && (messageCount ?? 0) > 0 ? (
+                <span className="sidebar-mobile-badge">{messageCount}</span>
+              ) : null}
+            </NavLink>
+          ))}
+        </nav>
+        <div className="sidebar-mobile-account">
+          <div className="sidebar-mobile-profile">
+            <img alt="" src={defaultProfileImage} />
+            <div>
+              <strong>{profileName}</strong>
+              <small>{profileMeta}</small>
+            </div>
+          </div>
+          {onLogout ? (
+            <Button
+              className="sidebar-mobile-menu-logout"
+              fullWidth
+              leftIcon={<LogOut aria-hidden="true" size={20} />}
+              onClick={() => {
+                closeMenu();
+                onLogout();
+              }}
+              variant="ghost"
+            >
+              로그아웃
+            </Button>
+          ) : null}
+        </div>
+      </Modal>
+    </>
   );
 }
