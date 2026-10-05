@@ -20,7 +20,6 @@ export type AuthContextValue = {
   isInitializing: boolean;
   isLoading: boolean;
   sessionError: string | null;
-  authNotice: string | null;
   login: (input: LoginInput) => Promise<User>;
   signup: (input: SignupInput) => Promise<User>;
   logout: () => void;

@@ -64,6 +64,12 @@ async function loginAs(page: Page, account: typeof accounts[number]) {
   await expect(page).toHaveURL(new RegExp(`${account.home}$`));
 }
 
+async function openTeacherMenuIfNeeded(page: Page) {
+  if (page.viewportSize()!.width <= 980 && new URL(page.url()).pathname.startsWith('/teacher')) {
+    await page.getByRole('button', { name: '교사 메뉴 더보기', exact: true }).click();
+  }
+}
+
 async function requestVerification(page: Page, email: string) {
   await page.locator('input[name="email"]').fill(email);
   await page.getByRole('button', { name: '인증번호 받기', exact: true }).click();
@@ -91,6 +97,7 @@ for (const account of accounts) {
     expect(session?.expiresAt).toBeGreaterThan(Date.now());
 
     await page.reload();
+    await openTeacherMenuIfNeeded(page);
     await expect(page.getByRole('button', { name: '로그아웃', exact: true }).first()).toBeAttached();
     await expect(page).toHaveURL(new RegExp(`${account.home}$`));
 
@@ -99,6 +106,7 @@ for (const account of accounts) {
       await expect(page).toHaveURL(new RegExp(`${account.home}$`));
     }
 
+    await openTeacherMenuIfNeeded(page);
     const logoutButton = page.getByRole('button', { name: '로그아웃', exact: true }).first();
     await logoutButton.click();
     await expect(page).toHaveURL(/\/login$/);
@@ -249,15 +257,29 @@ test('사용자 조회 중에는 보호된 페이지를 로그인 화면으로 �
   await expect(page.getByRole('heading', { name: '학부모 홈', exact: true })).toBeVisible();
 });
 
-test('사용 중 토큰이 만료되면 인증 정보를 제거하고 로그인으로 이동한다', async ({ page }) => {
+test('사용 중 토큰이 만료되면 로그인으로 이동하고 일회성 토스트로 안내한다', async ({ page }) => {
   await page.clock.install();
   await page.goto('/login');
   await configureMock(page, { sessionDurationMs: 60_000 });
   await loginAs(page, accounts[0]);
   await page.clock.fastForward(61_000);
   await expect(page).toHaveURL(/\/login$/);
-  await expect(page.getByRole('alert')).toHaveText('로그인 시간이 만료되었습니다. 다시 로그인해 주세요.');
+  const toast = page.locator('.ui-toast');
+  await expect(toast).toHaveCount(1);
+  await expect(toast.getByRole('alert')).toHaveText('세션이 만료되었습니다. 다시 로그인해 주세요.');
+  await expect(page.locator('.auth-screen').getByRole('alert')).toHaveCount(0);
   expect(await readSession(page)).toBeNull();
+
+  await page.getByRole('link', { name: '학부모 로그인', exact: true }).click();
+  await expect(page).toHaveURL(/\/login\?role=PARENT$/);
+  await expect(page.getByRole('heading', { name: '학부모 로그인', exact: true })).toBeVisible();
+  await expect(toast).toBeVisible();
+  await expect(page.locator('.auth-form').getByRole('alert')).toHaveCount(0);
+
+  await page.clock.fastForward(5_000);
+  await expect(toast).toHaveCount(0);
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
 test('새로고침 시 만료된 토큰을 거절한다', async ({ page }) => {
@@ -269,7 +291,8 @@ test('새로고침 시 만료된 토큰을 거절한다', async ({ page }) => {
   }, ISSUED_KEY);
   await page.reload();
   await expect(page).toHaveURL(/\/login$/);
-  await expect(page.getByRole('alert')).toContainText('로그인 시간이 만료되었습니다.');
+  await expect(page.locator('.ui-toast').getByRole('alert')).toContainText('세션이 만료되었습니다.');
+  await expect(page.locator('.auth-screen').getByRole('alert')).toHaveCount(0);
   expect(await readSession(page)).toBeNull();
 });
 
@@ -282,7 +305,8 @@ test('등록되지 않은 토큰을 거절한다', async ({ page }) => {
   }, SESSION_KEY);
   await page.reload();
   await expect(page).toHaveURL(/\/login$/);
-  await expect(page.getByRole('alert')).toContainText('인증 정보가 유효하지 않습니다.');
+  await expect(page.locator('.ui-toast').getByRole('alert')).toContainText('인증 정보가 유효하지 않습니다.');
+  await expect(page.locator('.auth-screen').getByRole('alert')).toHaveCount(0);
   expect(await readSession(page)).toBeNull();
 });
 
@@ -309,13 +333,21 @@ test('사용자 조회의 일시적 오류는 세션을 보존하고 재시도�
   await expect(page.getByRole('heading', { name: '학부모 홈', exact: true })).toBeVisible();
 });
 
-test('사용자 조회의 401 응답은 인증 상태를 초기화한다', async ({ page }) => {
+test('사용자 조회의 401 응답은 인증 상태를 초기화하고 닫을 수 있는 토스트로 안내한다', async ({ page }) => {
   await loginAs(page, accounts[0]);
   await configureMock(page, { failures: { getCurrentUser: 401 } });
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(page).toHaveURL(/\/login$/);
-  await expect(page.getByRole('alert')).toContainText('인증 정보가 유효하지 않습니다.');
+  await expect(page.locator('.ui-toast').getByRole('alert')).toContainText('인증 정보가 유효하지 않습니다.');
+  await expect(page.locator('.auth-screen').getByRole('alert')).toHaveCount(0);
   expect(await readSession(page)).toBeNull();
+
+  await page.getByRole('button', { name: '알림 닫기', exact: true }).click();
+  await expect(page.locator('.ui-toast')).toHaveCount(0);
+  await page.getByRole('link', { name: '학부모 로그인', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '학부모 로그인', exact: true })).toBeVisible();
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
 test('다른 탭의 로그아웃을 반영하고 늦은 사용자 조회가 세션을 되살리지 않는다', async ({ page, context }) => {

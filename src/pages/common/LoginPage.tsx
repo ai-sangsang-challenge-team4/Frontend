@@ -30,7 +30,7 @@ export function LoginPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { authNotice, isLoading, login, user } = useAuth();
+  const { isLoading, login, user } = useAuth();
   const locationState = location.state as LoginLocationState | null;
   const selectedRole = getSelectedLoginRole(searchParams.get('role'));
   const [email, setEmail] = useState(locationState?.registeredEmail ?? '');
@@ -89,11 +89,6 @@ export function LoginPage() {
           </header>
 
           <div className="auth-role-select">
-            {authNotice ? (
-              <p className="auth-alert auth-alert--danger" role="alert">
-                {authNotice}
-              </p>
-            ) : null}
             {locationState?.notice ? (
               <p className="auth-alert auth-alert--success" role="status">
                 {locationState.notice}
@@ -113,22 +108,11 @@ export function LoginPage() {
     <section className="auth-screen" aria-labelledby="login-title">
       <div className="auth-inner auth-inner--login">
         <header className="auth-heading">
-          <h1 id="login-title">
-            {selectedRole ? `${ROLE_LABEL[selectedRole]} 로그인` : '로그인'}
-          </h1>
-          <p>
-            {selectedRole
-              ? LOGIN_DESCRIPTION[selectedRole]
-              : '가입 시 사용한 이메일과 비밀번호로 로그인해주세요.'}
-          </p>
+          <h1 id="login-title">{ROLE_LABEL[selectedRole]} 로그인</h1>
+          <p>{LOGIN_DESCRIPTION[selectedRole]}</p>
         </header>
 
         <form className="auth-form auth-form--login" onSubmit={handleSubmit}>
-          {authNotice ? (
-            <p className="auth-alert auth-alert--danger" role="alert">
-              {authNotice}
-            </p>
-          ) : null}
           {locationState?.notice ? (
             <p className="auth-alert auth-alert--success" role="status">
               {locationState.notice}

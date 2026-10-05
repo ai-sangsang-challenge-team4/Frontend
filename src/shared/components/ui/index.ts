@@ -8,3 +8,4 @@ export * from './Popover';
 export * from './Select';
 export * from './Tabs';
 export * from './TextField';
+export * from './Toast';

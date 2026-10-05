@@ -41,6 +41,7 @@
 
 .guide-page-title-group {
   gap: 20px;
+  order: -1;
 }
 
 .guide-back-link {
@@ -626,6 +627,21 @@
     flex-direction: column;
   }
 
+  .guide-page-header {
+    gap: 12px;
+  }
+
+  .guide-page-title-group {
+    order: 0;
+  }
+
+  .guide-page-nav {
+    flex-wrap: wrap;
+    gap: 10px;
+    font-size: 16px;
+    line-height: 24px;
+  }
+
   .guide-post-detail-header {
     align-items: flex-start;
     flex-direction: column;
@@ -683,7 +699,6 @@
     padding: 36px 16px 56px;
   }
 
-  .guide-page-title-group h1,
   .guide-page-summary h2,
   .guide-post-detail-header h2 {
     font-size: 24px;
@@ -692,13 +707,6 @@
 
   .guide-page-title-group {
     gap: 12px;
-  }
-
-  .guide-page-nav {
-    flex-wrap: wrap;
-    gap: 10px;
-    font-size: 16px;
-    line-height: 24px;
   }
 
   .guide-page-summary {
