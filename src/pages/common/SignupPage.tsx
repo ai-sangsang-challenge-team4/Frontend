@@ -63,7 +63,7 @@ export function SignupPage() {
     }
 
     if (!role) {
-      nextErrors.role = '사용자 역할을 선택해 주세요.';
+      nextErrors.role = '계정 유형을 선택해 주세요.';
     }
 
     if (password.length < 8 || password.length > 20) {
@@ -126,7 +126,7 @@ export function SignupPage() {
           <div className="auth-field-list">
             <fieldset className="auth-fieldset auth-fieldset--roles">
               <legend>
-                사용자 역할 <span className="auth-required">*</span>
+                계정 유형 <span className="auth-required">*</span>
               </legend>
               <div className="auth-role-grid auth-role-grid--signup">
                 {SIGNUP_ROLE_OPTIONS.map((option) => (

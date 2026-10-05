@@ -1540,6 +1540,28 @@
 }
 
 @media (max-width: 480px) {
+  .topbar {
+    gap: 16px;
+  }
+
+  .brand {
+    font-size: 1.35rem;
+  }
+
+  .brand__mark {
+    width: 36px;
+    height: 36px;
+  }
+
+  .topbar__button.ui-button {
+    flex: 1 1 0;
+    width: auto;
+  }
+
+  .topbar__nav {
+    width: 100%;
+  }
+
   .auth-inline-row {
     grid-template-columns: 1fr;
     gap: 12px;
