@@ -1,9 +1,22 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { LogOut } from 'lucide-react';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../features/auth';
+import { Sidebar } from '../shared/components/teacher-shell/TeacherSidebar';
+import { Button, Modal } from '../shared/components/ui';
+import '../shared/styles/teacher-prototype.css';
 
 export function ParentLayout() {
   const { logout, user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isAccountOpen, setIsAccountOpen] = useState(false);
+  const isHistoryPage = location.pathname === '/parent/messages' || (
+    /^\/parent\/messages\/[^/]+$/.test(location.pathname) &&
+    location.pathname !== '/parent/messages/new'
+  );
+  const activeItem = isHistoryPage ? 'history' : 'new';
 
   const handleLogout = () => {
     logout();
@@ -11,35 +24,35 @@ export function ParentLayout() {
   };
 
   return (
-    <div className="role-layout">
-      <aside className="role-sidebar">
-        <NavLink className="brand" to="/parent">
-          Parent
-        </NavLink>
-        <nav className="role-nav" aria-label="학부모 메뉴">
-          <NavLink end to="/parent">
-            홈
-          </NavLink>
-          <NavLink to="/parent/messages/new">메시지 작성</NavLink>
-          <NavLink end to="/parent/messages">
-            메시지 이력
-          </NavLink>
-        </nav>
-        <div className="role-sidebar__footer">
-          {user ? (
-            <p className="role-user">
-              <span>{user.name}</span>
-              <span>{user.email}</span>
-            </p>
-          ) : null}
-          <button className="text-button" onClick={handleLogout} type="button">
-            로그아웃
-          </button>
+    <div className={`app-layout parent-app-layout${isSidebarCollapsed ? ' is-sidebar-collapsed' : ''}`}>
+      <Sidebar
+        activeItem={activeItem}
+        defaultCollapsed={isSidebarCollapsed}
+        onAccountClick={() => setIsAccountOpen(true)}
+        onCollapsedChange={setIsSidebarCollapsed}
+        onLogout={handleLogout}
+        profileMeta={user?.email}
+        profileName={user?.name}
+        variant="parent"
+      />
+      <div className="layout-body">
+        <div className="content-shell">
+          <Outlet />
         </div>
-      </aside>
-      <main className="role-content">
-        <Outlet />
-      </main>
+      </div>
+      <Modal
+        footer={
+          <Button leftIcon={<LogOut size={20} />} onClick={handleLogout} variant="outline">
+            로그아웃
+          </Button>
+        }
+        onOpenChange={setIsAccountOpen}
+        open={isAccountOpen}
+        title="계정 정보"
+      >
+        <p>{user?.name}</p>
+        <p>{user?.email}</p>
+      </Modal>
     </div>
   );
 }
