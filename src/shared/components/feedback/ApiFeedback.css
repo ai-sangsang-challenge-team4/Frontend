@@ -100,6 +100,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .api-feedback-spinner {
-    animation-duration: 2400ms;
+    animation: none;
   }
 }

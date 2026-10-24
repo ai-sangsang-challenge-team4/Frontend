@@ -75,6 +75,7 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
   signal?.addEventListener('abort', abortFromCaller, { once: true });
 
   let response: Response;
+  let payload: unknown;
   try {
     response = await fetch(buildApiUrl(path, query), {
       method,
@@ -82,6 +83,8 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
       body: requestBody,
       signal: controller.signal,
     });
+    // Keep the timeout and caller abort active until the body is fully read.
+    payload = await readPayload(response);
   } catch (error) {
     if (timedOut) throw new ApiError({ kind: 'TIMEOUT', status: 0 });
     // Caller-initiated aborts are not failures; let callers ignore them with isAbortError.
@@ -92,12 +95,13 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
     signal?.removeEventListener('abort', abortFromCaller);
   }
 
-  const payload = await readPayload(response);
-
   if (!response.ok) {
     const error = createErrorFromPayload(response.status, payload);
-    // Only an authenticated request proves the stored session is no longer valid.
-    if (error.kind === 'UNAUTHORIZED' && accessToken) config.onUnauthorized(error);
+    // Only an authenticated request proves the stored session is no longer valid,
+    // and a late 401 from a previous session must not invalidate the current one.
+    if (error.kind === 'UNAUTHORIZED' && accessToken && accessToken === config.getAccessToken()) {
+      config.onUnauthorized(error);
+    }
     throw error;
   }
 
@@ -120,7 +124,9 @@ export const apiClient = {
 
 async function readPayload(response: Response): Promise<unknown> {
   if (response.status === 204) return undefined;
-  const text = await response.text().catch(() => '');
+  // A failed body read on success must surface as an error, not an empty result.
+  // Error responses fall back to the status-code copy instead.
+  const text = response.ok ? await response.text() : await response.text().catch(() => '');
   if (!text) return undefined;
   try {
     return JSON.parse(text);

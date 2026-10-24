@@ -96,6 +96,31 @@ test('토큰이 있는 요청이 401이면 onUnauthorized를 호출한다', asyn
   expect(unauthorized).toHaveLength(1);
 });
 
+test('이전 세션 토큰으로 보낸 요청의 401은 현재 세션을 만료시키지 않는다', async () => {
+  const unauthorized: ApiError[] = [];
+  let token = 'old-token';
+  configureApiClient({ getAccessToken: () => token, onUnauthorized: (error) => unauthorized.push(error) });
+  mockFetch(() => {
+    token = 'new-token';
+    return json(401, { status: 'ERROR', code: 'UNAUTHORIZED', message: '인증 실패' });
+  });
+
+  await catchError(apiClient.get('/me'));
+  expect(unauthorized).toHaveLength(0);
+});
+
+test('성공 응답 본문 읽기에 실패하면 빈 성공 대신 NETWORK 오류로 끝난다', async () => {
+  mockFetch(() => new Response(new ReadableStream({ pull: (controller) => controller.error(new TypeError('body failed')) }), { status: 200 }));
+  expect(await catchError(apiClient.get('/messages'))).toMatchObject({ kind: 'NETWORK', status: 0 });
+});
+
+test('응답 본문 읽기가 멈추면 제한 시간 초과로 끝난다', async () => {
+  mockFetch(({ init }) => new Response(new ReadableStream({
+    start: (controller) => init.signal?.addEventListener('abort', () => controller.error(new DOMException('Aborted', 'AbortError'))),
+  }), { status: 200 }));
+  expect(await catchError(apiClient.get('/messages', { timeoutMs: 20 }))).toMatchObject({ kind: 'TIMEOUT' });
+});
+
 test('로그인 실패(401) 사유는 서버 문구를 보여주고 세션 만료 처리는 하지 않는다', async () => {
   const unauthorized: ApiError[] = [];
   configureApiClient({ getAccessToken: () => 'token', onUnauthorized: (error) => unauthorized.push(error) });
