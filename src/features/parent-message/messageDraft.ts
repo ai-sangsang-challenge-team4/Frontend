@@ -59,7 +59,11 @@ function isSentMessage(value: unknown): value is SentParentMessage {
     (value.consultationStatus === undefined || ['before', 'inProgress', 'complete'].includes(String(value.consultationStatus))) &&
     (value.conversation === undefined || (Array.isArray(value.conversation) && value.conversation.every((entry: unknown) => (
       isRecord(entry) && typeof entry.id === 'string' && typeof entry.body === 'string' &&
-      typeof entry.sentAt === 'string' && (entry.authorRole === 'parent' || entry.authorRole === 'teacher')
+      typeof entry.sentAt === 'string' && (entry.authorRole === 'parent' || entry.authorRole === 'teacher') &&
+      (entry.deliveryStatus === undefined || entry.deliveryStatus === 'SENT_TO_PARENT')
+    )))) &&
+    (value.activityLogs === undefined || (Array.isArray(value.activityLogs) && value.activityLogs.every((entry: unknown) => (
+      isRecord(entry) && ['action', 'actor', 'detail', 'id', 'time'].every((field) => typeof entry[field] === 'string')
     )))) &&
     Array.isArray(value.auditLog) && value.auditLog.every((entry: unknown) => (
       isRecord(entry) && entry.action === 'SENT' && typeof entry.at === 'string' &&

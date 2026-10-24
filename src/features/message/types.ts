@@ -1,3 +1,4 @@
+import type { ThreadActivityLog } from '../parent-message/parentMessageTypes';
 import type { ReplyTemplateDraft } from './replyTemplates';
 
 export type ThreadStatus = 'before' | 'inProgress' | 'complete';
@@ -37,13 +38,7 @@ export type RiskFactor = {
   status: RiskFactorStatus;
 };
 
-export type ActivityLog = {
-  action: string;
-  actor: string;
-  detail: string;
-  id: string;
-  time: string;
-};
+export type ActivityLog = ThreadActivityLog;
 
 // A teacher's report that the AI judgement was wrong; collected as misjudgement cases for evaluation.
 export type AiObjection = {
@@ -96,6 +91,8 @@ export type BoardThread = {
   needsTeacherReview?: boolean;
   parentAcknowledgedAt?: string;
   analysis?: ThreadAnalysis;
+  // Used only when there is no analysis, e.g. threads loaded from parent messages.
+  activityLogs?: ActivityLog[];
   aiDraftGenerated?: boolean;
   className: string;
   draftSavedAt?: string;

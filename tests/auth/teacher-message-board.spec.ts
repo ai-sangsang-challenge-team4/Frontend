@@ -118,3 +118,15 @@ test('사이드바 메시지 개수는 진행 중 상담 수를 따라간다', a
   if (testInfo.project.name === 'mobile') await page.getByRole('button', { name: /메뉴/ }).first().click();
   await expect(badge).toHaveText('4');
 });
+
+test('답변 작성 화면의 원문 보기는 원문 열람 화면을 열고 답변 작성으로 돌아온다', async ({ page }) => {
+  await page.goto('/teacher/messages/thread-002/response');
+  await page.getByRole('button', { name: '원문 보기', exact: true }).click();
+  await page.getByRole('button', { name: '원문 확인', exact: true }).click();
+
+  await expect(page).toHaveURL(/\/teacher\/messages\/thread-002$/);
+  await expect(page.getByText('원문 열람', { exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: '답변 작성하기', exact: true }).click();
+  await expect(page).toHaveURL(/\/teacher\/messages\/thread-002\/response$/);
+});

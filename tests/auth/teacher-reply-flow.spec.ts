@@ -57,7 +57,7 @@ test('규정 원문은 선택한 출처와 버전을 표시하고 작성 중인 
   await page.goto('/teacher/messages/thread-003/response');
   const editor = page.locator('#board-reply-composer-input');
   await editor.fill('규정 확인 후 안내드리겠습니다.');
-  await page.getByRole('button', { name: '현장체험학습 운영 계획 원문 보기', exact: true }).click();
+  await page.getByRole('button', { name: '현장체험학습 운영 계획 자세히 보기', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '규정 원문 확인', exact: true });
   await expect(dialog).toContainText('현장체험학습 운영 계획');
   await expect(dialog).toContainText('v0.9');
@@ -70,10 +70,10 @@ test('규정 원문은 선택한 출처와 버전을 표시하고 작성 중인 
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
   await expect(editor).toHaveValue('규정 확인 후 안내드리겠습니다.');
-  await expect(page.getByRole('button', { name: '현장체험학습 운영 계획 원문 보기', exact: true })).toBeFocused();
+  await expect(page.getByRole('button', { name: '현장체험학습 운영 계획 자세히 보기', exact: true })).toBeFocused();
 
   await page.goto('/teacher/messages/thread-002/response');
-  await page.getByRole('button', { name: '학교 생활지도 규정 원문 보기', exact: true }).click();
+  await page.getByRole('button', { name: '학교 생활지도 규정 자세히 보기', exact: true }).click();
   await expect(dialog).toContainText('제7조(학생 간 갈등 확인 절차)');
   await expect(dialog).not.toContainText('제5조(준비물 및 안전 수칙)');
 });

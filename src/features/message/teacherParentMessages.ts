@@ -66,13 +66,13 @@ export function readTeacherParentThreads(teacherUserId: number): BoardThread[] {
           title: message.title, latestMessage: latest.body, latestAt: latest.sentAt, latestAtLabel: formatMessageDate(latest.sentAt),
           messageDateLabel: formatMessageDate(message.sentAt, false), originalMessage: message.finalBody,
           status: message.consultationStatus ?? 'before', needsTeacherReview: message.needsTeacherReview,
-          parentAcknowledgedAt: message.parentAcknowledgedAt, risk: 'normal', riskReviewRequired: false,
+          parentAcknowledgedAt: message.parentAcknowledgedAt, activityLogs: message.activityLogs ?? [], risk: 'normal', riskReviewRequired: false,
           isPinned: message.teacherPinned ?? false, draftText: message.teacherDraftText ?? '', draftSavedAt: message.teacherDraftSavedAt,
           appliedTemplate: isReplyTemplateDraft(message.teacherReplyTemplate) ? message.teacherReplyTemplate : undefined,
           officialTemplateApplied: isReplyTemplateDraft(message.teacherReplyTemplate),
           replies: conversation.map((entry) => ({
             id: entry.id, authorRole: entry.authorRole, authorName: entry.authorRole === 'teacher' ? message.teacherName : parentName,
-            content: entry.body, label: entry.authorRole === 'teacher' ? '선생님 답변' : '학부모 문의', time: formatReplyTime(entry.sentAt, message.sentAt), sentAt: entry.sentAt,
+            content: entry.body, deliveryStatus: entry.deliveryStatus, label: entry.authorRole === 'teacher' ? '선생님 답변' : '학부모 문의', time: formatReplyTime(entry.sentAt, message.sentAt), sentAt: entry.sentAt,
           })),
         });
       }
@@ -98,9 +98,9 @@ export function persistTeacherParentThread(teacherUserId: number, thread: BoardT
       needsTeacherReview: !previous || previous.needsTeacherReview !== thread.needsTeacherReview
         ? thread.needsTeacherReview : message.needsTeacherReview,
       teacherDraftText: thread.draftText, teacherDraftSavedAt: thread.draftSavedAt, teacherPinned: thread.isPinned,
-      teacherReplyTemplate: thread.appliedTemplate,
+      teacherReplyTemplate: thread.appliedTemplate, activityLogs: thread.activityLogs ?? message.activityLogs,
       conversation: [...existing, ...addedReplies.map((reply) => ({
-        id: reply.id, authorRole: 'teacher' as const, body: reply.content, sentAt: reply.sentAt ?? thread.latestAt,
+        id: reply.id, authorRole: 'teacher' as const, body: reply.content, deliveryStatus: reply.deliveryStatus, sentAt: reply.sentAt ?? thread.latestAt,
       }))],
       updatedAt: addedReplies.length > 0 ? thread.latestAt : message.updatedAt,
     };

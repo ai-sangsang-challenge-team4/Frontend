@@ -276,31 +276,29 @@ function createAiReplyDraft(thread: BoardThread) {
   ].join('\n\n');
 }
 
+// Threads without analysis (parent-message threads) keep their logs on the thread itself.
+function getActivityLogs(thread: BoardThread) {
+  return thread.analysis?.activityLogs ?? thread.activityLogs ?? [];
+}
+
 function appendActivityLogs(
   thread: BoardThread,
   logs: Omit<ActivityLog, 'id' | 'time'>[],
 ): BoardThread {
-  if (!thread.analysis) {
-    return thread;
-  }
-
   const time = formatNow();
-  const existingLogs = thread.analysis.activityLogs;
+  const existingLogs = getActivityLogs(thread);
+  const activityLogs = [
+    ...existingLogs,
+    ...logs.map((log, index) => ({
+      ...log,
+      id: `${thread.id}-log-${existingLogs.length + index + 1}`,
+      time,
+    })),
+  ];
 
-  return {
-    ...thread,
-    analysis: {
-      ...thread.analysis,
-      activityLogs: [
-        ...existingLogs,
-        ...logs.map((log, index) => ({
-          ...log,
-          id: `${thread.id}-log-${existingLogs.length + index + 1}`,
-          time,
-        })),
-      ],
-    },
-  };
+  return thread.analysis
+    ? { ...thread, analysis: { ...thread.analysis, activityLogs } }
+    : { ...thread, activityLogs };
 }
 
 // A draft built from a template that was deactivated or replaced by a newer version cannot be sent.
@@ -1450,7 +1448,7 @@ type ActivityLogPanelProps = {
 };
 
 function ActivityLogPanel({ thread }: ActivityLogPanelProps) {
-  const logs = thread.analysis?.activityLogs ?? [];
+  const logs = getActivityLogs(thread);
 
   if (logs.length === 0) {
     return (
@@ -2298,8 +2296,11 @@ export function TeacherMessages({
       view: MessagesRouteView | null;
     }) => {
       setDraftPromptThreadId(null);
-      setInitialDetailTabRequest(null);
-      setInitialOriginalViewerRequest(null);
+      // pushTeacherMessageRoute also fires popstate, so keep a request aimed at the detail being opened.
+      const keepRequest = <T extends { threadId: string }>(current: T | null) =>
+        current?.threadId === routeState.threadId && routeState.view !== 'reply' ? current : null;
+      setInitialDetailTabRequest(keepRequest);
+      setInitialOriginalViewerRequest(keepRequest);
       setReplyComposerThreadId(
         routeState.view === 'reply' ? routeState.threadId : null,
       );
@@ -2471,27 +2472,13 @@ export function TeacherMessages({
 
       const savedAt = formatNow();
 
-      return {
-        ...thread,
-        draftSavedAt: savedAt,
-        analysis: thread.analysis
-          ? {
-              ...thread.analysis,
-              activityLogs: [
-                ...thread.analysis.activityLogs,
-                {
-                  id: `${thread.id}-draft-save-${
-                    thread.analysis.activityLogs.length + 1
-                  }`,
-                  time: savedAt,
-                  actor: '조예인 선생님',
-                  action: '답변 초안 임시저장',
-                  detail: `작성 중인 답변 초안을 임시저장했습니다. 저장 시각: ${savedAt}.`,
-                },
-              ],
-            }
-          : thread.analysis,
-      };
+      return appendActivityLogs({ ...thread, draftSavedAt: savedAt }, [
+        {
+          actor: '조예인 선생님',
+          action: '답변 초안 임시저장',
+          detail: `작성 중인 답변 초안을 임시저장했습니다. 저장 시각: ${savedAt}.`,
+        },
+      ]);
     });
   };
 
@@ -2777,30 +2764,17 @@ export function TeacherMessages({
   };
 
   const handleOriginalViewed = (threadId: string, evidence?: string) => {
-    updateThread(threadId, (thread) => {
-      if (!thread.analysis) {
-        return thread;
-      }
-
-      return {
-        ...thread,
-        analysis: {
-          ...thread.analysis,
-          activityLogs: [
-            ...thread.analysis.activityLogs,
-            {
-              id: `${thread.id}-original-${thread.analysis.activityLogs.length + 1}`,
-              time: formatNow(),
-              actor: '조예인 선생님',
-              action: '원문 확인',
-              detail: evidence
-                ? `판단 근거 "${evidence}" 위치를 원문에서 확인했습니다.`
-                : '학부모 원문 전체를 확인했습니다.',
-            },
-          ],
+    updateThread(threadId, (thread) =>
+      appendActivityLogs(thread, [
+        {
+          actor: '조예인 선생님',
+          action: '원문 확인',
+          detail: evidence
+            ? `판단 근거 "${evidence}" 위치를 원문에서 확인했습니다.`
+            : '학부모 원문 전체를 확인했습니다.',
         },
-      };
-    });
+      ]),
+    );
   };
 
   const handleOpenOriginalPageFromComposer = (threadId: string) => {
