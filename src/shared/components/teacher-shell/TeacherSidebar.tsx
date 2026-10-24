@@ -102,7 +102,7 @@ export function Sidebar({
       />
       <div className="sidebar-brand">
         <span className="sidebar-logo">(로고)</span>
-        <strong>{variant === 'parent' ? 'Parent Hub' : 'Teacher Hub'}</strong>
+        <strong>Teacher Hub</strong>
       </div>
 
       <button
@@ -142,14 +142,14 @@ export function Sidebar({
 
       {variant === 'parent' ? (
         <button
-          aria-label="계정 정보"
+          aria-label="설정/도움말"
           className="sidebar-utility-link"
           onClick={onAccountClick}
-          title="계정 정보"
+          title="설정/도움말"
           type="button"
         >
           <SidebarSettingsIcon className="sidebar-link-icon" />
-          <span className="sidebar-link-label">계정 정보</span>
+          <span className="sidebar-link-label">설정/도움말</span>
         </button>
       ) : (
         <NavLink
@@ -230,9 +230,9 @@ function MobileSidebarMenu({
 
   const closeMenu = () => setIsOpen(false);
   const brand = (
-    <NavLink className="sidebar-mobile-brand" onClick={closeMenu} to={isParent ? '/parent' : '/teacher/messages'}>
-      <span aria-hidden="true" className="sidebar-mobile-brand-mark">{isParent ? 'PH' : 'TH'}</span>
-      {isParent ? 'Parent Hub' : 'Teacher Hub'}
+    <NavLink className="sidebar-mobile-brand" onClick={closeMenu} to={isParent ? '/parent/messages/new' : '/teacher/messages'}>
+      <span aria-hidden="true" className="sidebar-mobile-brand-mark">TH</span>
+      Teacher Hub
     </NavLink>
   );
 
@@ -285,7 +285,7 @@ function MobileSidebarMenu({
               type="button"
             >
               <SidebarSettingsIcon className="sidebar-link-icon" />
-              <span>계정 정보</span>
+              <span>설정/도움말</span>
             </button>
           ) : null}
         </nav>

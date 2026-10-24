@@ -193,12 +193,13 @@ function RequiredLabel({ children }: { children: string }) {
 
 function getLoginRedirectPath(role: UserRole, from?: string) {
   const defaultPath = getDefaultRolePath(role);
+  const roleRootPath = `/${role.toLowerCase()}`;
 
   if (!from) {
     return defaultPath;
   }
 
-  return from === defaultPath || from.startsWith(`${defaultPath}/`) || from.startsWith(`${defaultPath}?`)
+  return from === roleRootPath || from.startsWith(`${roleRootPath}/`) || from.startsWith(`${roleRootPath}?`)
     ? from : defaultPath;
 }
 

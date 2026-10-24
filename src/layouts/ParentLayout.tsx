@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { LogOut } from 'lucide-react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../features/auth';
@@ -17,6 +17,10 @@ export function ParentLayout() {
     location.pathname !== '/parent/messages/new'
   );
   const activeItem = isHistoryPage ? 'history' : 'new';
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [location.pathname]);
 
   const handleLogout = () => {
     logout();

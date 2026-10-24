@@ -296,7 +296,21 @@
 @media (max-width: 620px) {
   .parent-write-heading { gap: 8px; }
   .parent-write-heading h1 { font-size: 22px; line-height: 28px; }
-  .parent-write-breadcrumb { flex: 0 0 auto; gap: 6px; font-size: 12px; line-height: 18px; }
+  .parent-write-breadcrumb {
+    min-width: 0;
+    flex: 1 1 auto;
+    gap: 6px;
+    overflow: hidden;
+    font-size: 12px;
+    line-height: 18px;
+  }
+  .parent-write-breadcrumb a { flex: 0 0 auto; }
+  .parent-write-breadcrumb span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .parent-write-breadcrumb svg { width: 14px; height: 14px; }
   .parent-write-notice { padding: 20px; }
   .parent-write-notice-heading svg { width: 32px; height: 32px; }

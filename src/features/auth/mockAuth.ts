@@ -2,7 +2,7 @@ import type { User, UserRole } from '../../shared/types';
 
 const rolePathMap: Record<UserRole, string> = {
   ADMIN: '/admin',
-  PARENT: '/parent',
+  PARENT: '/parent/messages/new',
   TEACHER: '/teacher',
 };
 

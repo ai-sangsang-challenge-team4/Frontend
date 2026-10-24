@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { ArrowLeft, ChevronRight, ContactRound, LockKeyhole, Save, Send } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { ContactRound, LockKeyhole, Save, Send } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import analysisIllustration from '../../shared/assets/parent/message-analysis.svg';
 import { Button, Select, TextareaField, TextField, Toast } from '../../shared/components/ui';
 import { mockConnectedTeachers, readMessageDraft, saveMessageDraft, type MessageDraft } from './messageDraft';
+import { ParentMessageHeader } from './ParentMessageHeader';
+import { analyzeParentMessage } from './parentMessageApi';
+import { createMessageReview, MESSAGE_MAX_LENGTH } from './parentMessageTypes';
 import './ParentMessageComposer.css';
 
 type FieldName = 'teacherId' | 'title' | 'body';
@@ -30,23 +33,32 @@ export function ParentMessageComposer({ userId }: { userId: number }) {
     loadingTitle.current?.focus();
     window.scrollTo({ top: 0, behavior: 'instant' });
 
-    // Preview the loading transition until the analysis API is connected.
-    const timer = window.setTimeout(() => {
+    const controller = new AbortController();
+    const analyze = async () => {
+      let review;
       try {
-        saveMessageDraft(userId, { ...draft, status: 'PARENT_REVIEW' });
+        review = createMessageReview(await analyzeParentMessage(draft, controller.signal));
+      } catch {
+        if (controller.signal.aborted) return;
+        review = createMessageReview({ status: 'failed', revisedText: null, risks: [], meaningWarning: null });
+      }
+      if (controller.signal.aborted) return;
+      try {
+        saveMessageDraft(userId, { ...draft, status: 'PARENT_REVIEW', review });
         navigate(`/parent/messages/${draft.messageId}/review`);
       } catch {
         analysisPending.current = false;
         setIsAnalyzing(false);
         setNotice('작성한 내용을 저장하지 못했습니다. 다시 시도해 주세요.');
       }
-    }, 3_000);
+    };
+    void analyze();
 
-    return () => window.clearTimeout(timer);
+    return () => controller.abort();
   }, [draft, isAnalyzing, navigate, userId]);
 
   function updateField(field: FieldName, value: string) {
-    setDraft((previous) => ({ ...previous, [field]: value, status: 'DRAFT' }));
+    setDraft((previous) => ({ ...previous, [field]: value, status: 'DRAFT', review: undefined }));
     setErrors((previous) => ({ ...previous, [field]: undefined }));
   }
 
@@ -72,10 +84,20 @@ export function ParentMessageComposer({ userId }: { userId: number }) {
     }
     if (!draft.title.trim()) nextErrors.title = '문의 제목을 입력해 주세요.';
     if (!draft.body.trim()) nextErrors.body = '문의 내용을 입력해 주세요.';
+    if (draft.body.length > MESSAGE_MAX_LENGTH) nextErrors.body = `문의 내용은 ${MESSAGE_MAX_LENGTH}자 이내로 작성해 주세요.`;
     setErrors(nextErrors);
     const firstInvalid = (['teacherId', 'title', 'body'] as const).find((field) => nextErrors[field]);
     if (firstInvalid) {
       document.getElementById(`parent-message-${firstInvalid}`)?.focus();
+      return;
+    }
+    if (draft.review) {
+      try {
+        saveMessageDraft(userId, { ...draft, status: 'PARENT_REVIEW' });
+        navigate(`/parent/messages/${draft.messageId}/review`);
+      } catch {
+        setNotice('작성한 내용을 저장하지 못했습니다. 다시 시도해 주세요.');
+      }
       return;
     }
     if (!navigator.onLine) {
@@ -102,27 +124,13 @@ export function ParentMessageComposer({ userId }: { userId: number }) {
       setIsAnalyzing(false);
       window.requestAnimationFrame(() => document.getElementById('parent-message-body')?.focus());
     } else {
-      navigate('/parent');
+      navigate('/parent/messages');
     }
   }
 
   return (
     <>
-      <header className="teacher-app-header parent-write-header">
-        <div className="parent-write-heading">
-          <button aria-label={isAnalyzing ? '문의 작성으로 돌아가기' : '홈으로 돌아가기'}
-            className="parent-write-back" onClick={handleBack}
-            title={isAnalyzing ? '문의 작성으로 돌아가기' : '홈으로 돌아가기'} type="button">
-            <ArrowLeft aria-hidden="true" size={24} />
-          </button>
-          <h1>새 문의 작성</h1>
-        </div>
-        <nav aria-label="현재 위치" className="parent-write-breadcrumb">
-          <Link to="/parent">홈</Link>
-          <ChevronRight aria-hidden="true" size={20} />
-          <span aria-current="page">새 문의 작성</span>
-        </nav>
-      </header>
+      <ParentMessageHeader backLabel={isAnalyzing ? '문의 작성으로 돌아가기' : '문의 내역으로 돌아가기'} onBack={handleBack} />
 
       <main className="layout-main parent-write-main" aria-busy={isAnalyzing}>
         {isAnalyzing ? (
@@ -163,7 +171,7 @@ export function ParentMessageComposer({ userId }: { userId: number }) {
                 onChange={(event) => updateField('title', event.target.value)}
                 placeholder="문의 제목을 입력해 주세요." required value={draft.title} />
               <TextareaField containerClassName="parent-write-field parent-write-body" error={errors.body}
-                id="parent-message-body" label="문의 내용" name="body"
+                id="parent-message-body" label="문의 내용" maxLength={MESSAGE_MAX_LENGTH} name="body"
                 onChange={(event) => updateField('body', event.target.value)}
                 placeholder="선생님께 전달할 문의 내용을 작성해 주세요." required rows={10} value={draft.body} />
               <div className="parent-write-actions">

@@ -15,7 +15,6 @@ import { MessageDetailPage as ParentMessageDetailPage } from '../../pages/parent
 import { MessageHistoryPage } from '../../pages/parent/MessageHistoryPage';
 import { MessageReviewPage } from '../../pages/parent/MessageReviewPage';
 import { MessageWritePage } from '../../pages/parent/MessageWritePage';
-import { ParentHomePage } from '../../pages/parent/ParentHomePage';
 import { AdminSharePage as TeacherAdminSharePage } from '../../pages/teacher/AdminSharePage';
 import { ExternalAnalysisPage } from '../../pages/teacher/ExternalAnalysisPage';
 import { MessageDetailPage as TeacherMessageDetailPage } from '../../pages/teacher/MessageDetailPage';
@@ -46,12 +45,12 @@ export function AppRouter() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<ParentHomePage />} />
+        <Route index element={<Navigate to="/parent/messages/new" replace />} />
         <Route path="messages" element={<MessageHistoryPage />} />
         <Route path="messages/new" element={<MessageWritePage />} />
         <Route path="messages/:messageId/review" element={<MessageReviewPage />} />
         <Route path="messages/:messageId" element={<ParentMessageDetailPage />} />
-        <Route path="*" element={<Navigate to="/parent" replace />} />
+        <Route path="*" element={<Navigate to="/parent/messages/new" replace />} />
       </Route>
 
       <Route

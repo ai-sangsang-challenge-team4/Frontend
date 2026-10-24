@@ -45,7 +45,7 @@ PLAYWRIGHT_BASE_URL=http://127.0.0.1:5175 npm run test:auth
 
 | 역할 | 이메일 | 비밀번호 | 로그인 후 화면 |
 | --- | --- | --- | --- |
-| PARENT | parent@example.com | password123 | /parent |
+| PARENT | parent@example.com | password123 | /parent/messages/new |
 | TEACHER | teacher@example.com | password123 | /teacher → /teacher/messages |
 | ADMIN | admin@teacherhub.local | admin1234 | /admin |
 

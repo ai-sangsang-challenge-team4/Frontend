@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 const draftKey = 'teacher-hub.parent-message-draft.101';
 
@@ -7,8 +7,7 @@ async function openComposer(page: Page) {
   await page.locator('input[name="email"]').fill('parent@example.com');
   await page.locator('input[name="password"]').fill('password123');
   await page.getByRole('button', { name: '로그인', exact: true }).click();
-  await expect(page).toHaveURL(/\/parent$/);
-  await page.goto('/parent/messages/new');
+  await expect(page).toHaveURL(/\/parent\/messages\/new$/);
   await expect(page.getByRole('heading', { name: '새 문의 작성', exact: true })).toBeVisible();
 }
 
@@ -16,6 +15,56 @@ async function fillMessage(page: Page) {
   await page.getByLabel('문의 제목', { exact: true }).fill('상담 일정을 문의드립니다.');
   await page.getByLabel('문의 내용', { exact: true }).fill('선생님 안녕하세요. 다음 주 상담 가능한 시간을 알려 주실 수 있을까요?');
 }
+
+async function expectMenuLabelsAligned(labels: Locator) {
+  await expect(labels).toHaveCount(3);
+  const positions = await labels.evaluateAll((elements) => elements.map((element) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    return range.getBoundingClientRect().left;
+  }));
+  for (const position of positions) expect(position).toBeCloseTo(positions[0], 1);
+}
+
+test('학부모 홈과 잘못된 경로는 새 문의로 연결되고 뒤로가기는 문의 내역을 연다', async ({ page }) => {
+  await openComposer(page);
+  for (const pathname of ['/parent', '/parent/unknown']) {
+    await page.goto(pathname);
+    await expect(page).toHaveURL(/\/parent\/messages\/new$/);
+    await expect(page.getByRole('heading', { name: '새 문의 작성', exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: '홈', exact: true })).toHaveCount(0);
+  }
+  await page.getByRole('button', { name: '문의 내역으로 돌아가기', exact: true }).click();
+  await expect(page).toHaveURL(/\/parent\/messages$/);
+  await expect(page.getByRole('heading', { name: '문의 내역', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '문의 작성으로 돌아가기', exact: true }).click();
+  await expect(page).toHaveURL(/\/parent\/messages\/new$/);
+});
+
+test('320px 화면에서도 제목과 breadcrumb가 헤더 안에 겹치지 않고 표시된다', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 320, height: 720 });
+  await openComposer(page);
+  const header = page.locator('.parent-write-header');
+  const heading = page.locator('.parent-write-heading');
+  const breadcrumb = page.getByRole('navigation', { name: '현재 위치', exact: true });
+  const currentPage = breadcrumb.locator('[aria-current="page"]');
+  await expect(currentPage).toHaveText('새 문의 작성');
+  await expect(currentPage).toHaveCSS('text-overflow', 'ellipsis');
+
+  for (const width of [320, 375, 620]) {
+    await page.setViewportSize({ width, height: 720 });
+    const headerBox = (await header.boundingBox())!;
+    const headingBox = (await heading.boundingBox())!;
+    const breadcrumbBox = (await breadcrumb.boundingBox())!;
+    expect(breadcrumbBox.x).toBeGreaterThanOrEqual(headingBox.x + headingBox.width);
+    expect(breadcrumbBox.x + breadcrumbBox.width).toBeLessThanOrEqual(headerBox.x + headerBox.width + 1);
+    expect(breadcrumbBox.y).toBeLessThan(headingBox.y + headingBox.height);
+    expect(breadcrumbBox.y + breadcrumbBox.height).toBeGreaterThan(headingBox.y);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  }
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.screenshot({ path: testInfo.outputPath('parent-message-write-320.png'), fullPage: true });
+});
 
 test('빈 입력과 공백 입력을 차단하고 임시저장한 메시지를 새로고침 후 복원한다', async ({ page }) => {
   await openComposer(page);
@@ -97,15 +146,17 @@ test('학부모 메뉴와 계정 정보를 표시하고 화면이 가로로 넘�
   const isMobile = page.viewportSize()!.width <= 980;
   if (isMobile) {
     await page.getByRole('button', { name: '학부모 메뉴 더보기', exact: true }).click();
-    const menu = page.getByRole('dialog', { name: 'Parent Hub 학부모 메뉴', exact: true });
+    const menu = page.getByRole('dialog', { name: 'Teacher Hub 학부모 메뉴', exact: true });
     await expect(menu.getByRole('link', { name: '새 문의', exact: true })).toHaveAttribute('aria-current', 'page');
     await expect(menu.getByRole('link', { name: '문의 내역', exact: true })).toBeVisible();
-    await menu.getByRole('button', { name: '계정 정보', exact: true }).click();
+    await expectMenuLabelsAligned(menu.locator('.sidebar-mobile-link > span'));
+    await menu.getByRole('button', { name: '설정/도움말', exact: true }).click();
   } else {
     await expect(page.locator('.sidebar-shell')).toHaveCSS('width', '297px');
+    await expectMenuLabelsAligned(page.locator('.sidebar-shell .sidebar-link-label'));
     await page.getByRole('button', { name: '사이드바 접기', exact: true }).click();
     await expect(page.locator('.sidebar-shell')).toHaveCSS('width', '100px');
-    await page.getByRole('button', { name: '계정 정보', exact: true }).click();
+    await page.getByRole('button', { name: '설정/도움말', exact: true }).click();
   }
   const account = page.getByRole('dialog', { name: '계정 정보', exact: true });
   await expect(account.getByText('parent@example.com', { exact: true })).toBeVisible();
