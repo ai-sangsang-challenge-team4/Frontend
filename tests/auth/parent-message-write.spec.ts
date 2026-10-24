@@ -26,7 +26,7 @@ async function expectMenuLabelsAligned(labels: Locator) {
   for (const position of positions) expect(position).toBeCloseTo(positions[0], 1);
 }
 
-test('학부모 홈과 잘못된 경로는 새 문의로 연결되고 뒤로가기는 문의 내역을 연다', async ({ page }) => {
+test('학부모 홈과 잘못된 경로는 새 문의로 연결되고 새 문의 작성에는 뒤로가기가 없다', async ({ page }) => {
   await openComposer(page);
   for (const pathname of ['/parent', '/parent/unknown']) {
     await page.goto(pathname);
@@ -34,8 +34,8 @@ test('학부모 홈과 잘못된 경로는 새 문의로 연결되고 뒤로가�
     await expect(page.getByRole('heading', { name: '새 문의 작성', exact: true })).toBeVisible();
     await expect(page.getByRole('navigation', { name: '현재 위치', exact: true }).getByRole('link', { name: '홈', exact: true })).toHaveAttribute('href', '/parent');
   }
-  await page.getByRole('button', { name: '문의 내역으로 돌아가기', exact: true }).click();
-  await expect(page).toHaveURL(/\/parent\/messages$/);
+  await expect(page.getByRole('button', { name: '문의 내역으로 돌아가기', exact: true })).toHaveCount(0);
+  await page.goto('/parent/messages');
   await expect(page.getByRole('heading', { name: '문의 내역', exact: true })).toBeVisible();
   if (page.viewportSize()!.width <= 980) {
     await page.getByRole('button', { name: '학부모 메뉴 더보기', exact: true }).click();

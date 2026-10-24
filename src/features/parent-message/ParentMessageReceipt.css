@@ -8,7 +8,6 @@
   display: grid;
   justify-items: center;
   gap: 16px;
-  margin-bottom: 48px;
   text-align: center;
 }
 
@@ -27,6 +26,13 @@
   color: var(--color-text-secondary);
   font-size: 18px;
   line-height: 28px;
+}
+
+.parent-receipt-success a {
+  color: var(--color-primary);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .parent-receipt-meta {

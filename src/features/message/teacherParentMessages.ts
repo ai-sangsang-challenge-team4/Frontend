@@ -2,14 +2,25 @@ import { formatMessageDate, getConversation } from '../parent-message/conversati
 import { mockConnectedTeachers, readSentMessages, updateSentMessage } from '../parent-message/messageDraft';
 import type { BoardThread } from './types';
 
+function readParentUserIds(): number[] {
+  try {
+    const ids: number[] = [];
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const match = localStorage.key(index)?.match(/^teacher-hub\.parent-sent-messages\.(\d+)$/);
+      if (match) ids.push(Number(match[1]));
+    }
+    return ids;
+  } catch {
+    // Blocked storage leaves only the built-in example threads.
+    return [];
+  }
+}
+
 // Browser-local mock bridge. A server API must enforce both the parent owner and assigned teacher.
 export function readTeacherParentThreads(teacherUserId: number): BoardThread[] {
   const teachers = mockConnectedTeachers.filter((teacher) => teacher.userId === teacherUserId);
   const threads: BoardThread[] = [];
-  for (let index = 0; index < localStorage.length; index += 1) {
-    const match = localStorage.key(index)?.match(/^teacher-hub\.parent-sent-messages\.(\d+)$/);
-    if (!match) continue;
-    const parentUserId = Number(match[1]);
+  for (const parentUserId of readParentUserIds()) {
     try {
       for (const message of readSentMessages(parentUserId)) {
         const teacher = teachers.find((item) => item.value === message.teacherId);

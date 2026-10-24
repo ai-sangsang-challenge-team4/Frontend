@@ -101,6 +101,10 @@ test('완료된 문의에 추가 질문을 연결하고 교사가 재확인 및 
   await page.getByLabel('문의 내용', { exact: true }).fill('방과후 출결은 생활기록부에도 반영되나요?');
   const reviewUrl = await send(page);
   await expect(page).toHaveURL(/\/parent\/messages\/done$/);
+  await expect(page.getByRole('region', { name: '전송한 문의 내용', exact: true })).toHaveCount(0);
+  await page.getByRole('status').getByRole('link', { name: '문의 내역', exact: true }).click();
+  await expect(page).toHaveURL(/\/parent\/messages$/);
+  await page.locator('.parent-history-link').filter({ hasText: '방과후 출결 확인' }).click();
   await expect(page.getByRole('region', { name: '전송한 문의 내용', exact: true })).toHaveCount(2);
   const messages = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), sentKey);
   expect(messages).toHaveLength(3);
@@ -209,4 +213,42 @@ test('여러 임시저장을 구분하고 모달을 닫거나 이어서 작성�
   await send(page);
   const remaining = await page.evaluate((key) => JSON.parse(localStorage.getItem(`${key}.all`)!), draftKey);
   expect(remaining).toHaveLength(2);
+});
+
+test('손상된 임시저장 목록은 백업하고 읽을 수 없는 항목은 저장 후에도 유지한다', async ({ page }) => {
+  await login(page);
+  await seed(page);
+  await page.evaluate((key) => localStorage.setItem(`${key}.all`, '{broken'), draftKey);
+  await page.goto('/parent/messages?tab=drafts');
+  await expect(page.getByText('임시저장한 문의가 없습니다.', { exact: true })).toBeVisible();
+  await page.goto('/parent/messages/new?fresh=1');
+  await page.getByLabel('문의 제목', { exact: true }).fill('복구 후 작성');
+  await page.getByLabel('문의 내용', { exact: true }).fill('손상 이후 임시저장 내용');
+  await page.getByRole('button', { name: '임시저장', exact: true }).click();
+  await expect(page.getByText('문의가 임시저장되었습니다.', { exact: true })).toBeVisible();
+  const backups = await page.evaluate((key) => Object.keys(localStorage)
+    .filter((item) => item.startsWith(`${key}.all.corrupted.`)).map((item) => localStorage.getItem(item)), draftKey);
+  expect(backups).toEqual(['{broken']);
+
+  const unreadable = { messageId: 'unreadable', title: 42 };
+  await page.evaluate(({ key, entry }) => {
+    const entries = JSON.parse(localStorage.getItem(`${key}.all`)!);
+    localStorage.setItem(`${key}.all`, JSON.stringify([...entries, entry]));
+  }, { key: draftKey, entry: unreadable });
+  await page.getByLabel('문의 내용', { exact: true }).fill('다시 저장한 내용');
+  await page.getByRole('button', { name: '임시저장', exact: true }).click();
+  const stored = await page.evaluate((key) => JSON.parse(localStorage.getItem(`${key}.all`)!), draftKey);
+  expect(stored).toHaveLength(2);
+  expect(stored).toContainEqual(unreadable);
+  await page.goto('/parent/messages?tab=drafts');
+  await expect(page.locator('.parent-draft-row')).toHaveCount(1);
+});
+
+test('저장소 접근이 막혀도 교사 문의 화면을 표시한다', async ({ page }) => {
+  await login(page, 'TEACHER');
+  await page.evaluate(() => {
+    Object.defineProperty(Storage.prototype, 'key', { configurable: true, value: () => { throw new DOMException('blocked', 'SecurityError'); } });
+  });
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(page.locator('.board-thread-copy').first()).toBeVisible();
 });

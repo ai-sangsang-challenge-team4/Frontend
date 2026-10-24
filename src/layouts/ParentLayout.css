@@ -28,15 +28,3 @@
   outline: 2px solid var(--color-primary);
   outline-offset: 4px;
 }
-
-@media (min-width: 1241px) {
-  .parent-detail-layout {
-    --app-content-left: 127px;
-    --app-content-right: clamp(56px, 11.8vw, 170px);
-  }
-
-  .parent-follow-up-layout {
-    --app-content-left: 114px;
-    --app-content-right: clamp(56px, 12vw, 173px);
-  }
-}

@@ -1,4 +1,4 @@
-import { ArrowRight, CalendarDays, Info, Pencil } from 'lucide-react';
+import { CalendarDays, Info, Pencil } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import completeIllustration from '../../shared/assets/parent/message-analysis.svg';
 import { ProfileAvatar } from '../message/components/ProfileAvatar';
@@ -21,11 +21,11 @@ export function ParentMessageReceipt({ userId, messageId }: { userId: number; me
     <ParentMessageHeader backLabel="문의 내역으로 돌아가기" onBack={() => navigate('/parent/messages')}
       title={justSent ? '전송 완료' : '문의 내역'} breadcrumbLabel="문의 내역" />
     <main className="layout-main parent-conversation-main">
-      {message ? <>
-        {justSent ? <div className="parent-receipt-success" role="status">
-          <img alt="" aria-hidden="true" src={completeIllustration} />
-          <h2>문의가 전송되었습니다.</h2><p>{message.teacherName}께 문의를 전달했습니다.</p>
-        </div> : null}
+      {message && justSent ? <div className="parent-receipt-success" role="status">
+        <img alt="" aria-hidden="true" src={completeIllustration} />
+        <h2>문의가 전송되었습니다.</h2>
+        <p>{message.teacherName}께 문의를 전달했습니다.<br />'<Link to="/parent/messages">문의 내역</Link>'에서 해당 문의를 확인해 주세요.</p>
+      </div> : message ? <>
         <div className="parent-conversation-notice"><Info aria-hidden="true" size={24} /><p>같은 내용에 대한 추가 질문은 이 문의에서 이어서 작성할 수 있습니다. 다른 내용은 새 문의로 작성해 주세요.</p></div>
         <section aria-label="전체 대화 내역" className="parent-conversation">
           <ol className="parent-conversation-messages">
@@ -47,7 +47,6 @@ export function ParentMessageReceipt({ userId, messageId }: { userId: number; me
           </ol>
           <div className="parent-conversation-actions">
             <div className="parent-conversation-primary-actions">
-              {justSent ? <Button onClick={() => navigate('/parent/messages')} rightIcon={<ArrowRight size={18} />} variant="outline">문의 내역</Button> : null}
               <Button leftIcon={<Pencil size={20} />} onClick={() => navigate(`/parent/messages/${encodeURIComponent(messageId)}/follow-up`)}>추가 문의하기</Button>
             </div>
             <p>다른 내용으로 문의를 원하시나요? <Link to="/parent/messages/new?fresh=1">새 문의 작성</Link></p>

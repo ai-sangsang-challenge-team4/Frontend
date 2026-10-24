@@ -89,25 +89,59 @@ export function readMessageDraft(userId: number, messageId?: string): MessageDra
   return null;
 }
 
+function draftsKey(userId: number) {
+  return `${draftKey(userId)}.all`;
+}
+
+type DraftCollection = { entries: unknown[]; corrupted: string | null };
+
+function readDraftCollection(userId: number): DraftCollection {
+  const stored = localStorage.getItem(draftsKey(userId));
+  if (!stored) return { entries: [], corrupted: null };
+  try {
+    const parsed: unknown = JSON.parse(stored);
+    if (Array.isArray(parsed)) return { entries: parsed, corrupted: null };
+  } catch {
+    // Kept as a backup by writeDraftCollection below.
+  }
+  return { entries: [], corrupted: stored };
+}
+
+// Unreadable entries are written back unchanged, and a corrupted collection is backed up before it is replaced.
+function writeDraftCollection(userId: number, collection: DraftCollection, entries: unknown[]) {
+  if (collection.corrupted !== null) {
+    localStorage.setItem(`${draftsKey(userId)}.corrupted.${Date.now()}`, collection.corrupted);
+  }
+  localStorage.setItem(draftsKey(userId), JSON.stringify(entries));
+}
+
+function isOtherDraft(messageId: string) {
+  return (entry: unknown) => !isRecord(entry) || entry.messageId !== messageId;
+}
+
+// The legacy single-draft key may hold a draft that is not in the collection yet.
+function readDraftEntries(userId: number, collection: DraftCollection) {
+  const active = readMessageDraft(userId);
+  return active ? [active, ...collection.entries.filter(isOtherDraft(active.messageId))] : collection.entries;
+}
+
 export function saveMessageDraft(userId: number, draft: MessageDraft) {
-  const drafts = readMessageDrafts(userId);
+  const collection = readDraftCollection(userId);
+  const entries = readDraftEntries(userId, collection);
   const saved = { ...draft, savedAt: new Date().toISOString() };
   localStorage.setItem(draftKey(userId), JSON.stringify(saved));
-  localStorage.setItem(`${draftKey(userId)}.all`, JSON.stringify([saved, ...drafts.filter((item) => item.messageId !== draft.messageId)]));
+  writeDraftCollection(userId, collection, [saved, ...entries.filter(isOtherDraft(draft.messageId))]);
 }
 
 export function clearMessageDraft(userId: number, messageId: string) {
-  const drafts = readMessageDrafts(userId).filter((draft) => draft.messageId !== messageId);
-  localStorage.setItem(`${draftKey(userId)}.all`, JSON.stringify(drafts));
+  const collection = readDraftCollection(userId);
+  writeDraftCollection(userId, collection, readDraftEntries(userId, collection).filter(isOtherDraft(messageId)));
   if (readMessageDraft(userId)?.messageId === messageId) localStorage.removeItem(draftKey(userId));
 }
 
 export function readMessageDrafts(userId: number): MessageDraft[] {
   const active = readMessageDraft(userId);
-  const stored = localStorage.getItem(`${draftKey(userId)}.all`);
-  const parsed: unknown = stored ? JSON.parse(stored) : [];
-  if (!Array.isArray(parsed)) throw new Error('임시저장한 문의를 읽지 못했습니다.');
-  const drafts = parsed.map(parseDraft).filter((draft): draft is MessageDraft => draft !== null);
+  const drafts = readDraftCollection(userId).entries.map(parseDraft).filter((draft): draft is MessageDraft => draft !== null);
   return active ? [active, ...drafts.filter((draft) => draft.messageId !== active.messageId)] : drafts;
 }
 
