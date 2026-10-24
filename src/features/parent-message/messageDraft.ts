@@ -8,11 +8,13 @@ export type MessageDraft = {
   body: string;
   status: Extract<MessageStatus, 'DRAFT' | 'PARENT_REVIEW'>;
   review?: MessageReview;
+  threadId?: string;
+  savedAt?: string;
 };
 
 // Replace this fixture with the connected-teachers API when available.
 export const mockConnectedTeachers = [
-  { value: 'teacher-102', label: '김OO 선생님' },
+  { value: 'teacher-102', label: '김OO 선생님', userId: 201, className: '3학년 2반' },
 ];
 
 function draftKey(userId: number) {
@@ -50,43 +52,97 @@ function isSentMessage(value: unknown): value is SentParentMessage {
       .every((field) => typeof value[field] === 'string') &&
     (value.selectionType === 'AI' || value.selectionType === 'ORIGINAL' || value.selectionType === 'CUSTOM') &&
     (value.selectionSource === 'AI' || value.selectionSource === 'ORIGINAL') &&
+    ['parentName', 'updatedAt', 'parentAcknowledgedAt', 'teacherDraftText', 'teacherDraftSavedAt']
+      .every((field) => value[field] === undefined || typeof value[field] === 'string') &&
+    ['isImportant', 'needsTeacherReview', 'teacherPinned']
+      .every((field) => value[field] === undefined || typeof value[field] === 'boolean') &&
+    (value.consultationStatus === undefined || ['before', 'inProgress', 'complete'].includes(String(value.consultationStatus))) &&
+    (value.conversation === undefined || (Array.isArray(value.conversation) && value.conversation.every((entry: unknown) => (
+      isRecord(entry) && typeof entry.id === 'string' && typeof entry.body === 'string' &&
+      typeof entry.sentAt === 'string' && (entry.authorRole === 'parent' || entry.authorRole === 'teacher')
+    )))) &&
     Array.isArray(value.auditLog) && value.auditLog.every((entry: unknown) => (
       isRecord(entry) && entry.action === 'SENT' && typeof entry.at === 'string' &&
       (entry.selectionType === 'AI' || entry.selectionType === 'ORIGINAL' || entry.selectionType === 'CUSTOM')
     ));
 }
 
-export function readMessageDraft(userId: number): MessageDraft | null {
+function parseDraft(draft: unknown): MessageDraft | null {
+  if (!isRecord(draft)) return null;
+  if (typeof draft.messageId !== 'string' || typeof draft.teacherId !== 'string' ||
+    typeof draft.title !== 'string' || typeof draft.body !== 'string' ||
+    (draft.status !== 'DRAFT' && draft.status !== 'PARENT_REVIEW') ||
+    (draft.threadId !== undefined && typeof draft.threadId !== 'string') ||
+    (draft.savedAt !== undefined && typeof draft.savedAt !== 'string')) return null;
+  const result = draft as MessageDraft;
+  return result.review !== undefined && !isMessageReview(result.review) ? { ...result, review: undefined } : result;
+}
+
+export function readMessageDraft(userId: number, messageId?: string): MessageDraft | null {
+  if (messageId) return readMessageDrafts(userId).find((draft) => draft.messageId === messageId) ?? null;
   try {
     const stored = localStorage.getItem(draftKey(userId));
-    if (!stored) return null;
-    const draft: unknown = JSON.parse(stored);
-    if (typeof draft !== 'object' || draft === null) return null;
-    if (
-      'messageId' in draft && typeof draft.messageId === 'string' &&
-      'teacherId' in draft && typeof draft.teacherId === 'string' &&
-      'title' in draft && typeof draft.title === 'string' &&
-      'body' in draft && typeof draft.body === 'string' &&
-      'status' in draft && (draft.status === 'DRAFT' || draft.status === 'PARENT_REVIEW')
-    ) {
-      const result = draft as MessageDraft;
-      if (result.review !== undefined && !isMessageReview(result.review)) {
-        return { ...result, review: undefined };
-      }
-      return result;
-    }
+    return stored ? parseDraft(JSON.parse(stored)) : null;
   } catch {
     return null;
   }
   return null;
 }
 
+function draftsKey(userId: number) {
+  return `${draftKey(userId)}.all`;
+}
+
+type DraftCollection = { entries: unknown[]; corrupted: string | null };
+
+function readDraftCollection(userId: number): DraftCollection {
+  const stored = localStorage.getItem(draftsKey(userId));
+  if (!stored) return { entries: [], corrupted: null };
+  try {
+    const parsed: unknown = JSON.parse(stored);
+    if (Array.isArray(parsed)) return { entries: parsed, corrupted: null };
+  } catch {
+    // Kept as a backup by writeDraftCollection below.
+  }
+  return { entries: [], corrupted: stored };
+}
+
+// Unreadable entries are written back unchanged, and a corrupted collection is backed up before it is replaced.
+function writeDraftCollection(userId: number, collection: DraftCollection, entries: unknown[]) {
+  if (collection.corrupted !== null) {
+    localStorage.setItem(`${draftsKey(userId)}.corrupted.${Date.now()}`, collection.corrupted);
+  }
+  localStorage.setItem(draftsKey(userId), JSON.stringify(entries));
+}
+
+function isOtherDraft(messageId: string) {
+  return (entry: unknown) => !isRecord(entry) || entry.messageId !== messageId;
+}
+
+// The legacy single-draft key may hold a draft that is not in the collection yet.
+function readDraftEntries(userId: number, collection: DraftCollection) {
+  const active = readMessageDraft(userId);
+  return active ? [active, ...collection.entries.filter(isOtherDraft(active.messageId))] : collection.entries;
+}
+
 export function saveMessageDraft(userId: number, draft: MessageDraft) {
-  localStorage.setItem(draftKey(userId), JSON.stringify(draft));
+  const collection = readDraftCollection(userId);
+  const entries = readDraftEntries(userId, collection);
+  const saved = { ...draft, savedAt: new Date().toISOString() };
+  localStorage.setItem(draftKey(userId), JSON.stringify(saved));
+  writeDraftCollection(userId, collection, [saved, ...entries.filter(isOtherDraft(draft.messageId))]);
 }
 
 export function clearMessageDraft(userId: number, messageId: string) {
+  const collection = readDraftCollection(userId);
+  writeDraftCollection(userId, collection, readDraftEntries(userId, collection).filter(isOtherDraft(messageId)));
   if (readMessageDraft(userId)?.messageId === messageId) localStorage.removeItem(draftKey(userId));
+}
+
+export function readMessageDrafts(userId: number): MessageDraft[] {
+  const active = readMessageDraft(userId);
+  const drafts = readDraftCollection(userId).entries.map(parseDraft).filter((draft): draft is MessageDraft => draft !== null);
+  return active ? [active, ...drafts.filter((draft) => draft.messageId !== active.messageId)] : drafts;
 }
 
 export function readSentMessages(userId: number): SentParentMessage[] {
@@ -108,5 +164,17 @@ export function storeSentMessage(userId: number, message: SentParentMessage) {
   const existing = messages.find((item) => item.messageId === message.messageId);
   if (existing) return existing;
   localStorage.setItem(sentKey(userId), JSON.stringify([message, ...messages]));
+  window.dispatchEvent(new Event('parent-messages-changed'));
+  return message;
+}
+
+export function updateSentMessage(userId: number, messageId: string, update: (message: SentParentMessage) => SentParentMessage) {
+  const messages = readSentMessages(userId);
+  const index = messages.findIndex((message) => message.messageId === messageId);
+  if (index < 0) throw new Error('문의를 찾을 수 없습니다.');
+  const message = update(messages[index]);
+  messages[index] = message;
+  localStorage.setItem(sentKey(userId), JSON.stringify(messages));
+  window.dispatchEvent(new Event('parent-messages-changed'));
   return message;
 }

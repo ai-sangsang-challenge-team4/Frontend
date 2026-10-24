@@ -1,4 +1,5 @@
 import { findSentMessage, mockConnectedTeachers, storeSentMessage, type MessageDraft } from './messageDraft';
+import { appendFollowUp, findSentSubmission } from './conversation';
 import {
   getSelectedMessage,
   maskContactInfo,
@@ -100,14 +101,16 @@ export async function sendParentMessage(
   draft: MessageDraft,
   review: MessageReview,
   signal: AbortSignal,
+  parentName?: string,
 ): Promise<SentParentMessage> {
   let existing;
   try {
-    existing = findSentMessage(userId, draft.messageId);
+    existing = findSentSubmission(userId, draft);
   } catch {
     throw new Error('문의 내역을 확인하지 못했습니다. 다시 시도해 주세요.');
   }
   if (existing) return existing;
+  if (draft.threadId && !findSentMessage(userId, draft.threadId)) throw new Error('기존 문의를 찾을 수 없습니다.');
   const selected = getSelectedMessage(draft.body, review);
   const error = validateFinalMessage(selected.text);
   if (error) throw new Error(error);
@@ -121,6 +124,7 @@ export async function sendParentMessage(
     signal.throwIfAborted();
     const sentAt = new Date().toISOString();
     const message: SentParentMessage = {
+      parentName,
       messageId: draft.messageId,
       teacherId: draft.teacherId,
       teacherName: teacher.label,
@@ -132,9 +136,10 @@ export async function sendParentMessage(
       status: 'SENT',
       sentAt,
       auditLog: [{ action: 'SENT', at: sentAt, selectionType: selected.selectionType }],
+      consultationStatus: 'before',
     };
     try {
-      return storeSentMessage(userId, message);
+      return draft.threadId ? appendFollowUp(userId, draft, message) : storeSentMessage(userId, message);
     } catch {
       throw new Error('문의를 저장하지 못했습니다. 작성한 내용은 유지됩니다. 다시 시도해 주세요.');
     }

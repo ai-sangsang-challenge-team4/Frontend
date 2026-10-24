@@ -172,7 +172,7 @@
 .sidebar-divider {
   position: absolute;
   top: auto;
-  bottom: 212px;
+  bottom: 228px;
   left: 0;
   width: 100%;
   height: 3px;
@@ -182,7 +182,7 @@
 .sidebar-utility-link {
   position: absolute;
   top: auto;
-  bottom: 147px;
+  bottom: 163px;
   left: 0;
   width: 100%;
 }
@@ -471,11 +471,11 @@
   }
 
   .sidebar-divider {
-    bottom: 168px;
+    bottom: 180px;
   }
 
   .sidebar-utility-link {
-    bottom: 112px;
+    bottom: 124px;
   }
 
   .sidebar-profile {
@@ -543,11 +543,11 @@
   }
 
   .sidebar-divider {
-    bottom: 98px;
+    bottom: 106px;
   }
 
   .sidebar-utility-link {
-    bottom: 52px;
+    bottom: 60px;
   }
 
   .sidebar-profile {

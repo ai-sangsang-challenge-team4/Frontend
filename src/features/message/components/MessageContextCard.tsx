@@ -17,8 +17,8 @@ export function MessageContextCard({ thread }: MessageContextCardProps) {
         </span>
       </div>
       <div className="board-card-topic">
-        <strong>{thread.title}</strong>
-        <span>{thread.latestMessage}</span>
+        <strong>{thread.conversationSummary?.topic ?? thread.title}</strong>
+        <span>{thread.conversationSummary?.text ?? 'AI 요약을 준비하고 있습니다.'}</span>
       </div>
       <div className="board-card-meta-group">
         <div className="board-card-meta">

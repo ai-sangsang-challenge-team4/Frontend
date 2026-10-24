@@ -59,10 +59,6 @@
   gap: 24px;
 }
 
-.parent-write-notice-heading svg {
-  flex: 0 0 auto;
-}
-
 .parent-write-notice h2 {
   font-size: 24px;
   font-weight: 400;
@@ -71,7 +67,7 @@
 
 .parent-write-notice ul {
   margin-top: 20px;
-  padding-left: 84px;
+  padding-left: 24px;
   list-style: disc;
   color: var(--color-text-secondary);
   font-size: 20px;
@@ -141,7 +137,7 @@
 
 .parent-write-field .ui-textarea-control {
   min-height: 316px;
-  padding: 14px 60px;
+  padding: 24px 60px;
   border: 1px solid transparent;
   box-shadow: var(--shadow-sm);
   resize: vertical;
@@ -173,6 +169,13 @@
 .parent-write-analyze {
   min-width: 217px;
 }
+
+.parent-follow-up-layout .parent-write-main { margin-top: 63px; }
+.parent-follow-up-layout .parent-write-form { margin-top: 59px; gap: 46px; }
+.parent-follow-up-layout .parent-write-body { margin-top: 5px; }
+.parent-follow-up-layout .parent-write-body .ui-textarea-control { height: 316px; resize: none; }
+.parent-follow-up-layout .parent-write-actions { margin-top: 42px; }
+.parent-follow-up-layout .parent-write-field .ui-field-icon { color: var(--color-border-default); }
 
 .parent-analysis {
   padding-top: 60px;
@@ -264,10 +267,14 @@
 
   .parent-write-field .ui-input-shell,
   .parent-write-field .ui-select-shell { padding: 0 24px; }
-  .parent-write-field .ui-textarea-control { padding: 14px 24px; }
+  .parent-write-field .ui-textarea-control { padding: 20px 24px; }
 }
 
 @media (max-width: 820px) {
+  .parent-follow-up-layout .parent-write-main { margin-top: 40px; }
+  .parent-follow-up-layout .parent-write-form { margin-top: 36px; gap: 28px; }
+  .parent-follow-up-layout .parent-write-body { margin-top: 0; }
+  .parent-follow-up-layout .parent-write-actions { margin-top: 12px; }
   .teacher-app-header.parent-write-header {
     align-items: center;
     flex-direction: row;
@@ -313,7 +320,6 @@
   }
   .parent-write-breadcrumb svg { width: 14px; height: 14px; }
   .parent-write-notice { padding: 20px; }
-  .parent-write-notice-heading svg { width: 32px; height: 32px; }
   .parent-write-actions { gap: 12px; }
   .parent-write-actions .ui-button { flex: 1; gap: 8px; padding: 12px; font-size: 16px; }
   .parent-write-actions .ui-button-icon svg { width: 18px; height: 18px; }

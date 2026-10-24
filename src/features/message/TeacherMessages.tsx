@@ -6,7 +6,7 @@ import {
   type ReactNode,
   type SVGProps,
 } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Sidebar } from '../../shared/components/teacher-shell/TeacherSidebar';
 import { SearchIcon, StarIcon } from '../../shared/components/teacher-shell/icons';
 import {
@@ -15,6 +15,8 @@ import {
   Dropdown,
   EmptyState,
   Modal,
+  Badge,
+  Toast,
   StatusChip,
   Tabs,
   TextField,
@@ -70,6 +72,7 @@ import type {
   ThreadTab,
 } from './types';
 import './TeacherMessages.css';
+import { persistTeacherParentThread, readTeacherParentThreads } from './teacherParentMessages';
 
 type TeacherMessagesProps = {
   initialThreadId?: string | null;
@@ -187,7 +190,7 @@ function openGuidePostFromMessages(
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
-const initialThreads: BoardThread[] = [
+const exampleThreads: BoardThread[] = [
   {
     id: 'thread-001',
     parentName: '최유진 학부모',
@@ -528,6 +531,12 @@ const initialThreads: BoardThread[] = [
   },
 ];
 
+// The example threads ship with their AI summary in title/latestMessage; keep it fixed as replies arrive.
+const initialThreads = exampleThreads.map((thread) => ({
+  ...thread,
+  conversationSummary: thread.conversationSummary ?? { topic: thread.title, text: thread.latestMessage },
+}));
+
 const detailTabLabel: Record<DetailTab, string> = {
   conversation: '대화',
   risk: '위험 요소',
@@ -683,6 +692,7 @@ function ThreadRow({
         <div className="board-thread-copy">
           <span className="board-thread-title-row">
             <strong>{thread.title}</strong>
+            {thread.needsTeacherReview ? <Badge variant="warning">재확인 필요</Badge> : null}
             {needsAttention ? (
               <>
                 <span className="board-thread-title-dot" aria-hidden="true" />
@@ -1585,7 +1595,14 @@ function ActivityLogPanel({ thread }: ActivityLogPanelProps) {
   );
 }
 
+// The parent's 확인했어요 counts only when it is newer than the latest teacher reply.
+function isAcknowledgedByParent(thread: BoardThread) {
+  const latestTeacherReply = thread.replies.filter((reply) => reply.authorRole === 'teacher').at(-1);
+  return Boolean(thread.parentAcknowledgedAt && latestTeacherReply?.sentAt && thread.parentAcknowledgedAt >= latestTeacherReply.sentAt);
+}
+
 type DetailProps = {
+  onConsultationComplete: (threadId: string) => void;
   initialOriginalViewer?: OriginalMessageRequest;
   initialTab?: DetailTab;
   onBack: () => void;
@@ -1599,6 +1616,7 @@ type DetailProps = {
 };
 
 function ThreadDetail({
+  onConsultationComplete,
   initialOriginalViewer,
   initialTab,
   onBack,
@@ -1763,6 +1781,12 @@ function ThreadDetail({
       </nav>
 
       <MessageContextCard thread={thread} />
+      {thread.needsTeacherReview || isAcknowledgedByParent(thread) ? (
+        <div className="board-consultation-controls">
+          {thread.needsTeacherReview ? <Badge variant="warning">재확인 필요</Badge> : null}
+          {isAcknowledgedByParent(thread) ? <Badge>학부모 확인</Badge> : null}
+        </div>
+      ) : null}
 
       {originalViewer ? (
         <OriginalMessageViewer
@@ -1884,6 +1908,14 @@ function ThreadDetail({
                 </p>
               </div>
               <div className="board-answer-actions">
+                <button
+                  className="board-outline-button board-consultation-complete-button"
+                  disabled={thread.status === 'complete'}
+                  onClick={() => onConsultationComplete(thread.id)}
+                  type="button"
+                >
+                  {thread.status === 'complete' ? '상담 완료됨' : '상담 완료 처리'}
+                </button>
                 <button
                   className="board-primary-button board-reply-compose-button"
                   onClick={() => onOpenReplyComposer(thread.id)}
@@ -2025,7 +2057,7 @@ function ReplySendCompleteDialog({
         <p>
           {thread?.parentName ?? '학부모'}에게 답변을 전송했습니다.
           <br />
-          대화 상태가 상담 완료로 변경되었습니다.
+          상담을 마치면 상세 화면에서 상담 완료 처리해 주세요.
         </p>
       </div>
     </Modal>
@@ -2256,6 +2288,7 @@ export function TeacherMessages({
 }: TeacherMessagesProps) {
   const { logout, user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const handleLogout = () => {
     logout();
     navigate('/login', { replace: true });
@@ -2293,7 +2326,23 @@ export function TeacherMessages({
     null,
   );
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [threads, setThreads] = useState(initialThreads);
+  const [threads, setThreads] = useState(() => [...readTeacherParentThreads(user?.userId ?? 0), ...initialThreads]);
+  const [storageError, setStorageError] = useState<string | null>(null);
+  const dismissStorageError = useCallback(() => setStorageError(null), []);
+
+  useEffect(() => {
+    const refresh = () => setThreads((current) => [
+      ...readTeacherParentThreads(user?.userId ?? 0), ...current.filter((thread) => thread.parentUserId === undefined),
+    ]);
+    window.addEventListener('storage', refresh);
+    window.addEventListener('parent-messages-changed', refresh);
+    window.addEventListener('focus', refresh);
+    return () => {
+      window.removeEventListener('storage', refresh);
+      window.removeEventListener('parent-messages-changed', refresh);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [user?.userId]);
 
   const syncRouteState = useCallback(
     (routeState: {
@@ -2307,7 +2356,7 @@ export function TeacherMessages({
         routeState.view === 'reply' ? routeState.threadId : null,
       );
       setSelectedThreadId(routeState.threadId);
-      setSendCompleteThreadId(null);
+      setSendCompleteThreadId((current) => current === routeState.threadId ? current : null);
     },
     [],
   );
@@ -2316,7 +2365,7 @@ export function TeacherMessages({
     syncRouteState(
       getMessagesRouteStateFromLocation({ initialThreadId, initialView }),
     );
-  }, [initialThreadId, initialView, syncRouteState]);
+  }, [initialThreadId, initialView, location.pathname, syncRouteState]);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -2371,11 +2420,17 @@ export function TeacherMessages({
     threadId: string,
     updater: (thread: BoardThread) => BoardThread,
   ) => {
-    setThreads((currentThreads) =>
-      currentThreads.map((thread) =>
-        thread.id === threadId ? updater(thread) : thread,
-      ),
-    );
+    const current = threads.find((thread) => thread.id === threadId);
+    if (!current) return false;
+    const next = updater(current);
+    try {
+      persistTeacherParentThread(user?.userId ?? 0, next);
+      setThreads((currentThreads) => currentThreads.map((thread) => thread.id === threadId ? next : thread));
+      return true;
+    } catch {
+      setStorageError('문의 처리 내용을 저장하지 못했습니다. 다시 시도해 주세요.');
+      return false;
+    }
   };
 
   const handleToggleStar = (threadId: string) => {
@@ -2432,7 +2487,6 @@ export function TeacherMessages({
         ? thread.officialTemplateApplied
         : false,
       draftText: value,
-      status: thread.status === 'complete' ? 'inProgress' : thread.status,
     }));
   };
 
@@ -2443,9 +2497,6 @@ export function TeacherMessages({
       draftSavedAt: undefined,
       draftText: '',
       officialTemplateApplied: false,
-      status: thread.replies.some((reply) => reply.authorRole === 'teacher')
-        ? thread.status
-        : 'before',
     }));
   };
 
@@ -2459,7 +2510,6 @@ export function TeacherMessages({
 
       return {
         ...thread,
-        status: thread.status === 'complete' ? 'inProgress' : thread.status,
         draftSavedAt: savedAt,
         analysis: thread.analysis
           ? {
@@ -2496,7 +2546,6 @@ export function TeacherMessages({
         draftSavedAt: undefined,
         draftText: generatedDraft,
         officialTemplateApplied: false,
-        status: thread.status === 'complete' ? 'inProgress' : thread.status,
         analysis: thread.analysis
           ? {
               ...thread.analysis,
@@ -2533,7 +2582,6 @@ export function TeacherMessages({
         draftSavedAt: undefined,
         draftText: templateDraft,
         officialTemplateApplied: true,
-        status: thread.status === 'complete' ? 'inProgress' : thread.status,
         analysis: thread.analysis
           ? {
               ...thread.analysis,
@@ -2681,7 +2729,6 @@ export function TeacherMessages({
         },
         risk: systemRiskTone[review.level],
         riskReviewRequired: false,
-        status: 'inProgress',
       };
     });
   };
@@ -2771,7 +2818,7 @@ export function TeacherMessages({
       return;
     }
 
-    updateThread(threadId, (thread) => {
+    const saved = updateThread(threadId, (thread) => {
       const nextReply = thread.draftText.trim();
 
       if (!nextReply) {
@@ -2791,17 +2838,20 @@ export function TeacherMessages({
           ...thread.replies,
           {
             id: `${thread.id}-${thread.replies.length + 1}`,
-            authorName: '조예인 선생님',
+            authorName: user?.name ?? '선생님',
             authorRole: 'teacher',
             content: nextReply,
             label: '선생님 답변',
             readByParent: false,
             time: formatNow(),
+            sentAt: new Date().toISOString(),
           },
         ],
-        status: 'complete',
+        needsTeacherReview: false,
+        status: 'inProgress',
       };
     });
+    if (!saved) return;
     setInitialDetailTabRequest(null);
     setInitialOriginalViewerRequest(null);
     setReplyComposerThreadId(null);
@@ -2906,6 +2956,7 @@ export function TeacherMessages({
             onSubmitReply={handleSubmitReply}
             thread={replyComposerThread}
           />
+          {storageError ? <Toast message={storageError} onClose={dismissStorageError} /> : null}
         </main>
       </section>
     );
@@ -2925,6 +2976,7 @@ export function TeacherMessages({
         />
         <main className="board-detail-page">
           <ThreadDetail
+            onConsultationComplete={(threadId) => updateThread(threadId, (thread) => ({ ...thread, status: 'complete', needsTeacherReview: false }))}
             initialOriginalViewer={
               initialOriginalViewerRequest?.threadId === selectedThread.id
                 ? initialOriginalViewerRequest.request
@@ -2954,6 +3006,7 @@ export function TeacherMessages({
             open={sendCompleteThreadId === selectedThread.id}
             thread={sendCompleteThread}
           />
+          {storageError ? <Toast message={storageError} onClose={dismissStorageError} /> : null}
         </main>
       </section>
     );
@@ -2976,6 +3029,9 @@ export function TeacherMessages({
         </h1>
 
         <section className="board-list-panel" aria-label="메시지 목록">
+          {threads.some((thread) => thread.needsTeacherReview) ? <p className="board-follow-up-notice" role="status">
+            추가 질문이 도착했습니다. 재확인이 필요한 문의 {threads.filter((thread) => thread.needsTeacherReview).length}건을 확인해 주세요.
+          </p> : null}
           <Tabs
             ariaLabel="메시지 분류"
             className="board-tabs"
@@ -2985,6 +3041,7 @@ export function TeacherMessages({
           />
         </section>
       </main>
+      {storageError ? <Toast message={storageError} onClose={dismissStorageError} /> : null}
       <DraftResumeDialog
         onClose={() => setDraftPromptThreadId(null)}
         onContinue={handleContinueDraft}

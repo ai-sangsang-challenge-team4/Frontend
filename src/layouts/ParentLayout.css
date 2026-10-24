@@ -1,0 +1,28 @@
+.parent-history-layout {
+  --app-content-max: 984px;
+}
+
+.parent-detail-layout {
+  --app-content-max: 1043px;
+}
+
+.parent-follow-up-layout {
+  --app-content-max: 1053px;
+}
+
+.parent-detail-layout .parent-write-heading,
+.parent-follow-up-layout .parent-write-heading { gap: 8px; }
+
+.parent-app-layout .sidebar-profile-account {
+  display: grid;
+  width: var(--sidebar-profile-avatar-size);
+  height: var(--sidebar-profile-avatar-size);
+  justify-self: center;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.parent-app-layout .sidebar-profile-account:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 4px;
+}
