@@ -46,13 +46,13 @@
 .board-toolbar {
   display: flex;
   align-items: center;
-  gap: 28px;
+  gap: 12px;
   margin-top: 33px;
 }
 
 .board-filter-select {
-  width: 204px;
-  min-width: 204px;
+  width: 180px;
+  min-width: 180px;
 }
 
 .board-filter-select .ui-dropdown-button,
@@ -76,6 +76,7 @@
   flex: 1 0 auto;
   min-width: max-content;
   overflow: visible;
+  text-align: left;
 }
 
 .board-filter-select .ui-dropdown-button:hover {
@@ -94,7 +95,91 @@
 }
 
 .board-search-field {
-  width: 300px;
+  width: auto;
+  min-width: 0;
+  max-width: 520px;
+  flex: 1 1 520px;
+}
+
+.board-detail-filter-toggle {
+  display: inline-flex;
+  height: 47px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  padding: 0 8px;
+  border-radius: 8px;
+  color: var(--color-text-primary);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.board-detail-filter-toggle:hover {
+  background: var(--color-bg-canvas);
+}
+
+.board-detail-filter-toggle:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.board-detail-filter-toggle svg {
+  width: 14px;
+  height: 14px;
+  transition: transform 0.15s ease;
+}
+
+.board-detail-filter-toggle.is-open svg {
+  transform: rotate(180deg);
+}
+
+.board-detail-filter-count {
+  display: inline-grid;
+  min-width: 20px;
+  height: 20px;
+  place-items: center;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.board-detail-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 32px;
+  /* Same spacing as .board-toolbar's margin-top so the tabs, toolbar and detail filter sit on an even rhythm. */
+  margin-top: 33px;
+  padding: 20px 0;
+  border-top: 1px solid var(--color-border-divider);
+  border-bottom: 1px solid var(--color-border-divider);
+}
+
+.board-detail-filter-field {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.board-detail-filter-field > span {
+  flex: 0 0 auto;
+  color: var(--color-text-primary);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.board-detail-filter + .board-thread-list {
+  margin-top: 24px;
+}
+
+.board-detail-filter-reset {
+  height: 47px;
+  margin-left: auto;
+  padding: 0 20px;
 }
 
 .board-search-field .ui-input-shell {
@@ -151,7 +236,7 @@
   display: grid;
   min-width: 0;
   min-height: 112px;
-  grid-template-columns: minmax(0, 264px) minmax(0, 1fr) 94px 164px;
+  grid-template-columns: minmax(0, 264px) minmax(0, 1fr) 94px 192px;
   align-items: center;
   gap: 16px;
   padding: 0 16px 0 0;
@@ -203,6 +288,15 @@
   flex: 0 0 auto;
   border-radius: 50%;
   background: #484848;
+}
+
+/* Same treatment as the parent inquiry list's recheck label. */
+.board-thread-recheck {
+  flex-shrink: 0;
+  color: var(--color-primary);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .board-thread-attention-alert {
@@ -267,7 +361,7 @@
   font-size: 16px;
   font-weight: 500;
   line-height: 24px;
-  text-align: right;
+  text-align: left;
   white-space: nowrap;
 }
 

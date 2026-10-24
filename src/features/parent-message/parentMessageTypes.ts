@@ -1,3 +1,5 @@
+import type { ReplyTemplateDraft } from '../message/replyTemplates';
+
 export const MESSAGE_MAX_LENGTH = 1500;
 
 export type MessageSource = 'AI' | 'ORIGINAL';
@@ -32,7 +34,16 @@ export type ConversationMessage = {
   id: string;
   authorRole: 'parent' | 'teacher';
   body: string;
+  deliveryStatus?: 'SENT_TO_PARENT';
   sentAt: string;
+};
+
+export type ThreadActivityLog = {
+  action: string;
+  actor: string;
+  detail: string;
+  id: string;
+  time: string;
 };
 
 export type SentParentMessage = {
@@ -57,6 +68,9 @@ export type SentParentMessage = {
   teacherDraftText?: string;
   teacherDraftSavedAt?: string;
   teacherPinned?: boolean;
+  teacherReplyTemplate?: ReplyTemplateDraft;
+  // Teacher-side processing history; threads from the parent bridge have no analysis to hold it.
+  activityLogs?: ThreadActivityLog[];
 };
 
 export function createMessageReview(analysis: ParentMessageAnalysis): MessageReview {

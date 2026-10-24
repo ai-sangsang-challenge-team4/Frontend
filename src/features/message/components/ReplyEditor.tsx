@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import {
   ResetIcon,
   SaveIcon,
@@ -21,7 +22,10 @@ type ReplyEditorProps = {
   onDraftReset: () => void;
   onDraftSave: () => void;
   onSubmit: () => void;
+  onOpenProcedure: () => void;
   stageNotice: string;
+  submitDisabled: boolean;
+  templateEditor?: ReactNode;
 };
 
 export function ReplyEditor({
@@ -39,25 +43,33 @@ export function ReplyEditor({
   onDraftReset,
   onDraftSave,
   onSubmit,
+  onOpenProcedure,
   stageNotice,
+  submitDisabled,
+  templateEditor,
 }: ReplyEditorProps) {
   const replyTextareaDescription = [isLocked ? lockNoticeId : undefined, aiNoticeId]
     .filter(Boolean)
     .join(' ');
 
+  if (isLocked) {
+    return (
+      <section className="board-reply-compose-panel board-template-locked" aria-labelledby={lockNoticeId}>
+        <h2 id={lockNoticeId}>이 메시지는 개별 답변을 보낼 수 없습니다</h2>
+        <p>작성 중인 내용이 모두 잠깁니다. 지정 검토자가 잠금을 해제하기 전까지 공식 절차를 먼저 확인해 주세요.</p>
+        {draftText ? <p className="board-template-locked-preview">{draftText}</p> : null}
+        <button className="board-composer-action-button" onClick={onOpenProcedure} type="button">절차 안내 보기</button>
+      </section>
+    );
+  }
+
   return (
     <section className="board-reply-compose-panel">
       <div className="board-reply-compose-header">
-        <label htmlFor="board-reply-composer-input">선생님 답변</label>
+        <label htmlFor={templateEditor ? undefined : 'board-reply-composer-input'}>선생님 답변</label>
         <span aria-live="polite">{draftStatusText}</span>
       </div>
-      {isLocked ? (
-        <p className="board-reply-lock-notice" id={lockNoticeId}>
-          긴급 위험도 검토가 필요한 메시지는 위험 요소 탭에서 검토를 완료한
-          뒤 답변을 전송할 수 있습니다.
-        </p>
-      ) : null}
-      <textarea
+      {templateEditor ?? <textarea
         aria-describedby={replyTextareaDescription || undefined}
         disabled={isLocked}
         id="board-reply-composer-input"
@@ -65,12 +77,11 @@ export function ReplyEditor({
         placeholder="학부모에게 전달할 답변을 작성하세요."
         rows={11}
         value={draftText}
-      />
+      />}
       <p className="board-reply-ai-note" id={aiNoticeId}>
         {stageNotice}
         <br />
-        생성되거나 적용된 답변은 자동 전송되지 않으며, 교사가 직접 수정한
-        내용만 최종 전송됩니다.
+        답변은 자동 전송되지 않습니다. 내용을 확인하고 필요한 수정을 마친 뒤 전송해 주세요.
       </p>
       <div className="board-reply-bottom-actions">
         <button
@@ -104,7 +115,7 @@ export function ReplyEditor({
           <button
             aria-describedby={isLocked ? lockNoticeId : undefined}
             className="board-composer-action-button board-composer-action-button--primary"
-            disabled={isLocked || !hasDraft}
+            disabled={isLocked || !hasDraft || submitDisabled}
             onClick={onSubmit}
             type="button"
           >

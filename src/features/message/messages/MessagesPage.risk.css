@@ -354,59 +354,22 @@
 .board-risk-review-slider {
   --board-risk-review-thumb-size: 40px;
   --board-risk-review-edge: calc(var(--board-risk-review-thumb-size) / 2);
-  --board-risk-review-mid-offset: calc(var(--board-risk-review-edge) / 3);
-  --board-risk-review-selected-position: var(--board-risk-review-edge);
-  --board-risk-review-current-position: var(
-    --board-risk-review-selected-position
+  --board-risk-review-selected-ratio: 0;
+  --board-risk-review-current-ratio: 0;
+  --board-risk-review-selected-position: calc(
+    var(--board-risk-review-edge) +
+      (100% - var(--board-risk-review-thumb-size)) *
+      var(--board-risk-review-selected-ratio)
+  );
+  --board-risk-review-current-position: calc(
+    var(--board-risk-review-edge) +
+      (100% - var(--board-risk-review-thumb-size)) *
+      var(--board-risk-review-current-ratio)
   );
 
   display: grid;
   width: 100%;
   gap: 0;
-}
-
-.board-risk-review-slider--low {
-  --board-risk-review-selected-position: var(--board-risk-review-edge);
-}
-
-.board-risk-review-slider--medium {
-  --board-risk-review-selected-position: calc(
-    33.333% + var(--board-risk-review-mid-offset)
-  );
-}
-
-.board-risk-review-slider--high {
-  --board-risk-review-selected-position: calc(
-    66.667% - var(--board-risk-review-mid-offset)
-  );
-}
-
-.board-risk-review-slider--emergency {
-  --board-risk-review-selected-position: calc(
-    100% - var(--board-risk-review-edge)
-  );
-}
-
-.board-risk-review-slider-current--low {
-  --board-risk-review-current-position: var(--board-risk-review-edge);
-}
-
-.board-risk-review-slider-current--medium {
-  --board-risk-review-current-position: calc(
-    33.333% + var(--board-risk-review-mid-offset)
-  );
-}
-
-.board-risk-review-slider-current--high {
-  --board-risk-review-current-position: calc(
-    66.667% - var(--board-risk-review-mid-offset)
-  );
-}
-
-.board-risk-review-slider-current--emergency {
-  --board-risk-review-current-position: calc(
-    100% - var(--board-risk-review-edge)
-  );
 }
 
 .board-risk-current-marker {
@@ -463,7 +426,7 @@
   left: var(--board-risk-review-edge);
   height: 8px;
   border-radius: 999px;
-  background: #3182f7;
+  background: linear-gradient(90deg, #2fb36d 0%, #9bcf3c 33%, #ffc233 55%, #ff8a2a 78%, #fd2d27 100%);
 }
 
 .board-risk-review-range {
@@ -571,20 +534,12 @@
   transform: translateX(-50%);
 }
 
-.board-risk-review-level:first-child {
-  left: var(--board-risk-review-edge);
-}
-
-.board-risk-review-level:nth-child(2) {
-  left: calc(33.333% + var(--board-risk-review-mid-offset));
-}
-
-.board-risk-review-level:nth-child(3) {
-  left: calc(66.667% - var(--board-risk-review-mid-offset));
-}
-
-.board-risk-review-level:last-child {
-  left: calc(100% - var(--board-risk-review-edge));
+.board-risk-review-level {
+  left: calc(
+    var(--board-risk-review-edge) +
+      (100% - var(--board-risk-review-thumb-size)) *
+      var(--board-risk-review-level-ratio, 0)
+  );
 }
 
 .board-risk-review-level.is-active {
@@ -594,6 +549,77 @@
 
 .board-risk-review-level:disabled {
   cursor: default;
+}
+
+.board-risk-review-scale-ends {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.board-risk-score-guide {
+  --board-risk-score-color: #2fb36d;
+
+  display: grid;
+  width: 100%;
+  gap: 4px;
+  padding: 14px 18px;
+  border-left: 4px solid var(--board-risk-score-color);
+  border-radius: 8px;
+  background: var(--color-bg-canvas);
+}
+
+.board-risk-score-guide--2 { --board-risk-score-color: #7cc242; }
+.board-risk-score-guide--3 { --board-risk-score-color: #c9c22b; }
+.board-risk-score-guide--4 { --board-risk-score-color: #ffc233; }
+.board-risk-score-guide--5 { --board-risk-score-color: #ff8a2a; }
+.board-risk-score-guide--6 { --board-risk-score-color: #ff5a2a; }
+.board-risk-score-guide--7 { --board-risk-score-color: #fd2d27; }
+
+.board-risk-score-guide strong {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-primary);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.board-risk-score-guide-level {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.board-risk-score-guide p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 15px;
+  line-height: 22px;
+  word-break: keep-all;
+}
+
+.board-risk-section-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.board-risk-action-button.board-ai-objection-button {
+  width: auto;
+  padding: 4px 14px;
+}
+
+.board-ai-objection-button:disabled {
+  cursor: default;
+  opacity: 0.6;
 }
 
 .board-risk-review-reason label {
@@ -848,7 +874,7 @@
 
 .board-risk-empty {
   min-height: 240px;
-  border-style: solid;
+  border: var(--divider-default);
 }
 
 .board-risk-factor-empty .ui-empty-state-icon {

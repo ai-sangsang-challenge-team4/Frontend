@@ -5,7 +5,7 @@ import completeIllustration from '../../shared/assets/parent/message-analysis.sv
 import { ProfileAvatar } from '../message/components/ProfileAvatar';
 import { mockConnectedTeachers, updateSentMessage } from './messageDraft';
 import { Button, EmptyState, StatusChip, Toast } from '../../shared/components/ui';
-import { consultationChips, formatMessageDate, getConversation } from './conversation';
+import { compareMessageTimes, consultationChips, formatMessageDate, getConversation } from './conversation';
 import { ParentMessageHeader } from './ParentMessageHeader';
 import { useParentMessages } from './useParentMessages';
 import './ParentMessageHistory.css';
@@ -21,7 +21,8 @@ export function ParentMessageReceipt({ userId, messageId }: { userId: number; me
   const latest = conversation[conversation.length - 1];
   const teacherClassName = mockConnectedTeachers.find((teacher) => teacher.value === message?.teacherId)?.className;
   const latestTeacherReply = conversation.filter((entry) => entry.authorRole === 'teacher').at(-1);
-  const isAcknowledged = Boolean(message?.parentAcknowledgedAt && latestTeacherReply && message.parentAcknowledgedAt >= latestTeacherReply.sentAt);
+  const isAcknowledged = Boolean(message?.parentAcknowledgedAt && latestTeacherReply &&
+    compareMessageTimes(message.parentAcknowledgedAt, latestTeacherReply.sentAt) >= 0);
   const [notice, setNotice] = useState<string | null>(null);
   const dismissNotice = useCallback(() => setNotice(null), []);
 
@@ -84,12 +85,13 @@ export function ParentMessageReceipt({ userId, messageId }: { userId: number; me
           </ol>
           <div className="parent-conversation-actions">
             <div className="parent-conversation-primary-actions">
-              <Button disabled={!latestTeacherReply || isAcknowledged} onClick={handleAcknowledge}
-                title={latestTeacherReply ? undefined : '선생님 답변이 도착하면 확인할 수 있습니다.'} variant="outline">
+              <Button aria-describedby={latestTeacherReply ? undefined : 'parent-acknowledge-hint'}
+                disabled={!latestTeacherReply || isAcknowledged} onClick={handleAcknowledge} variant="outline">
                 {isAcknowledged ? '확인 완료' : '확인했어요.'}
               </Button>
               <Button leftIcon={<Pencil size={20} />} onClick={() => navigate(`/parent/messages/${encodeURIComponent(messageId)}/follow-up`)}>추가 문의하기</Button>
             </div>
+            {latestTeacherReply ? null : <p className="parent-acknowledge-hint" id="parent-acknowledge-hint">선생님 답변이 도착하면 확인할 수 있습니다.</p>}
             <p>다른 내용으로 문의를 원하시나요? <Link to="/parent/messages/new?fresh=1">새 문의 작성</Link></p>
           </div>
         </section>

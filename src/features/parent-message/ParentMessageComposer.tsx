@@ -150,7 +150,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
   return (
     <>
       <ParentMessageHeader title={threadId ? '추가 문의하기' : '새 문의 작성'}
-        breadcrumbLabel="새 문의 작성" showBack={Boolean(threadId) || isAnalyzing}
+        breadcrumbLabel={threadId ? '추가 문의하기' : '새 문의 작성'} showBack={Boolean(threadId) || isAnalyzing}
         backLabel={isAnalyzing ? '문의 작성으로 돌아가기' : '문의 내역으로 돌아가기'} onBack={handleBack} />
 
       <main className="layout-main parent-write-main" aria-busy={isAnalyzing}>
