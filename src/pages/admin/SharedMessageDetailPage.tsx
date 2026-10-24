@@ -1,13 +1,9 @@
 import { useParams } from 'react-router-dom';
-import { PageHeader } from '../../shared/components';
+import { AdminSharedMessageDetail } from '../../features/admin';
 
 export function SharedMessageDetailPage() {
-  const { messageId } = useParams();
+  const { messageId = '' } = useParams();
 
-  return (
-    <section className="page">
-      <PageHeader eyebrow="Admin" title="공유 메시지 상세" />
-      <p className="route-meta">messageId: {messageId}</p>
-    </section>
-  );
+  // key resets tab and memo state when moving between shared messages.
+  return <AdminSharedMessageDetail complaintId={messageId} key={messageId} />;
 }

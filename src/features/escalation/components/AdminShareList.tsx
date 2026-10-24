@@ -1,36 +1,35 @@
+import { Link } from 'react-router-dom';
+import { StatusChip } from '../../../shared/components/ui';
 import {
-  StatusChip,
-  type StatusChipStatus,
-} from '../../../shared/components/ui';
-
-export type AdminShareRequest = {
-  owner: string;
-  status: string;
-  title: string;
-};
-
-const shareStatusVariant: Record<string, StatusChipStatus> = {
-  '공유 대기': 'pending',
-  '검토 중': 'review',
-  '공유 완료': 'complete',
-};
+  escalationStatusChip,
+  formatEscalationTime,
+  teacherEscalationStatusLabel,
+} from '../escalationRules';
+import type { ComplaintEscalation } from '../escalationTypes';
 
 type AdminShareListProps = {
-  requests: AdminShareRequest[];
+  escalations: ComplaintEscalation[];
 };
 
-export function AdminShareList({ requests }: AdminShareListProps) {
+export function AdminShareList({ escalations }: AdminShareListProps) {
   return (
     <div className="status-list">
-      {requests.map((request) => (
-        <article className="status-row" key={request.title}>
+      {escalations.map((escalation) => (
+        <article className="status-row" key={escalation.escalationId}>
           <div>
-            <h2>{request.title}</h2>
-            <p>{request.owner}</p>
+            <h2>
+              <Link className="admin-share-row-link" to={`/teacher/messages/${escalation.complaintId}`}>
+                {escalation.title}
+              </Link>
+            </h2>
+            <p>
+              {escalation.assignedAdminName} · {formatEscalationTime(escalation.sharedAt)} 공유
+            </p>
+            {escalation.adminMemo ? <p>관리자 메모: {escalation.adminMemo}</p> : null}
           </div>
           <StatusChip
-            label={request.status}
-            status={shareStatusVariant[request.status] ?? 'default'}
+            label={teacherEscalationStatusLabel[escalation.status]}
+            status={escalationStatusChip[escalation.status]}
           />
         </article>
       ))}

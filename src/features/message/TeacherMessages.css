@@ -6,4 +6,5 @@
 @import "./messages/MessagesPage.risk.css";
 @import "./messages/MessagesPage.modals.css";
 @import "./messages/MessagesPage.templates.css";
+@import "./messages/MessagesPage.escalation.css";
 @import "./messages/MessagesPage.responsive.css";

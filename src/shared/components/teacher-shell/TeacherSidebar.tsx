@@ -15,7 +15,7 @@ import {
 } from './icons';
 import './TeacherSidebar.css';
 
-export type SidebarItem = 'messages' | 'guide' | 'share' | 'settings' | 'new' | 'history';
+export type SidebarItem = 'messages' | 'guide' | 'share' | 'settings' | 'new' | 'history' | 'adminMessages';
 
 type SidebarProps = {
   activeItem?: SidebarItem;
@@ -26,7 +26,7 @@ type SidebarProps = {
   onAccountClick?: () => void;
   profileMeta?: string;
   profileName?: string;
-  variant?: 'teacher' | 'parent';
+  variant?: 'teacher' | 'parent' | 'admin';
 };
 
 type SidebarNavItem = {
@@ -62,6 +62,19 @@ const parentNavItems: SidebarNavItem[] = [
   { href: '/parent/messages', icon: SidebarGuideIcon, key: 'history', label: '문의 내역' },
 ];
 
+const adminNavItems: SidebarNavItem[] = [
+  { href: '/admin/messages', icon: SidebarShareIcon, key: 'adminMessages', label: '공유받은 메시지' },
+];
+
+const sidebarVariants = {
+  admin: { home: '/admin/messages', items: adminNavItems, label: '관리자 메뉴' },
+  parent: { home: '/parent/messages/new', items: parentNavItems, label: '학부모 메뉴' },
+  teacher: { home: '/teacher/messages', items: navItems, label: '교사 메뉴' },
+} as const;
+
+// The nav item that carries the unread/active count badge.
+const badgeItems: SidebarItem[] = ['messages', 'adminMessages'];
+
 export function Sidebar({
   activeItem = 'messages',
   defaultCollapsed = true,
@@ -76,8 +89,7 @@ export function Sidebar({
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
   const isSettingsActive = activeItem === 'settings';
-  const items = variant === 'parent' ? parentNavItems : navItems;
-  const menuLabel = variant === 'parent' ? '학부모 메뉴' : '교사 메뉴';
+  const { items, label: menuLabel } = sidebarVariants[variant];
 
   const handleToggleCollapsed = () => {
     const nextValue = !isCollapsed;
@@ -131,7 +143,7 @@ export function Sidebar({
             >
               <Icon className="sidebar-link-icon" />
               <span className="sidebar-link-label">{label}</span>
-              {key === 'messages' && messageCount > 0 ? (
+              {badgeItems.includes(key) && messageCount > 0 ? (
                 <span className="sidebar-badge">{messageCount}</span>
               ) : null}
             </NavLink>
@@ -152,7 +164,7 @@ export function Sidebar({
           <SidebarSettingsIcon className="sidebar-link-icon" />
           <span className="sidebar-link-label">설정/도움말</span>
         </button>
-      ) : (
+      ) : variant === 'admin' ? null : (
         <NavLink
           aria-current={isSettingsActive ? 'page' : undefined}
           aria-label="설정/도움말"
@@ -217,11 +229,11 @@ function MobileSidebarMenu({
 }: Pick<SidebarProps, 'activeItem' | 'messageCount' | 'onLogout' | 'onAccountClick' | 'profileMeta' | 'profileName' | 'variant'>) {
   const [isOpen, setIsOpen] = useState(false);
   const isParent = variant === 'parent';
-  const menuLabel = isParent ? '학부모 메뉴' : '교사 메뉴';
-  const mobileNavItems = isParent ? parentNavItems : [
-    ...navItems,
+  const { home: homePath, items: variantItems, label: menuLabel } = sidebarVariants[variant ?? 'teacher'];
+  const mobileNavItems: SidebarNavItem[] = variant === 'teacher' || !variant ? [
+    ...variantItems,
     { href: '/teacher/settings', icon: SidebarSettingsIcon, key: 'settings', label: '설정/도움말' },
-  ];
+  ] : [...variantItems];
 
   useEffect(() => {
     const mobileViewport = window.matchMedia('(max-width: 980px)');
@@ -235,7 +247,7 @@ function MobileSidebarMenu({
 
   const closeMenu = () => setIsOpen(false);
   const brand = (
-    <NavLink className="sidebar-mobile-brand" onClick={closeMenu} to={isParent ? '/parent/messages/new' : '/teacher/messages'}>
+    <NavLink className="sidebar-mobile-brand" onClick={closeMenu} to={homePath}>
       <img alt="" className="sidebar-mobile-brand-mark" src={logoImage} />
       Teacher Hub
     </NavLink>
@@ -275,7 +287,7 @@ function MobileSidebarMenu({
             >
               <Icon className="sidebar-link-icon" />
               <span>{label}</span>
-              {key === 'messages' && (messageCount ?? 0) > 0 ? (
+              {badgeItems.includes(key) && (messageCount ?? 0) > 0 ? (
                 <span className="sidebar-mobile-badge">{messageCount}</span>
               ) : null}
             </NavLink>

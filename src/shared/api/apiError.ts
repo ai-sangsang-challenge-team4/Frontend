@@ -107,6 +107,17 @@ export const API_ERROR_CODE_MESSAGES: Record<string, string> = {
   RESPONSE_ALREADY_EXISTS: '이미 전송된 답변이에요.',
   RESPONSE_ACCESS_DENIED: '해당 답변을 확인할 권한이 없어요.',
   INVALID_STATUS_TRANSITION: '문의 상태가 변경되어 요청을 처리할 수 없어요. 최신 정보를 확인해 주세요.',
+  // 관리자 공유·처리 (프론트 Mock 기준 코드, 백엔드 확정 전)
+  ALREADY_ESCALATED: '이미 관리자에게 공유된 문의예요.',
+  ESCALATION_FORBIDDEN: '관리자 공유 권한이 없어요.',
+  INVALID_ESCALATION_REASON: '공유 사유를 500자 이내로 입력해 주세요.',
+  ESCALATION_CONTENT_REQUIRED: '공유할 메시지 내용을 하나 이상 선택해 주세요.',
+  ADMIN_NOT_FOUND: '공유할 관리자를 찾을 수 없어요.',
+  ADMIN_ACCESS_DENIED: '관리자만 확인할 수 있어요.',
+  COMPLAINT_NOT_SHARED: '관리자에게 공유되지 않은 문의는 열람할 수 없어요.',
+  ESCALATION_NOT_FOUND: '공유된 문의를 찾을 수 없어요.',
+  INVALID_ADMIN_ACTION: '처리 요청 형식이 올바르지 않아요.',
+  INVALID_ESCALATION_TRANSITION: '처리 상태가 이미 변경되었어요. 최신 정보를 확인해 주세요.',
 };
 
 export const REPLY_SEND_FAILED_MESSAGE = '답변을 전송하지 못했어요. 내용을 확인한 후 다시 시도해 주세요.';
