@@ -1,0 +1,42 @@
+.parent-history-layout {
+  --app-content-max: 984px;
+  --app-page-top-offset: 124px;
+}
+
+.parent-detail-layout {
+  --app-content-max: 1043px;
+}
+
+.parent-follow-up-layout {
+  --app-content-max: 1053px;
+  --app-page-top-offset: 106px;
+}
+
+.parent-detail-layout .parent-write-heading,
+.parent-follow-up-layout .parent-write-heading { gap: 8px; }
+
+.parent-app-layout .sidebar-profile-account {
+  display: grid;
+  width: var(--sidebar-profile-avatar-size);
+  height: var(--sidebar-profile-avatar-size);
+  justify-self: center;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.parent-app-layout .sidebar-profile-account:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 4px;
+}
+
+@media (min-width: 1241px) {
+  .parent-detail-layout {
+    --app-content-left: 127px;
+    --app-content-right: clamp(56px, 11.8vw, 170px);
+  }
+
+  .parent-follow-up-layout {
+    --app-content-left: 114px;
+    --app-content-right: clamp(56px, 12vw, 173px);
+  }
+}

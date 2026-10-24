@@ -111,10 +111,10 @@ test('AI 수정본을 복원하고 개인정보를 재검사한 최종 문장을
   await page.goto(reviewUrl);
   await expect(page).not.toHaveURL(/\/review$/);
   await expect(page.getByRole('region', { name: '전송한 문의 내용', exact: true })).toContainText('[이메일]');
-  await page.getByRole('button', { name: '문의 내역', exact: true }).click();
+  await page.getByRole('button', { name: '문의 내역으로 돌아가기', exact: true }).click();
   await expect(page.locator('.parent-history-link')).toHaveCount(1);
   await page.locator('.parent-history-link').click();
-  await expect(page.getByRole('heading', { name: '문의 상세', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '문의 내역', exact: true })).toBeVisible();
 });
 
 for (const source of ['AI', 'ORIGINAL'] as const) {

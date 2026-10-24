@@ -62,9 +62,13 @@ export type BoardReply = {
   label: string;
   readByParent?: boolean;
   time: string;
+  sentAt?: string;
 };
 
 export type BoardThread = {
+  parentUserId?: number;
+  needsTeacherReview?: boolean;
+  teacherAcknowledgedAt?: string;
   analysis?: ThreadAnalysis;
   aiDraftGenerated?: boolean;
   className: string;

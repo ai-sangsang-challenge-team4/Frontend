@@ -26,7 +26,17 @@ export type MessageReview = {
   originalEdit: string | null;
 };
 
+export type ConsultationStatus = 'before' | 'inProgress' | 'complete';
+
+export type ConversationMessage = {
+  id: string;
+  authorRole: 'parent' | 'teacher';
+  body: string;
+  sentAt: string;
+};
+
 export type SentParentMessage = {
+  parentName?: string;
   messageId: string;
   teacherId: string;
   teacherName: string;
@@ -38,6 +48,15 @@ export type SentParentMessage = {
   status: 'SENT';
   sentAt: string;
   auditLog: { action: 'SENT'; at: string; selectionType: MessageSelectionType }[];
+  consultationStatus?: ConsultationStatus;
+  conversation?: ConversationMessage[];
+  isImportant?: boolean;
+  needsTeacherReview?: boolean;
+  teacherAcknowledgedAt?: string;
+  updatedAt?: string;
+  teacherDraftText?: string;
+  teacherDraftSavedAt?: string;
+  teacherPinned?: boolean;
 };
 
 export function createMessageReview(analysis: ParentMessageAnalysis): MessageReview {

@@ -165,7 +165,11 @@ export function Sidebar({
       )}
 
       <div className="sidebar-profile">
-        {isCollapsed && onLogout ? (
+        {isCollapsed && variant === 'parent' ? (
+          <button aria-label="계정 정보" className="sidebar-profile-account" onClick={onAccountClick} title="계정 정보" type="button">
+            <img alt="" aria-hidden="true" className="sidebar-profile-avatar" src={defaultProfileImage} />
+          </button>
+        ) : isCollapsed && onLogout ? (
           <Button
             aria-label="로그아웃"
             className="sidebar-profile-logout"

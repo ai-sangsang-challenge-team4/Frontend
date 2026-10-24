@@ -1,54 +1,60 @@
-import { useState } from 'react';
-import { ArrowRight, Plus } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { ArrowRight, CalendarDays, Info, Pencil } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import completeIllustration from '../../shared/assets/parent/message-analysis.svg';
+import { ProfileAvatar } from '../message/components/ProfileAvatar';
 import { Button, EmptyState } from '../../shared/components/ui';
-import { findSentMessage } from './messageDraft';
+import { formatMessageDate, getConversation } from './conversation';
 import { ParentMessageHeader } from './ParentMessageHeader';
-import './ParentMessageReview.css';
+import { useParentMessages } from './useParentMessages';
+import './ParentMessageHistory.css';
 import './ParentMessageReceipt.css';
 
 export function ParentMessageReceipt({ userId, messageId }: { userId: number; messageId: string }) {
   const navigate = useNavigate();
   const location = useLocation();
   const justSent = location.state?.justSent === true;
-  const [result] = useState(() => {
-    try {
-      return { message: findSentMessage(userId, messageId), error: null };
-    } catch {
-      return { message: null, error: '문의 정보를 불러오지 못했습니다. 다시 시도해 주세요.' };
-    }
-  });
-  const message = result.message;
-  const labels = { AI: 'AI 초안', ORIGINAL: '원문', CUSTOM: '직접 수정' };
+  const { messages, error, refresh } = useParentMessages(userId);
+  const message = messages.find((item) => item.messageId === messageId);
+  const conversation = message ? getConversation(message) : [];
 
-  return (
-    <>
-      <ParentMessageHeader backLabel="문의 내역으로 돌아가기" onBack={() => navigate('/parent/messages')}
-        title={justSent ? '전송 완료' : '문의 상세'} />
-      <main className="layout-main parent-receipt">
-        {message ? <>
-          {justSent ? (
-            <div className="parent-receipt-success" role="status">
-              <img alt="" aria-hidden="true" src={completeIllustration} />
-              <h2>문의가 전송되었습니다.</h2>
-              <p>{message.teacherName}께 문의를 전달했습니다.</p>
+  return <>
+    <ParentMessageHeader backLabel="문의 내역으로 돌아가기" onBack={() => navigate('/parent/messages')}
+      title={justSent ? '전송 완료' : '문의 내역'} breadcrumbLabel="문의 내역" />
+    <main className="layout-main parent-conversation-main">
+      {message ? <>
+        {justSent ? <div className="parent-receipt-success" role="status">
+          <img alt="" aria-hidden="true" src={completeIllustration} />
+          <h2>문의가 전송되었습니다.</h2><p>{message.teacherName}께 문의를 전달했습니다.</p>
+        </div> : null}
+        <div className="parent-conversation-notice"><Info aria-hidden="true" size={24} /><p>같은 내용에 대한 추가 질문은 이 문의에서 이어서 작성할 수 있습니다. 다른 내용은 새 문의로 작성해 주세요.</p></div>
+        <section aria-label="전체 대화 내역" className="parent-conversation">
+          <ol className="parent-conversation-messages">
+            {conversation.map((entry, index) => {
+              const date = formatMessageDate(entry.sentAt, false);
+              const showDate = index === 0 || formatMessageDate(conversation[index - 1].sentAt, false) !== date;
+              const isParent = entry.authorRole === 'parent';
+              return <li key={entry.id}>
+                {showDate ? <div className="parent-conversation-date"><CalendarDays aria-hidden="true" size={20} /><time dateTime={entry.sentAt}>{new Date(entry.sentAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul', year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}</time></div> : null}
+                <article aria-label={isParent ? '학부모 메시지' : '교사 답변'} className={`parent-chat-message ${isParent ? 'is-parent' : 'is-teacher'}`}>
+                  {!isParent ? <div className="parent-chat-author"><ProfileAvatar className="parent-chat-avatar" /><strong>{message.teacherName}</strong></div> : null}
+                  <div className="parent-chat-row">
+                    <section aria-label={isParent ? '전송한 문의 내용' : '선생님 답변 내용'} className="parent-chat-bubble"><p>{entry.body}</p></section>
+                    <time dateTime={entry.sentAt}>{new Date(entry.sentAt).toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit' })}</time>
+                  </div>
+                </article>
+              </li>;
+            })}
+          </ol>
+          <div className="parent-conversation-actions">
+            <div className="parent-conversation-primary-actions">
+              {justSent ? <Button onClick={() => navigate('/parent/messages')} rightIcon={<ArrowRight size={18} />} variant="outline">문의 내역</Button> : null}
+              <Button leftIcon={<Pencil size={20} />} onClick={() => navigate(`/parent/messages/${encodeURIComponent(messageId)}/follow-up`)}>추가 문의하기</Button>
             </div>
-          ) : null}
-          <dl className="parent-review-preview-meta parent-receipt-meta">
-            <dt>문의 대상</dt><dd>{message.teacherName}</dd>
-            <dt>문의 제목</dt><dd>{message.title}</dd>
-            <dt>선택 문장</dt><dd>{labels[message.selectionType]}</dd>
-            <dt>전송 일시</dt><dd><time dateTime={message.sentAt}>{new Date(message.sentAt).toLocaleString('ko-KR')}</time></dd>
-          </dl>
-          <section aria-label="전송한 문의 내용" className="parent-receipt-body"><p>{message.finalBody}</p></section>
-          <div className="parent-receipt-actions">
-            <Button leftIcon={<Plus size={20} />} onClick={() => navigate('/parent/messages/new')} variant="outline">새 문의 작성</Button>
-            <Button onClick={() => navigate('/parent/messages')} rightIcon={<ArrowRight size={20} />}>문의 내역</Button>
+            <p>다른 내용으로 문의를 원하시나요? <Link to="/parent/messages/new?fresh=1">새 문의 작성</Link></p>
           </div>
-        </> : <EmptyState title={result.error ?? '문의를 찾을 수 없습니다.'}
-          action={<Button onClick={() => navigate('/parent/messages')}>문의 내역</Button>} />}
-      </main>
-    </>
-  );
+        </section>
+      </> : <EmptyState title={error ?? '문의를 찾을 수 없습니다.'}
+        action={error ? <Button onClick={refresh}>다시 시도</Button> : <Button onClick={() => navigate('/parent/messages')}>문의 내역</Button>} />}
+    </main>
+  </>;
 }

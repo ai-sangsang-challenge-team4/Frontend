@@ -6,18 +6,24 @@ type ParentMessageHeaderProps = {
   title?: string;
   backLabel?: string;
   onBack?: () => void;
+  showBack?: boolean;
+  showBreadcrumb?: boolean;
+  breadcrumbLabel?: string;
 };
 
 export function ParentMessageHeader({
   title = '새 문의 작성',
   backLabel = '문의 작성으로 돌아가기',
   onBack,
+  showBack = true,
+  showBreadcrumb = true,
+  breadcrumbLabel = title,
 }: ParentMessageHeaderProps) {
   const navigate = useNavigate();
   return (
     <header className="teacher-app-header parent-write-header">
       <div className="parent-write-heading">
-        <button
+        {showBack ? <button
           aria-label={backLabel}
           className="parent-write-back"
           onClick={onBack ?? (() => navigate('/parent/messages/new'))}
@@ -25,14 +31,14 @@ export function ParentMessageHeader({
           type="button"
         >
           <ArrowLeft aria-hidden="true" size={24} />
-        </button>
+        </button> : null}
         <h1>{title}</h1>
       </div>
-      <nav aria-label="현재 위치" className="parent-write-breadcrumb">
-        <Link to="/parent/messages/new">새 문의</Link>
+      {showBreadcrumb ? <nav aria-label="현재 위치" className="parent-write-breadcrumb">
+        <Link to="/parent">홈</Link>
         <ChevronRight aria-hidden="true" size={20} />
-        <span aria-current="page">{title}</span>
-      </nav>
+        <span aria-current="page">{breadcrumbLabel}</span>
+      </nav> : null}
     </header>
   );
 }

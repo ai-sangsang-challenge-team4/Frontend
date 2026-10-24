@@ -32,12 +32,17 @@ test('학부모 홈과 잘못된 경로는 새 문의로 연결되고 뒤로가�
     await page.goto(pathname);
     await expect(page).toHaveURL(/\/parent\/messages\/new$/);
     await expect(page.getByRole('heading', { name: '새 문의 작성', exact: true })).toBeVisible();
-    await expect(page.getByRole('link', { name: '홈', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('navigation', { name: '현재 위치', exact: true }).getByRole('link', { name: '홈', exact: true })).toHaveAttribute('href', '/parent');
   }
   await page.getByRole('button', { name: '문의 내역으로 돌아가기', exact: true }).click();
   await expect(page).toHaveURL(/\/parent\/messages$/);
   await expect(page.getByRole('heading', { name: '문의 내역', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '문의 작성으로 돌아가기', exact: true }).click();
+  if (page.viewportSize()!.width <= 980) {
+    await page.getByRole('button', { name: '학부모 메뉴 더보기', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Teacher Hub 학부모 메뉴', exact: true }).getByRole('link', { name: '새 문의', exact: true }).click();
+  } else {
+    await page.getByRole('link', { name: '새 문의', exact: true }).click();
+  }
   await expect(page).toHaveURL(/\/parent\/messages\/new$/);
 });
 

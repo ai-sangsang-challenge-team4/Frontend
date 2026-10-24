@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, Eye, Gavel, Pencil, Repeat2, RotateCcw, Save, Send, UserRoundX } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';
+import { useAuth } from '../auth';
 import { Accordion, Button, EmptyState, Modal, Tabs, TextareaField, Toast } from '../../shared/components/ui';
-import { clearMessageDraft, findSentMessage, mockConnectedTeachers, readMessageDraft, saveMessageDraft, type MessageDraft } from './messageDraft';
+import { clearMessageDraft, mockConnectedTeachers, readMessageDraft, saveMessageDraft, type MessageDraft } from './messageDraft';
 import { ParentMessageHeader } from './ParentMessageHeader';
 import { createMockAnalysis, sendParentMessage } from './parentMessageApi';
+import { findSentSubmission, findSentSubmissionById, getDraftPath } from './conversation';
 import {
   createMessageReview,
   getSelectedMessage,
@@ -66,12 +68,13 @@ function HighlightedMessage({ text, risks, onSelect }: {
 export function ParentMessageReview({ userId, messageId }: { userId: number; messageId: string }) {
   const [initial] = useState(() => {
     try {
-      return { draft: readMessageDraft(userId), sent: findSentMessage(userId, messageId), error: null };
+      const draft = readMessageDraft(userId, messageId);
+      return { draft, sent: draft ? findSentSubmission(userId, draft) : findSentSubmissionById(userId, messageId), error: null };
     } catch {
       return { draft: null, sent: null, error: '문의 정보를 불러오지 못했습니다. 다시 시도해 주세요.' };
     }
   });
-  if (initial.sent) return <Navigate replace to={`/parent/messages/${messageId}`} />;
+  if (initial.sent) return <Navigate replace to={`/parent/messages/${initial.sent.messageId}`} />;
   if (!initial.draft || initial.draft.messageId !== messageId || initial.draft.status !== 'PARENT_REVIEW') {
     return (
       <>
@@ -87,6 +90,7 @@ export function ParentMessageReview({ userId, messageId }: { userId: number; mes
 }
 
 function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: number }) {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [review, setReview] = useState<MessageReview>(() => {
     const restored = draft.review ?? createMessageReview(createMockAnalysis(draft.body));
@@ -147,10 +151,10 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
     sendController.current = controller;
     try {
       persistReview();
-      const sent = await sendParentMessage(userId, draft, review, controller.signal);
+      const sent = await sendParentMessage(userId, draft, review, controller.signal, user?.name);
       if (controller.signal.aborted) return;
       try {
-        clearMessageDraft(userId, sent.messageId);
+        clearMessageDraft(userId, draft.messageId);
       } catch {
         // The sent record remains authoritative if draft cleanup fails.
       }
@@ -170,7 +174,7 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
   function handleBack() {
     try {
       persistReview();
-      navigate('/parent/messages/new');
+      navigate(draft.threadId ? getDraftPath(draft) : '/parent/messages/new');
     } catch {
       setNotice('작성한 내용을 저장하지 못했습니다. 임시저장 후 다시 시도해 주세요.');
     }
@@ -242,7 +246,7 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
 
   return (
     <>
-      <ParentMessageHeader onBack={handleBack} />
+      <ParentMessageHeader title={draft.threadId ? '추가 문의하기' : '새 문의 작성'} onBack={handleBack} />
       <main className="layout-main parent-review-main">
         <section aria-label="문의 문장 선택" className="parent-review-editor">
           <Tabs
