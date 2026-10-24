@@ -25,13 +25,18 @@ export function formatHistoryTime(at: string) {
     : date.toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul', month: 'long', day: 'numeric' });
 }
 
+// Compares ISO timestamps chronologically so records with different UTC offsets still order correctly.
+export function compareMessageTimes(left: string, right: string) {
+  return Date.parse(left) - Date.parse(right);
+}
+
 // Parent-side recheck: the teacher replied after the parent's last message and the parent has not confirmed it yet.
 export function needsParentReview(message: SentParentMessage) {
   const conversation = getConversation(message);
   const latestTeacherReply = conversation.filter((entry) => entry.authorRole === 'teacher').at(-1);
   const latestParentMessage = conversation.filter((entry) => entry.authorRole === 'parent').at(-1);
-  if (!latestTeacherReply || (latestParentMessage && latestParentMessage.sentAt > latestTeacherReply.sentAt)) return false;
-  return !message.parentAcknowledgedAt || message.parentAcknowledgedAt < latestTeacherReply.sentAt;
+  if (!latestTeacherReply || (latestParentMessage && compareMessageTimes(latestParentMessage.sentAt, latestTeacherReply.sentAt) > 0)) return false;
+  return !message.parentAcknowledgedAt || compareMessageTimes(message.parentAcknowledgedAt, latestTeacherReply.sentAt) < 0;
 }
 
 export function getDraftPath(draft: MessageDraft) {

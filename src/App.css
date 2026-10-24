@@ -41,15 +41,11 @@
 }
 
 .brand__mark {
-  display: inline-grid;
+  display: block;
   width: 42px;
   height: 42px;
-  place-items: center;
-  border-radius: 8px;
-  background: #ebeffb;
-  color: #3b5bdb;
-  font-size: 0.8rem;
-  font-weight: 900;
+  flex: 0 0 auto;
+  object-fit: contain;
 }
 
 .role-nav a,

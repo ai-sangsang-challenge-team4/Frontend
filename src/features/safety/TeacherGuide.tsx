@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type SVGProps } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth';
+import { useActiveMessageCount } from '../message/useActiveMessageCount';
 import { Sidebar } from '../../shared/components/teacher-shell/TeacherSidebar';
 import { SearchIcon } from '../../shared/components/teacher-shell/icons';
 import { Button, EmptyState, TextField } from '../../shared/components/ui';
@@ -677,6 +678,7 @@ function GuidePostDetail({
 
 export function TeacherGuide() {
   const { logout, user } = useAuth();
+  const activeMessageCount = useActiveMessageCount(user?.userId ?? 0);
   const navigate = useNavigate();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [query, setQuery] = useState('');
@@ -768,7 +770,7 @@ export function TeacherGuide() {
       <Sidebar
         activeItem="guide"
         defaultCollapsed={isSidebarCollapsed}
-        messageCount={2}
+        messageCount={activeMessageCount}
         onCollapsedChange={setIsSidebarCollapsed}
         onLogout={handleLogout}
         profileMeta={user?.email}

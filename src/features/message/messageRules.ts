@@ -3,8 +3,12 @@ import type {
   StatusChipStatus,
 } from '../../shared/components/ui';
 import type {
+  AiObjectionType,
   BoardThread,
   FilterValue,
+  RiskFilterValue,
+  RiskScore,
+  SortValue,
   RiskGuideAction,
   RiskLevel,
   SystemRiskLevel,
@@ -72,11 +76,69 @@ export const statusChipStatus: Record<ThreadStatus, StatusChipStatus> = {
   complete: 'complete',
 };
 
+// 'active' (before + inProgress) is the default so completed consultations stay hidden until the teacher asks for them.
 export const filterOptions: { label: string; value: FilterValue }[] = [
-  { label: '전체 상담', value: 'all' },
   { label: '진행 중 상담', value: 'active' },
   { label: '완료된 상담', value: 'complete' },
+  { label: '전체 상담', value: 'all' },
 ];
+
+export const riskFilterOptions: { label: string; value: RiskFilterValue }[] = [
+  { label: '전체', value: 'all' },
+  ...systemRiskReviewLevels.map((level) => ({ label: systemRiskLabel[level], value: level })),
+];
+
+export const sortOptions: { label: string; value: SortValue }[] = [
+  { label: '최신순', value: 'latest' },
+  { label: '위험도 높은 순', value: 'risk' },
+  { label: '상담 상태순', value: 'status' },
+];
+
+export function matchesStatusFilter(status: ThreadStatus, filter: FilterValue) {
+  if (filter === 'all') return true;
+  return filter === 'active' ? status !== 'complete' : status === 'complete';
+}
+
+const statusSortOrder: Record<ThreadStatus, number> = { before: 0, inProgress: 1, complete: 2 };
+
+export function compareThreads(left: BoardThread, right: BoardThread, sort: SortValue) {
+  const byLatest = (Date.parse(right.latestAt) || 0) - (Date.parse(left.latestAt) || 0);
+  if (sort === 'risk') {
+    return systemRiskReviewLevels.indexOf(getThreadRiskLevel(right)) -
+      systemRiskReviewLevels.indexOf(getThreadRiskLevel(left)) || byLatest;
+  }
+  if (sort === 'status') return statusSortOrder[left.status] - statusSortOrder[right.status] || byLatest;
+  return byLatest;
+}
+
+export const riskScores: RiskScore[] = [1, 2, 3, 4, 5, 6, 7];
+
+export const riskScoreGuides: Record<RiskScore, { example: string; label: string }> = {
+  1: { label: '매우 안전', example: '감사 인사, 일상적인 안부처럼 대응 부담이 없는 메시지' },
+  2: { label: '안전', example: '일정·준비물 확인 등 사실 확인만 필요한 단순 문의' },
+  3: { label: '약간 주의', example: '불편함을 표현하지만 정중하고 요청이 분명한 메시지' },
+  4: { label: '주의', example: '같은 요구를 반복하거나 감정적인 표현이 섞인 메시지' },
+  5: { label: '위험', example: '교사 개인을 비난하거나 공격적인 표현이 담긴 메시지' },
+  6: { label: '높은 위험', example: '민원·법적 조치를 언급하며 압박하거나 위협적인 표현이 있는 메시지' },
+  7: { label: '매우 위험', example: '신체적 위협, 학생 안전 우려 등 즉시 대응이 필요한 메시지' },
+};
+
+export function riskScoreToLevel(score: RiskScore): SystemRiskLevel {
+  if (score <= 2) return 'low';
+  if (score <= 4) return 'medium';
+  if (score <= 6) return 'high';
+  return 'emergency';
+}
+
+// Starting score when the teacher has not rated yet: the lowest score inside the current level.
+export const defaultRiskScore: Record<SystemRiskLevel, RiskScore> = { low: 1, medium: 3, high: 5, emergency: 7 };
+
+export const aiObjectionTypeLabel: Record<AiObjectionType, string> = {
+  overestimated: '실제보다 위험하게 판단했어요',
+  underestimated: '실제보다 안전하게 판단했어요',
+  wrongEvidence: '위험 요소나 판단 근거가 맞지 않아요',
+  other: '기타',
+};
 
 export const riskStageGuides: Record<
   SystemRiskLevel,
@@ -142,7 +204,7 @@ export const riskStageGuides: Record<
     ],
     lockTitle: '‘긴급’ 단계에서는 답변 작성이 제한됩니다.',
     lockDescription:
-      '위험도 검토가 끝난 뒤 공식 절차에 맞춰 답변을 진행할 수 있습니다.',
+      '지정 검토자가 잠금을 해제하기 전까지 답변 생성과 전송이 차단됩니다.',
   },
 };
 
@@ -154,18 +216,20 @@ export function getThreadRiskLevel(thread: BoardThread): SystemRiskLevel {
   );
 }
 
+// safetyLock is set by the analysis and only a designated reviewer can lift it,
+// so it blocks replies even after a teacher lowers the risk level.
+export function isReplyLocked(thread: BoardThread) {
+  return getThreadRiskLevel(thread) === 'emergency' || Boolean(thread.analysis?.safetyLock);
+}
+
 export function canGenerateReplyDraft(thread: BoardThread) {
   const riskLevel = getThreadRiskLevel(thread);
 
-  return riskLevel === 'low' || riskLevel === 'medium';
+  return (riskLevel === 'low' || riskLevel === 'medium') && !isReplyLocked(thread);
 }
 
 export function canUseOfficialReplyTemplate(thread: BoardThread) {
-  return getThreadRiskLevel(thread) === 'high';
-}
-
-export function isReplyLocked(thread: BoardThread) {
-  return getThreadRiskLevel(thread) === 'emergency';
+  return getThreadRiskLevel(thread) === 'high' && !isReplyLocked(thread);
 }
 
 export function getVisibleRiskFactors(thread: BoardThread) {

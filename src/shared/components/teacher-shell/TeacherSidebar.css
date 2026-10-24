@@ -50,9 +50,10 @@
 }
 
 .sidebar-logo {
-  color: var(--color-text-primary);
-  font-size: 16px;
-  font-weight: 500;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  object-fit: contain;
 }
 
 .sidebar-brand strong {
@@ -264,16 +265,10 @@
 }
 
 .sidebar-mobile-brand-mark {
-  display: grid;
   width: 36px;
   height: 36px;
   flex: 0 0 auto;
-  place-items: center;
-  border-radius: var(--radius-sm);
-  color: var(--color-primary);
-  background: var(--color-primary-subtle);
-  font-size: 12px;
-  font-weight: 700;
+  object-fit: contain;
 }
 
 .sidebar-mobile-toggle {
@@ -512,7 +507,8 @@
   }
 
   .sidebar-logo {
-    font-size: 13px;
+    width: 28px;
+    height: 28px;
   }
 
   .sidebar-brand strong {

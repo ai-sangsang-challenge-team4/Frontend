@@ -1,14 +1,17 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
+  useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
   type SVGProps,
 } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Sidebar } from '../../shared/components/teacher-shell/TeacherSidebar';
-import { SearchIcon, StarIcon } from '../../shared/components/teacher-shell/icons';
+import { ChevronDownIcon, SearchIcon, StarIcon } from '../../shared/components/teacher-shell/icons';
 import {
   Accordion,
   Button,
@@ -23,7 +26,6 @@ import {
 } from '../../shared/components/ui';
 import {
   emergencyOfficialProcedurePostId,
-  replyReferenceGuidePostId,
 } from '../safety/guidePostIds';
 import { useAuth } from '../auth';
 import { BufferedSummaryCard } from './components/BufferedSummaryCard';
@@ -43,35 +45,63 @@ import { OriginalMessageViewer } from './components/OriginalMessageViewer';
 import { ProfileAvatar } from './components/ProfileAvatar';
 import { ReplyCheckPanel } from './components/ReplyCheckPanel';
 import { ReplyEditor } from './components/ReplyEditor';
+import { RegulationSourceDialog } from './components/RegulationSourceDialog';
+import { TemplateReplyEditor } from './components/TemplateReplyEditor';
 import { RiskFactorDetail, RiskFactorTitle } from './components/RiskFactorDisplay';
 import {
   canGenerateReplyDraft,
   canUseOfficialReplyTemplate,
+  aiObjectionTypeLabel,
+  compareThreads,
+  defaultRiskScore,
   filterOptions,
   getBufferedSummaryText,
   getPrimaryParentMessage,
   getThreadRiskLevel,
   getVisibleRiskFactors,
   isReplyLocked,
+  matchesStatusFilter,
+  riskFilterOptions,
+  riskScoreGuides,
+  riskScores,
+  riskScoreToLevel,
   riskStageGuides,
+  sortOptions,
   statusChipStatus,
   statusLabel,
   systemRiskLabel,
-  systemRiskReviewLevels,
   systemRiskTone,
-  threadRiskToSystemRisk,
 } from './messageRules';
+import { formatRegulationSource, searchRegulations, type RegulationSource } from './replyReferences';
+import {
+  findCautionExpressions,
+  changeReplyTemplateDraft,
+  createReplyTemplateDraft,
+  findReplyTemplate,
+  findReplyTemplates,
+  getReplyTemplate,
+  renderReplyTemplate,
+  validateReplyTemplate,
+  type ReplyTemplateChange,
+} from './replyTemplates';
 import type {
+  ActivityLog,
+  AiObjection,
+  AiObjectionType,
   BoardThread,
   DetailTab,
   FilterValue,
   MessagesRouteView,
   OriginalMessageRequest,
+  RiskFilterValue,
   RiskReviewSubmission,
-  SystemRiskLevel,
+  RiskScore,
+  SortValue,
   ThreadTab,
 } from './types';
 import './TeacherMessages.css';
+import { compareMessageTimes, formatMessageDate } from '../parent-message/conversation';
+import { initialTeacherThreads } from './mockThreads';
 import { persistTeacherParentThread, readTeacherParentThreads } from './teacherParentMessages';
 
 type TeacherMessagesProps = {
@@ -190,352 +220,6 @@ function openGuidePostFromMessages(
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
-const exampleThreads: BoardThread[] = [
-  {
-    id: 'thread-001',
-    parentName: '최유진 학부모',
-    studentName: '최유진',
-    className: '3학년 2반',
-    title: '상담 일정 및 조치 내용 확인 요청',
-    latestMessage: '학부모 상담 가능 일정을 확인하고 조율을 요청',
-    latestAt: '2026-08-03T10:24:00+09:00',
-    latestAtLabel: '2026.08.03 오전 10:24',
-    risk: 'urgent',
-    status: 'before',
-    riskReviewRequired: true,
-    draftText: '',
-    isPinned: false,
-    messageDateLabel: '2026년 8월 10일 월요일',
-    moderatedSummary: '상담 일정을 요구하며 불만과 압박을 표현하고 있음.',
-    originalMessage:
-      '오늘 중으로 꼭 연락 주세요. 아이가 학교에 가기 싫다고 하고 집에서도 계속 울어서 저도 너무 불안합니다. 그냥 상담 일정만 잡는 말로 끝내지 말고, 학교에서 지금까지 무엇을 확인했고 어떤 조치를 했는지 분명히 알려 주세요. 답이 늦으면 더 이상 기다리기 어렵습니다.',
-    officialTemplates: [
-      '학급 생활 관찰 기록 양식',
-      '상담 일정 조율 안내문',
-      '학생 안전 확인 체크리스트',
-    ],
-    analysis: {
-      systemRiskLevel: 'emergency',
-      teacherReviewedRiskLevel: undefined,
-      safetyLock: true,
-      studentSafetySignal: 'POSSIBLE',
-      canViewOriginal: true,
-      originalMessageAvailable: true,
-      canReviewRisk: true,
-      canViewActivityLog: true,
-      packageAvailable: true,
-      summary: {
-        status: 'ready',
-        text: '상담 일정을 요구하며 불만과 압박을 표현하고 있음.',
-      },
-      riskFactors: [
-        {
-          id: 'factor-pressure',
-          name: '즉시 응답 압박',
-          description: '오늘 중 연락과 조치 설명을 강하게 요청하고 있습니다.',
-          status: 'detected',
-          rationale:
-            '답변 기한을 특정하고 후속 행동을 예고해 교사가 즉시 대응해야 하는 압박으로 해석될 수 있습니다.',
-          evidence: '오늘 중으로 꼭 연락 주세요',
-        },
-        {
-          id: 'factor-student-safety',
-          name: '학생 안전 신호',
-          description:
-            '학생이 등교를 거부하고 울었다는 표현이 있어 별도 확인이 필요합니다.',
-          status: 'boundary',
-          rationale:
-            '직접적인 위해 표현은 아니지만 학생의 정서 상태를 확인해야 하는 경계 신호입니다.',
-          evidence: '학교에 가기 싫다고 하고 집에서도 계속 울어서',
-        },
-        {
-          id: 'factor-accountability',
-          name: '조치 설명 요구',
-          description:
-            '상담 일정뿐 아니라 학교의 확인 내용과 대응 조치를 요구합니다.',
-          status: 'detected',
-          rationale:
-            '교사가 답변 전 사실 확인과 내부 기록 점검을 함께 해야 하는 요청입니다.',
-          evidence: '무엇을 확인했고 어떤 조치를 했는지',
-        },
-      ],
-      activityLogs: [
-        {
-          id: 'log-001',
-          time: '2026.08.23 오전 10:24',
-          actor: 'AI 분석',
-          action: '위험도 산정',
-          detail: '시스템 위험도를 긴급으로 분류했습니다.',
-        },
-        {
-          id: 'log-002',
-          time: '2026.08.23 오전 10:25',
-          actor: '조예인 선생님',
-          action: '상세 화면 진입',
-          detail: '완충 요약과 위험 요소를 확인했습니다.',
-        },
-      ],
-    },
-    replies: [
-      {
-        id: 'reply-001-1',
-        authorName: '최유진 학부모',
-        authorRole: 'parent',
-        label: '게시글',
-        time: '오전 10:11',
-        content:
-          '네, 오늘 중으로 꼭 연락 부탁드립니다. 아이가 요즘 학교에 가기 싫다고 할 정도라 저도 많이 걱정됩니다. 단순히 상담 일정만 잡는 것보다 학교에서 지금까지 어떤 상황을 확인했고 어떻게 대응하고 있는지도 같이 설명해 주셨으면 합니다.',
-      }
-    ],
-  },
-  {
-    id: 'thread-002',
-    parentName: '박서준 학부모',
-    studentName: '박서준',
-    className: '4학년 1반',
-    title: '친구와의 갈등 후속 확인',
-    latestMessage:
-      '어제 쉬는 시간 일을 아이가 계속 이야기해서 후속 확인을 부탁드립니다.',
-    latestAt: '2026-08-23T09:08:00+09:00',
-    latestAtLabel: '2026.08.23 오전 9:08',
-    risk: 'attention',
-    status: 'inProgress',
-    riskReviewRequired: false,
-    draftText:
-      '안녕하세요, 학부모님. 말씀해 주신 상황을 확인한 뒤 오늘 하교 전까지 안내드리겠습니다.',
-    isPinned: false,
-    messageDateLabel: '2026년 8월 23일 일요일',
-    moderatedSummary: '친구와의 갈등 이후 학생 정서 확인과 후속 안내를 요청함.',
-    originalMessage:
-      '어제 쉬는 시간에 있었던 일 때문에 아이가 계속 속상해합니다. 상대 학생과 어떤 대화가 있었는지 확인 부탁드립니다.',
-    analysis: {
-      systemRiskLevel: 'medium',
-      safetyLock: false,
-      studentSafetySignal: 'NONE',
-      canViewOriginal: true,
-      originalMessageAvailable: true,
-      canReviewRisk: true,
-      canViewActivityLog: true,
-      packageAvailable: false,
-      summary: {
-        status: 'ready',
-        text: '친구와의 갈등 이후 학생 정서 확인과 후속 안내를 요청함.',
-      },
-      riskFactors: [
-        {
-          id: 'factor-peer-conflict',
-          name: '또래 갈등',
-          description: '쉬는 시간 갈등과 학생의 속상함이 언급되었습니다.',
-          status: 'detected',
-          rationale: '상대 학생과의 대화 확인이 필요한 생활지도 맥락입니다.',
-          evidence: '상대 학생과 어떤 대화가 있었는지',
-        },
-      ],
-      activityLogs: [
-        {
-          id: 'log-002-1',
-          time: '2026.08.23 오전 9:08',
-          actor: '조예인 선생님',
-          action: '답변 초안 저장',
-          detail: '학부모 안내 초안을 임시저장했습니다.',
-        },
-      ],
-    },
-    replies: [
-      {
-        id: 'reply-002-1',
-        authorName: '박서준 학부모',
-        authorRole: 'parent',
-        label: '게시글',
-        time: '오전 8:42',
-        content:
-          '어제 쉬는 시간에 있었던 일 때문에 아이가 계속 속상해합니다. 상대 학생과 어떤 대화가 있었는지 확인 부탁드립니다.',
-      },
-      {
-        id: 'reply-002-2',
-        authorName: '조예인 선생님',
-        authorRole: 'teacher',
-        label: '선생님 답변',
-        readByParent: false,
-        time: '오전 9:01',
-        content:
-          '말씀해 주신 내용을 확인했습니다. 아이가 느낀 부분을 먼저 살피고, 관련 학생들과 상황을 차분히 확인하겠습니다.',
-      },
-    ],
-  },
-  {
-    id: 'thread-003',
-    parentName: '정하준 학부모',
-    studentName: '정하준',
-    className: '3학년 2반',
-    title: '현장체험학습 준비물 문의',
-    latestMessage:
-      '안내장 준비물 외에 개인 도시락을 챙겨도 되는지 궁금합니다.',
-    latestAt: '2026-08-22T17:20:00+09:00',
-    latestAtLabel: '2026.08.22 오후 5:20',
-    risk: 'normal',
-    status: 'before',
-    riskReviewRequired: false,
-    draftText: '',
-    isPinned: false,
-    messageDateLabel: '2026년 8월 22일 토요일',
-    originalMessage: '',
-    analysis: {
-      systemRiskLevel: 'low',
-      safetyLock: false,
-      studentSafetySignal: 'NONE',
-      canViewOriginal: false,
-      originalMessageAvailable: false,
-      canReviewRisk: false,
-      canViewActivityLog: true,
-      packageAvailable: false,
-      summary: {
-        status: 'failed',
-        text: '요약을 불러오지 못했습니다.',
-      },
-      riskFactors: [
-        {
-          id: 'factor-general-inquiry',
-          name: '일반 문의',
-          description: '준비물과 일정에 관한 확인 요청입니다.',
-          status: 'unknown',
-          rationale:
-            '원문 권한이 없어 AI 근거를 표시하지 못하지만 목록 위험도는 일반으로 유지됩니다.',
-          evidence: '원문 확인 권한 없음',
-        },
-      ],
-      activityLogs: [
-        {
-          id: 'log-003-1',
-          time: '2026.08.22 오후 5:20',
-          actor: '시스템',
-          action: '메시지 수신',
-          detail: '일반 문의로 분류되었습니다.',
-        },
-      ],
-    },
-    replies: [
-      {
-        id: 'reply-003-1',
-        authorName: '정하준 학부모',
-        authorRole: 'parent',
-        label: '게시글',
-        time: '오후 5:20',
-        content:
-          '안내장에 적힌 준비물 외에 개인 도시락을 챙겨도 되는지 궁금합니다. 물은 어느 정도 가져가면 될까요?',
-      },
-    ],
-  },
-  {
-    id: 'thread-004',
-    parentName: '이수아 학부모',
-    studentName: '이수아',
-    className: '5학년 3반',
-    title: '가정 내 변화에 따른 학교 생활 확인',
-    latestMessage:
-      '최근 가정 상황이 바뀌어 아이가 예민할 수 있어 생활 확인을 부탁드립니다.',
-    latestAt: '2026-08-22T14:06:00+09:00',
-    latestAtLabel: '2026.08.22 오후 2:06',
-    risk: 'danger',
-    status: 'inProgress',
-    riskReviewRequired: false,
-    draftText: '',
-    isPinned: false,
-    messageDateLabel: '2026년 8월 22일 토요일',
-    moderatedSummary: '학생 정서 변화 가능성이 있어 생활 관찰과 기록이 필요함.',
-    originalMessage:
-      '최근 가정 상황이 바뀌어 아이가 예민할 수 있습니다. 학교에서 달라진 모습이 있는지 확인해 주시면 감사하겠습니다.',
-    officialTemplates: ['생활 관찰 기록', '상담 연계 안내', '가정-학교 협력 메모'],
-    analysis: {
-      systemRiskLevel: 'high',
-      safetyLock: false,
-      studentSafetySignal: 'POSSIBLE',
-      canViewOriginal: true,
-      originalMessageAvailable: true,
-      canReviewRisk: true,
-      canViewActivityLog: true,
-      packageAvailable: true,
-      summary: {
-        status: 'ready',
-        text: '학생 정서 변화 가능성이 있어 생활 관찰과 기록이 필요함.',
-      },
-      riskFactors: [
-        {
-          id: 'factor-home-change',
-          name: '가정 내 변화',
-          description: '가정 상황 변화가 학생 생활에 영향을 줄 수 있습니다.',
-          status: 'boundary',
-          rationale:
-            '직접 위험 단정은 어렵지만 학교 생활 관찰과 기록을 남기는 것이 적절합니다.',
-          evidence: '최근 가정 상황이 바뀌어',
-        },
-      ],
-      activityLogs: [
-        {
-          id: 'log-004-1',
-          time: '2026.08.22 오후 2:06',
-          actor: 'AI 분석',
-          action: '위험 요소 요약',
-          detail: '가정 변화와 학생 정서 관찰 필요성을 표시했습니다.',
-        },
-      ],
-    },
-    replies: [
-      {
-        id: 'reply-004-1',
-        authorName: '이수아 학부모',
-        authorRole: 'parent',
-        label: '게시글',
-        time: '오후 2:06',
-        content:
-          '최근 가정 상황이 바뀌어 아이가 예민할 수 있습니다. 학교에서 달라진 모습이 있는지 확인해 주시면 감사하겠습니다.',
-      },
-    ],
-  },
-  {
-    id: 'thread-005',
-    parentName: '최도윤 학부모',
-    studentName: '최도윤',
-    className: '2학년 4반',
-    title: '방과후 수업 결석 처리 확인',
-    latestMessage:
-      '지난 금요일 방과후 수업 결석이 출결에 어떻게 반영되는지 확인했습니다.',
-    latestAt: '2026-08-21T16:48:00+09:00',
-    latestAtLabel: '2026.08.21 오후 4:48',
-    risk: 'normal',
-    status: 'complete',
-    riskReviewRequired: false,
-    draftText: '',
-    isPinned: false,
-    replies: [
-      {
-        id: 'reply-005-1',
-        authorName: '최도윤 학부모',
-        authorRole: 'parent',
-        label: '게시글',
-        time: '오후 4:12',
-        content:
-          '지난 금요일 방과후 수업 결석이 출결에 어떻게 반영되는지 확인 부탁드립니다.',
-      },
-      {
-        id: 'reply-005-2',
-        authorName: '조예인 선생님',
-        authorRole: 'teacher',
-        label: '선생님 답변',
-        readByParent: true,
-        time: '오후 4:48',
-        content:
-          '방과후 수업 결석은 정규 수업 출결과 별도로 기록됩니다. 자세한 내용은 방과후 담당 선생님께도 공유해 두었습니다.',
-      },
-    ],
-  },
-];
-
-// The example threads ship with their AI summary in title/latestMessage; keep it fixed as replies arrive.
-const initialThreads = exampleThreads.map((thread) => ({
-  ...thread,
-  conversationSummary: thread.conversationSummary ?? { topic: thread.title, text: thread.latestMessage },
-}));
 
 const detailTabLabel: Record<DetailTab, string> = {
   conversation: '대화',
@@ -546,21 +230,7 @@ const detailTabLabel: Record<DetailTab, string> = {
 const detailTabs: DetailTab[] = ['conversation', 'risk', 'activity'];
 
 function formatNow(date = new Date()) {
-  const parts = new Intl.DateTimeFormat('ko-KR', {
-    day: '2-digit',
-    hour: 'numeric',
-    hour12: true,
-    minute: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  })
-    .formatToParts(date)
-    .reduce<Record<string, string>>((formattedParts, part) => {
-      formattedParts[part.type] = part.value;
-      return formattedParts;
-    }, {});
-
-  return `${parts.year}.${parts.month}.${parts.day} ${parts.dayPeriod} ${parts.hour}:${parts.minute}`;
+  return formatMessageDate(date.toISOString());
 }
 
 function createAiReplyDraft(thread: BoardThread) {
@@ -606,17 +276,62 @@ function createAiReplyDraft(thread: BoardThread) {
   ].join('\n\n');
 }
 
-function createOfficialTemplateReply(thread: BoardThread) {
-  const parentName = `${thread.parentName}님`;
-  const templateName = thread.officialTemplates?.[0] ?? '학교 공식 응답 템플릿';
+// Threads without analysis (parent-message threads) keep their logs on the thread itself.
+function getActivityLogs(thread: BoardThread) {
+  return thread.analysis?.activityLogs ?? thread.activityLogs ?? [];
+}
 
-  return [
-    `안녕하세요, ${parentName}.`,
-    `말씀해 주신 내용은 ${templateName}에 따라 접수하고 확인하겠습니다.`,
-    '현재 확인되지 않은 내용은 단정하지 않고, 관련 기록과 학생 상황을 확인한 뒤 학교 절차에 맞게 안내드리겠습니다.',
-    '필요한 경우 상담 또는 추가 확인 일정을 별도로 조율하겠습니다.',
-    '감사합니다.',
-  ].join('\n\n');
+function appendActivityLogs(
+  thread: BoardThread,
+  logs: Omit<ActivityLog, 'id' | 'time'>[],
+): BoardThread {
+  const time = formatNow();
+  const existingLogs = getActivityLogs(thread);
+  const activityLogs = [
+    ...existingLogs,
+    ...logs.map((log, index) => ({
+      ...log,
+      id: `${thread.id}-log-${existingLogs.length + index + 1}`,
+      time,
+    })),
+  ];
+
+  return thread.analysis
+    ? { ...thread, analysis: { ...thread.analysis, activityLogs } }
+    : { ...thread, activityLogs };
+}
+
+// A draft built from a template that was deactivated or replaced by a newer version cannot be sent.
+function isAppliedTemplateInactive(thread: BoardThread) {
+  if (!thread.appliedTemplate) {
+    return false;
+  }
+
+  const template = getReplyTemplate(thread.appliedTemplate.templateId);
+
+  return (
+    !template ||
+    template.status !== 'ACTIVE' ||
+    template.version !== thread.appliedTemplate.version
+  );
+}
+
+function getAppliedTemplateLabel(thread: BoardThread) {
+  const template = getReplyTemplate(thread.appliedTemplate?.templateId);
+
+  return template && thread.appliedTemplate
+    ? `${template.title} 템플릿 v${thread.appliedTemplate.version}`
+    : undefined;
+}
+
+function getReplyDraftErrors(thread: BoardThread, teacherName: string) {
+  if (!thread.appliedTemplate) {
+    return canUseOfficialReplyTemplate(thread) && findReplyTemplate(thread)
+      ? ['먼저 답장 예시를 골라 주세요.'] : [];
+  }
+  const template = getReplyTemplate(thread.appliedTemplate.templateId);
+  if (!template) return ['사용할 수 없는 예시입니다. 다른 예시를 골라 주세요.'];
+  return validateReplyTemplate(template, thread.appliedTemplate, thread, teacherName, thread.draftText);
 }
 
 
@@ -692,7 +407,12 @@ function ThreadRow({
         <div className="board-thread-copy">
           <span className="board-thread-title-row">
             <strong>{thread.title}</strong>
-            {thread.needsTeacherReview ? <Badge variant="warning">재확인 필요</Badge> : null}
+            {thread.needsTeacherReview ? (
+              <>
+                <span className="board-thread-title-dot" aria-hidden="true" />
+                <small className="board-thread-recheck">재확인 필요</small>
+              </>
+            ) : null}
             {needsAttention ? (
               <>
                 <span className="board-thread-title-dot" aria-hidden="true" />
@@ -762,53 +482,119 @@ function ThreadList({
   );
 }
 
+type BoardFilters = {
+  query: string;
+  risk: RiskFilterValue;
+  sort: SortValue;
+  status: FilterValue;
+};
+
+const defaultBoardFilters: BoardFilters = { query: '', risk: 'all', sort: 'latest', status: 'active' };
+
 type BoardWorkspaceProps = {
-  activeFilter: FilterValue;
   emptyDescription: string;
   emptyTitle: string;
-  onFilterChange: (value: FilterValue) => void;
-  onQueryChange: (value: string) => void;
+  filters: BoardFilters;
+  isDetailFilterOpen: boolean;
+  onDetailFilterToggle: () => void;
+  onFiltersChange: (filters: Partial<BoardFilters>) => void;
   onSelect: (threadId: string) => void;
   onToggleStar: (threadId: string) => void;
-  query: string;
   selectedThreadId?: string;
   threads: BoardThread[];
 };
 
 function BoardWorkspace({
-  activeFilter,
   emptyDescription,
   emptyTitle,
-  onFilterChange,
-  onQueryChange,
+  filters,
+  isDetailFilterOpen,
+  onDetailFilterToggle,
+  onFiltersChange,
   onSelect,
   onToggleStar,
-  query,
   selectedThreadId,
   threads,
 }: BoardWorkspaceProps) {
+  const detailFilterId = useId();
+  const appliedDetailCount =
+    Number(filters.risk !== defaultBoardFilters.risk) +
+    Number(filters.sort !== defaultBoardFilters.sort);
+
   return (
     <>
       <div className="board-toolbar">
         <Dropdown
-          ariaLabel="메시지 처리 상태 필터"
+          ariaLabel="상담 상태 필터"
           className="board-filter-select"
-          menuLabel="메시지 처리 상태"
-          onValueChange={(nextValue) => onFilterChange(nextValue as FilterValue)}
+          menuLabel="상담 상태"
+          onValueChange={(nextValue) => onFiltersChange({ status: nextValue as FilterValue })}
           options={filterOptions}
-          value={activeFilter}
+          value={filters.status}
         />
 
         <TextField
           aria-label="메시지 검색"
           containerClassName="board-search-field"
           leadingIcon={<SearchIcon />}
-          onChange={(event) => onQueryChange(event.currentTarget.value)}
+          onChange={(event) => onFiltersChange({ query: event.currentTarget.value })}
           placeholder="이름 또는 메시지 내용으로 검색"
           type="search"
-          value={query}
+          value={filters.query}
         />
+
+        <button
+          aria-controls={detailFilterId}
+          aria-expanded={isDetailFilterOpen}
+          className={`board-detail-filter-toggle${isDetailFilterOpen ? ' is-open' : ''}`}
+          onClick={onDetailFilterToggle}
+          type="button"
+        >
+          <span>필터상세</span>
+          {appliedDetailCount > 0 ? (
+            <span className="board-detail-filter-count">
+              {appliedDetailCount}
+              <span className="sr-only">개 적용됨</span>
+            </span>
+          ) : null}
+          <ChevronDownIcon aria-hidden="true" />
+        </button>
       </div>
+
+      {isDetailFilterOpen ? (
+        <div aria-label="상세 필터" className="board-detail-filter" id={detailFilterId} role="group">
+          <div className="board-detail-filter-field">
+            <span>위험도</span>
+            <Dropdown
+              ariaLabel="위험도 필터"
+              className="board-filter-select board-detail-filter-select"
+              menuLabel="위험도"
+              onValueChange={(nextValue) => onFiltersChange({ risk: nextValue as RiskFilterValue })}
+              options={riskFilterOptions}
+              value={filters.risk}
+            />
+          </div>
+          <div className="board-detail-filter-field">
+            <span>정렬</span>
+            <Dropdown
+              ariaLabel="정렬 기준"
+              className="board-filter-select board-detail-filter-select"
+              menuLabel="정렬 기준"
+              onValueChange={(nextValue) => onFiltersChange({ sort: nextValue as SortValue })}
+              options={sortOptions}
+              value={filters.sort}
+            />
+          </div>
+          <button
+            className="board-outline-button board-detail-filter-reset"
+            disabled={appliedDetailCount === 0}
+            onClick={() => onFiltersChange({ risk: defaultBoardFilters.risk, sort: defaultBoardFilters.sort })}
+            type="button"
+          >
+            초기화
+          </button>
+        </div>
+      ) : null}
 
       <ThreadList
         emptyDescription={emptyDescription}
@@ -838,6 +624,7 @@ type DraftResumeDialogProps = {
 };
 
 type BoardConfirmDialogAction = {
+  disabled?: boolean;
   label: string;
   onClick: () => void;
   tone?: 'danger' | 'primary';
@@ -951,6 +738,7 @@ function BoardConfirmDialog({
             return (
               <button
                 className={className}
+                disabled={action.disabled}
                 key={`${action.label}-${index}`}
                 onClick={action.onClick}
                 type="button"
@@ -1041,42 +829,110 @@ function OriginalMessageConfirmDialog({
   );
 }
 
+type AiObjectionDialogProps = {
+  onClose: () => void;
+  onSubmit: (objection: Pick<AiObjection, 'reason' | 'type'>) => void;
+  open: boolean;
+};
+
+function AiObjectionDialog({ onClose, onSubmit, open }: AiObjectionDialogProps) {
+  const [type, setType] = useState<AiObjectionType | null>(null);
+  const [reason, setReason] = useState('');
+  const reasonId = useId();
+  const trimmedReason = reason.trim();
+
+  useEffect(() => {
+    if (!open) {
+      setType(null);
+      setReason('');
+    }
+  }, [open]);
+
+  return (
+    <BoardConfirmDialog
+      actions={[
+        { label: '취소', onClick: onClose },
+        {
+          disabled: !type || trimmedReason.length === 0,
+          label: '이의 제기',
+          onClick: () => {
+            if (type && trimmedReason) onSubmit({ reason: trimmedReason, type });
+          },
+          tone: 'primary',
+        },
+      ]}
+      descriptionId="board-ai-objection-description"
+      onClose={onClose}
+      open={open}
+      title="AI 판단이 틀렸나요?"
+      titleId="board-ai-objection-title"
+    >
+      <p className="board-confirm-modal-copy" id="board-ai-objection-description">
+        남겨 주신 사유는 AI 오판 사례로 모아 판단 기준을 개선하는 데 활용됩니다.
+      </p>
+      <fieldset className="board-ai-objection-types">
+        <legend>어떤 부분이 틀렸나요?</legend>
+        {(Object.keys(aiObjectionTypeLabel) as AiObjectionType[]).map((currentType) => (
+          <label key={currentType}>
+            <input
+              checked={type === currentType}
+              name="board-ai-objection-type"
+              onChange={() => setType(currentType)}
+              type="radio"
+              value={currentType}
+            />
+            <span>{aiObjectionTypeLabel[currentType]}</span>
+          </label>
+        ))}
+      </fieldset>
+      <label className="board-ai-objection-reason-label" htmlFor={reasonId}>
+        사유
+      </label>
+      <div className="board-risk-review-textarea-shell board-ai-objection-reason">
+        <textarea
+          id={reasonId}
+          maxLength={300}
+          onChange={(event) => setReason(event.target.value)}
+          placeholder="AI 판단이 틀렸다고 생각하신 이유를 적어 주세요."
+          value={reason}
+        />
+        <span>{reason.length} / 300</span>
+      </div>
+    </BoardConfirmDialog>
+  );
+}
+
 type RiskReviewPanelProps = {
   canReview: boolean;
-  level: SystemRiskLevel;
-  onLevelChange: (level: SystemRiskLevel) => void;
   onReasonChange: (reason: string) => void;
+  onScoreChange: (score: RiskScore) => void;
   onSubmit: () => void;
   reason: string;
-  referenceLevel: SystemRiskLevel;
+  referenceScore: RiskScore;
+  score: RiskScore;
   threadId: string;
 };
 
 function RiskReviewPanel({
   canReview,
-  level,
-  onLevelChange,
   onReasonChange,
+  onScoreChange,
   onSubmit,
   reason,
-  referenceLevel,
+  referenceScore,
+  score,
   threadId,
 }: RiskReviewPanelProps) {
   const trimmedReason = reason.trim();
   const reasonInputId = `board-risk-review-reason-${threadId}`;
   const reasonRequirementId = `${reasonInputId}-requirement`;
-  const selectedLevelIndex = Math.max(
-    0,
-    systemRiskReviewLevels.indexOf(level),
-  );
-  const referenceLevelIndex = Math.max(
-    0,
-    systemRiskReviewLevels.indexOf(referenceLevel),
-  );
-  const isDownwardReview = selectedLevelIndex < referenceLevelIndex;
-  const isUpwardReview = selectedLevelIndex > referenceLevelIndex;
+  const guideId = `board-risk-review-guide-${threadId}`;
+  const level = riskScoreToLevel(score);
+  const guide = riskScoreGuides[score];
+  const isDownwardReview = score < referenceScore;
+  const isUpwardReview = score > referenceScore;
   const isEmergencyDowngrade =
-    referenceLevel === 'emergency' && isDownwardReview;
+    riskScoreToLevel(referenceScore) === 'emergency' && level !== 'emergency';
   const isReasonRequired = isDownwardReview;
   const isSubmitDisabledByReason =
     isReasonRequired && trimmedReason.length === 0;
@@ -1094,9 +950,11 @@ function RiskReviewPanel({
       : isUpwardReview
         ? '상향 반영'
         : '검토 완료';
-  const handleSliderChange = (value: string) => {
-    onLevelChange(systemRiskReviewLevels[Number(value)]);
-  };
+  const scorePosition = (value: RiskScore) => (value - 1) / (riskScores.length - 1);
+  const sliderStyle = {
+    '--board-risk-review-selected-ratio': scorePosition(score),
+    '--board-risk-review-current-ratio': scorePosition(referenceScore),
+  } as CSSProperties;
 
   return (
     <section
@@ -1111,9 +969,7 @@ function RiskReviewPanel({
           <p>이 메시지의 위험도를 어떻게 판단하시나요?</p>
         </div>
 
-        <div
-          className={`board-risk-review-slider board-risk-review-slider--${level} board-risk-review-slider-current--${referenceLevel}`}
-        >
+        <div className="board-risk-review-slider" style={sliderStyle}>
           <div className="board-risk-current-marker" aria-hidden="true">
             <span>
               <svg
@@ -1133,41 +989,56 @@ function RiskReviewPanel({
           <div className="board-risk-review-control">
             <span aria-hidden="true" className="board-risk-review-line" />
             <input
-              aria-label="위험도 단계"
-              aria-valuetext={systemRiskLabel[level]}
+              aria-describedby={guideId}
+              aria-label="위험도 점수"
+              aria-valuetext={`${score}점 ${guide.label}`}
               className="board-risk-review-range"
               disabled={!canReview}
-              max={systemRiskReviewLevels.length - 1}
-              min={0}
-              onChange={(event) => handleSliderChange(event.target.value)}
+              max={7}
+              min={1}
+              onChange={(event) => onScoreChange(Number(event.target.value) as RiskScore)}
               step={1}
               type="range"
-              value={selectedLevelIndex}
+              value={score}
             />
-            <span className="board-risk-review-thumb" />
+            <span className={`board-risk-review-thumb board-risk-review-thumb--${score}`} />
           </div>
           <div
-            aria-label="위험도 단계 선택"
+            aria-label="위험도 점수 선택"
             className="board-risk-review-levels"
             role="group"
           >
-            {systemRiskReviewLevels.map((currentLevel) => (
+            {riskScores.map((currentScore) => (
               <button
-                aria-pressed={level === currentLevel}
+                aria-label={`${currentScore}점 ${riskScoreGuides[currentScore].label}`}
+                aria-pressed={score === currentScore}
                 className={
-                  level === currentLevel
+                  score === currentScore
                     ? 'board-risk-review-level is-active'
                     : 'board-risk-review-level'
                 }
                 disabled={!canReview}
-                key={currentLevel}
-                onClick={() => onLevelChange(currentLevel)}
+                key={currentScore}
+                onClick={() => onScoreChange(currentScore)}
+                style={{ '--board-risk-review-level-ratio': scorePosition(currentScore) } as CSSProperties}
                 type="button"
               >
-                {systemRiskLabel[currentLevel]}
+                {currentScore}
               </button>
             ))}
           </div>
+          <div aria-hidden="true" className="board-risk-review-scale-ends">
+            <span>매우 안전</span>
+            <span>매우 위험</span>
+          </div>
+        </div>
+
+        <div className={`board-risk-score-guide board-risk-score-guide--${score}`} id={guideId}>
+          <strong>
+            {score}점 · {guide.label}
+            <span className="board-risk-score-guide-level">{systemRiskLabel[level]} 단계</span>
+          </strong>
+          <p>{guide.example}</p>
         </div>
       </div>
 
@@ -1242,6 +1113,7 @@ function RiskReviewPanel({
 }
 
 type RiskAnalysisPanelProps = {
+  onAiObjection: (threadId: string, objection: Pick<AiObjection, 'reason' | 'type'>) => void;
   onEvidencePackageCreate: (threadId: string) => void;
   onReviewComplete: (threadId: string, review: RiskReviewSubmission) => void;
   onOriginalOpen: (evidence?: string) => void;
@@ -1250,6 +1122,7 @@ type RiskAnalysisPanelProps = {
 };
 
 function RiskAnalysisPanel({
+  onAiObjection,
   onEvidencePackageCreate,
   onReviewComplete,
   onOriginalOpen,
@@ -1257,19 +1130,20 @@ function RiskAnalysisPanel({
   thread,
 }: RiskAnalysisPanelProps) {
   const [isProcedureOpen, setIsProcedureOpen] = useState(false);
+  const [isObjectionOpen, setIsObjectionOpen] = useState(false);
   const analysis = thread.analysis;
-  const initialReviewLevel =
-    analysis?.teacherReviewedRiskLevel ?? analysis?.systemRiskLevel ?? 'low';
-  const [reviewLevel, setReviewLevel] =
-    useState<SystemRiskLevel>(initialReviewLevel);
+  const initialReviewScore =
+    analysis?.teacherRiskScore ??
+    defaultRiskScore[analysis?.teacherReviewedRiskLevel ?? analysis?.systemRiskLevel ?? 'low'];
+  const [reviewScore, setReviewScore] = useState<RiskScore>(initialReviewScore);
   const [reviewReason, setReviewReason] = useState(
     analysis?.teacherReviewReason ?? '',
   );
 
   useEffect(() => {
-    setReviewLevel(initialReviewLevel);
+    setReviewScore(initialReviewScore);
     setReviewReason(analysis?.teacherReviewReason ?? '');
-  }, [analysis?.teacherReviewReason, initialReviewLevel, thread.id]);
+  }, [analysis?.teacherReviewReason, initialReviewScore, thread.id]);
 
   if (!analysis) {
     return (
@@ -1316,6 +1190,7 @@ function RiskAnalysisPanel({
     analysis.safetyLock ||
     thread.riskReviewRequired;
   const canShowStudentSafetyCard = analysis.studentSafetySignal !== 'NONE';
+  const hasAiObjection = Boolean(analysis.aiObjections?.length);
   const canShowEvidencePackage =
     effectiveRiskLevel === 'high' || effectiveRiskLevel === 'emergency';
   const handleGuideAction = () => {
@@ -1339,19 +1214,14 @@ function RiskAnalysisPanel({
   };
   const handleReviewSubmit = () => {
     const reason = reviewReason.trim();
-    const selectedLevelIndex = systemRiskReviewLevels.indexOf(reviewLevel);
-    const referenceLevelIndex = systemRiskReviewLevels.indexOf(initialReviewLevel);
 
-    if (
-      !analysis.canReviewRisk ||
-      (selectedLevelIndex < referenceLevelIndex && !reason)
-    ) {
+    if (!analysis.canReviewRisk || (reviewScore < initialReviewScore && !reason)) {
       return;
     }
 
     onReviewComplete(thread.id, {
-      level: reviewLevel,
       reason,
+      score: reviewScore,
     });
   };
 
@@ -1416,16 +1286,26 @@ function RiskAnalysisPanel({
               확인된 위험 요소와 판단 근거
             </h2>
           </div>
-          {canShowEvidenceOriginalButton ? (
+          <div className="board-risk-section-actions">
             <button
-              className="board-outline-button board-risk-action-button"
-              onClick={() => onOriginalOpen()}
+              className="board-outline-button board-risk-action-button board-ai-objection-button"
+              disabled={hasAiObjection}
+              onClick={() => setIsObjectionOpen(true)}
               type="button"
             >
-              <span>원문 보기</span>
-              <ExternalLinkIcon />
+              {hasAiObjection ? '이의 제기 완료' : 'AI 판단이 틀렸어요'}
             </button>
-          ) : null}
+            {canShowEvidenceOriginalButton ? (
+              <button
+                className="board-outline-button board-risk-action-button"
+                onClick={() => onOriginalOpen()}
+                type="button"
+              >
+                <span>원문 보기</span>
+                <ExternalLinkIcon />
+              </button>
+            ) : null}
+          </div>
         </div>
 
         {riskFactorItems.length > 0 ? (
@@ -1443,15 +1323,24 @@ function RiskAnalysisPanel({
         )}
       </section>
 
+      <AiObjectionDialog
+        onClose={() => setIsObjectionOpen(false)}
+        onSubmit={(objection) => {
+          onAiObjection(thread.id, objection);
+          setIsObjectionOpen(false);
+        }}
+        open={isObjectionOpen}
+      />
+
       {canShowReviewPanel ? (
         <RiskReviewPanel
           canReview={analysis.canReviewRisk}
-          level={reviewLevel}
-          onLevelChange={setReviewLevel}
           onReasonChange={setReviewReason}
+          onScoreChange={setReviewScore}
           onSubmit={handleReviewSubmit}
           reason={reviewReason}
-          referenceLevel={initialReviewLevel}
+          referenceScore={initialReviewScore}
+          score={reviewScore}
           threadId={thread.id}
         />
       ) : null}
@@ -1559,7 +1448,7 @@ type ActivityLogPanelProps = {
 };
 
 function ActivityLogPanel({ thread }: ActivityLogPanelProps) {
-  const logs = thread.analysis?.activityLogs ?? [];
+  const logs = getActivityLogs(thread);
 
   if (logs.length === 0) {
     return (
@@ -1598,7 +1487,8 @@ function ActivityLogPanel({ thread }: ActivityLogPanelProps) {
 // The parent's 확인했어요 counts only when it is newer than the latest teacher reply.
 function isAcknowledgedByParent(thread: BoardThread) {
   const latestTeacherReply = thread.replies.filter((reply) => reply.authorRole === 'teacher').at(-1);
-  return Boolean(thread.parentAcknowledgedAt && latestTeacherReply?.sentAt && thread.parentAcknowledgedAt >= latestTeacherReply.sentAt);
+  return Boolean(thread.parentAcknowledgedAt && latestTeacherReply?.sentAt &&
+    compareMessageTimes(thread.parentAcknowledgedAt, latestTeacherReply.sentAt) >= 0);
 }
 
 type DetailProps = {
@@ -1612,10 +1502,12 @@ type DetailProps = {
   onReturnToReplyComposer: (threadId: string) => void;
   onReviewComplete: (threadId: string, review: RiskReviewSubmission) => void;
   onReviewRequest: (threadId: string) => void;
+  onAiObjection: RiskAnalysisPanelProps['onAiObjection'];
   thread: BoardThread;
 };
 
 function ThreadDetail({
+  onAiObjection,
   onConsultationComplete,
   initialOriginalViewer,
   initialTab,
@@ -1637,10 +1529,8 @@ function ThreadDetail({
   const isLocked = isReplyLocked(thread);
   const effectiveRiskLevel = getThreadRiskLevel(thread);
   const hasDraft = thread.draftText.trim().length > 0;
-  const lockedGuide =
-    riskStageGuides[
-      thread.analysis?.systemRiskLevel ?? threadRiskToSystemRisk[thread.risk]
-    ];
+  // Shown only while locked, which always means the emergency safety lock.
+  const lockedGuide = riskStageGuides.emergency;
   const bufferedSummaryText = getBufferedSummaryText(thread);
   const visibleConversationReplies = bufferedSummaryText
     ? thread.replies.filter((reply) => reply.authorRole !== 'parent')
@@ -1781,10 +1671,9 @@ function ThreadDetail({
       </nav>
 
       <MessageContextCard thread={thread} />
-      {thread.needsTeacherReview || isAcknowledgedByParent(thread) ? (
+      {isAcknowledgedByParent(thread) ? (
         <div className="board-consultation-controls">
-          {thread.needsTeacherReview ? <Badge variant="warning">재확인 필요</Badge> : null}
-          {isAcknowledgedByParent(thread) ? <Badge>학부모 확인</Badge> : null}
+          <Badge>학부모 확인</Badge>
         </div>
       ) : null}
 
@@ -1933,6 +1822,7 @@ function ThreadDetail({
 
       {!originalViewer && activeDetailTab === 'risk' ? (
         <RiskAnalysisPanel
+          onAiObjection={onAiObjection}
           onEvidencePackageCreate={onEvidencePackageCreate}
           onReviewComplete={onReviewComplete}
           onOriginalOpen={openOriginalViewer}
@@ -1955,6 +1845,7 @@ function ThreadDetail({
 }
 
 type ReplySendConfirmDialogProps = {
+  cautionExpressions: string[];
   draftText: string;
   onCancel: () => void;
   onConfirm: () => void;
@@ -1963,6 +1854,7 @@ type ReplySendConfirmDialogProps = {
 };
 
 function ReplySendConfirmDialog({
+  cautionExpressions,
   draftText,
   onCancel,
   onConfirm,
@@ -1970,6 +1862,7 @@ function ReplySendConfirmDialog({
   thread,
 }: ReplySendConfirmDialogProps) {
   const [isConfirmed, setIsConfirmed] = useState(false);
+  const templateLabel = getAppliedTemplateLabel(thread);
 
   useEffect(() => {
     if (open) {
@@ -2006,13 +1899,23 @@ function ReplySendConfirmDialog({
     >
       <div className="board-send-confirm">
         <div className="board-send-confirm-summary">
-          <span>{thread.parentName}</span>
+          <span>
+            받는 사람: {thread.parentName}
+            {templateLabel ? ` · ${templateLabel}` : null}
+          </span>
           <strong>{thread.title}</strong>
         </div>
         <div className="board-send-confirm-preview">
           <strong>전송될 답변</strong>
           <p>{draftText}</p>
         </div>
+        {cautionExpressions.length > 0 ? (
+          <p className="board-reply-lock-notice" role="alert">
+            확인할 표현 {cautionExpressions.length}개:{' '}
+            {cautionExpressions.map((expression) => `"${expression}"`).join(', ')}
+            {' '}— 약속처럼 들릴 수 있어요. 필요하면 다시 고쳐 주세요.
+          </p>
+        ) : null}
         <label className="board-send-confirm-checkbox">
           <input
             checked={isConfirmed}
@@ -2065,7 +1968,8 @@ function ReplySendCompleteDialog({
 }
 
 type ReplyComposerPageProps = {
-  onApplyOfficialTemplate: (threadId: string) => void;
+  onApplyOfficialTemplate: (threadId: string, templateId?: string) => void;
+  onTemplateChange: (threadId: string, change: ReplyTemplateChange) => void;
   onBack: () => void;
   onDraftChange: (threadId: string, value: string) => void;
   onDraftReset: (threadId: string) => void;
@@ -2079,6 +1983,7 @@ type ReplyComposerPageProps = {
 
 function ReplyComposerPage({
   onApplyOfficialTemplate,
+  onTemplateChange,
   onBack,
   onDraftChange,
   onDraftReset,
@@ -2089,15 +1994,28 @@ function ReplyComposerPage({
   onSubmitReply,
   thread,
 }: ReplyComposerPageProps) {
+  const { user } = useAuth();
+  const teacherName = user?.name ?? '담임';
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [isCheckPanelOpen, setIsCheckPanelOpen] = useState(true);
   const [isOriginalConfirmOpen, setIsOriginalConfirmOpen] = useState(false);
+  const [referenceSource, setReferenceSource] = useState<RegulationSource | null>(null);
   const hasDraft = thread.draftText.trim().length > 0;
   const bufferedSummaryText = getBufferedSummaryText(thread);
   const isLocked = isReplyLocked(thread);
   const riskLevel = getThreadRiskLevel(thread);
-  const isAiDraftAvailable = canGenerateReplyDraft(thread);
+  const regulationResult = useMemo(() => searchRegulations(thread), [thread]);
+  // No corpus match means no AI draft at all; a search failure keeps the button so the teacher can retry.
+  const isAiDraftAvailable =
+    canGenerateReplyDraft(thread) && regulationResult.status !== 'not_found';
   const isOfficialTemplateAvailable = canUseOfficialReplyTemplate(thread);
+  const replyTemplate = isOfficialTemplateAvailable
+    ? findReplyTemplate(thread)
+    : undefined;
+  const isTemplateInactive = isAppliedTemplateInactive(thread);
+  const draftErrors = getReplyDraftErrors(thread, teacherName);
+  const matchingTemplates = findReplyTemplates(thread);
+  const appliedTemplateLabel = getAppliedTemplateLabel(thread);
   const lockNoticeId = `board-reply-lock-notice-${thread.id}`;
   const aiNoticeId = `board-ai-draft-notice-${thread.id}`;
   const canInspectOriginal = Boolean(
@@ -2118,29 +2036,37 @@ function ReplyComposerPage({
       ? 'AI 다시 생성'
       : 'AI 답변 생성';
   const assistButtonDisabled =
-    isLocked || (!isAiDraftAvailable && !isOfficialTemplateAvailable);
-  const stageNotice =
-    riskLevel === 'low'
-      ? '일반 단계: 원문과 RAG 기반 참고자료로 답변 초안을 생성할 수 있습니다.'
-      : riskLevel === 'medium'
-        ? '주의 단계: 완충 요약과 원문을 확인한 뒤 AI 초안을 교사가 검토하고 수정하는 것을 권고합니다.'
-        : riskLevel === 'high'
-          ? '위험 단계: 개별 AI 초안 대신 증빙 패키지와 승인된 공식 응답 템플릿을 사용합니다.'
-          : '긴급 단계: 개별 답변 초안은 제공되지 않으며 즉시 오프라인 공식 절차에 따라 대응합니다.';
+    isLocked || (!isAiDraftAvailable && !replyTemplate);
+  const stageNotice = isLocked
+    ? '긴급 단계: 개별 답변 초안은 제공되지 않으며 즉시 오프라인 공식 절차에 따라 대응합니다.'
+    : riskLevel === 'high'
+      ? replyTemplate
+        ? `위험 단계: 개별 AI 초안 대신 답장 예시(${replyTemplate.title})를 사용합니다.${replyTemplate.approved ? '' : ' 예시 문구는 확정 전입니다.'}`
+        : '이 메시지에 맞는 공식 템플릿이 없습니다. 내용을 검토한 뒤 직접 작성해 주세요.'
+      : regulationResult.status === 'not_found'
+        ? '관련 규정이 등록된 자료에 없어 AI 초안을 생성하지 않습니다. 직접 작성해 주세요.'
+        : riskLevel === 'low'
+          ? '일반 단계: 원문과 RAG 기반 참고자료로 답변 초안을 생성할 수 있습니다.'
+          : '주의 단계: 완충 요약과 원문을 확인한 뒤 AI 초안을 교사가 검토하고 수정하는 것을 권고합니다.';
   const draftStatusText = isLocked
-    ? '위험도 검토 필요'
-    : thread.draftSavedAt
-      ? `마지막 임시저장 ${thread.draftSavedAt}`
-      : thread.officialTemplateApplied
-        ? '공식 템플릿 적용됨'
-        : thread.aiDraftGenerated
-          ? 'AI 초안 적용됨'
-          : hasDraft
-            ? '작성 중'
-            : '작성 중인 답변 없음';
+    ? '긴급 잠금 · 전송 불가'
+    : isTemplateInactive
+      ? '적용한 템플릿을 더 이상 사용할 수 없습니다. 템플릿을 다시 적용해 주세요.'
+      : draftErrors.length > 0
+        ? draftErrors.join(' ')
+        : thread.draftSavedAt
+          ? `마지막 임시저장 ${thread.draftSavedAt}`
+          : thread.officialTemplateApplied
+            ? `${appliedTemplateLabel ?? '공식 템플릿'} 적용됨`
+            : thread.aiDraftGenerated
+              ? 'AI 초안 적용됨'
+              : hasDraft
+                ? '작성 중'
+                : '작성 중인 답변 없음';
   const handleAssistAction = () => {
-    if (isOfficialTemplateAvailable) {
-      onApplyOfficialTemplate(thread.id);
+    if (replyTemplate) {
+      const selected = matchingTemplates.find((template) => template.templateId === thread.appliedTemplate?.templateId);
+      onApplyOfficialTemplate(thread.id, selected?.templateId ?? replyTemplate.templateId);
       return;
     }
 
@@ -2160,6 +2086,7 @@ function ReplyComposerPage({
     setIsConfirmOpen(false);
     setIsCheckPanelOpen(true);
     setIsOriginalConfirmOpen(false);
+    setReferenceSource(null);
   }, [thread.id]);
 
   return (
@@ -2213,14 +2140,9 @@ function ReplyComposerPage({
       <div className="board-reply-composer">
         <ReplyCheckPanel
           isOpen={isCheckPanelOpen}
-          onOpenReference={() => {
-            openGuidePostFromMessages(
-              thread.id,
-              'reply',
-              replyReferenceGuidePostId,
-            );
-          }}
+          onOpenReference={setReferenceSource}
           onToggle={() => setIsCheckPanelOpen((isOpen) => !isOpen)}
+          regulationResult={regulationResult}
         />
 
         <section className="board-reply-context-panel">
@@ -2256,11 +2178,30 @@ function ReplyComposerPage({
           onDraftReset={() => onDraftReset(thread.id)}
           onDraftSave={() => onDraftSave(thread.id)}
           onSubmit={() => setIsConfirmOpen(true)}
+          onOpenProcedure={() => openGuidePostFromMessages(thread.id, 'reply', emergencyOfficialProcedurePostId)}
           stageNotice={stageNotice}
+          submitDisabled={isTemplateInactive || draftErrors.length > 0}
+          templateEditor={!isLocked && (thread.appliedTemplate || replyTemplate) ? (
+            <>
+              {isTemplateInactive ? (
+                <p className="board-reply-lock-notice" role="alert">이 예시는 더 이상 사용할 수 없습니다. 최신 예시를 다시 적용하면 입력한 빈칸과 직접 고친 문장은 유지됩니다.</p>
+              ) : null}
+              <TemplateReplyEditor
+                disabled={isTemplateInactive}
+                draft={thread.appliedTemplate}
+                onApply={(templateId) => onApplyOfficialTemplate(thread.id, templateId)}
+                onChange={(change) => onTemplateChange(thread.id, change)}
+                teacherName={teacherName}
+                templates={matchingTemplates}
+                thread={thread}
+              />
+            </>
+          ) : undefined}
         />
       </div>
 
       <ReplySendConfirmDialog
+        cautionExpressions={findCautionExpressions(thread.draftText)}
         draftText={thread.draftText.trim()}
         onCancel={() => setIsConfirmOpen(false)}
         onConfirm={() => {
@@ -2270,6 +2211,7 @@ function ReplyComposerPage({
         open={isConfirmOpen}
         thread={thread}
       />
+      <RegulationSourceDialog onClose={() => setReferenceSource(null)} source={referenceSource} />
       <OriginalMessageConfirmDialog
         onCancel={() => setIsOriginalConfirmOpen(false)}
         onConfirm={() => {
@@ -2297,7 +2239,8 @@ export function TeacherMessages({
     initialThreadId,
     initialView,
   });
-  const [activeFilter, setActiveFilter] = useState<FilterValue>('all');
+  const [filters, setFilters] = useState<BoardFilters>(defaultBoardFilters);
+  const [isDetailFilterOpen, setIsDetailFilterOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ThreadTab>('all');
   const [draftPromptThreadId, setDraftPromptThreadId] = useState<string | null>(
     null,
@@ -2311,7 +2254,6 @@ export function TeacherMessages({
       request: OriginalMessageRequest;
       threadId: string;
     } | null>(null);
-  const [query, setQuery] = useState('');
   const [replyComposerThreadId, setReplyComposerThreadId] = useState<
     string | null
   >(
@@ -2326,9 +2268,13 @@ export function TeacherMessages({
     null,
   );
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [threads, setThreads] = useState(() => [...readTeacherParentThreads(user?.userId ?? 0), ...initialThreads]);
-  const [storageError, setStorageError] = useState<string | null>(null);
-  const dismissStorageError = useCallback(() => setStorageError(null), []);
+  const [threads, setThreads] = useState(() => [...readTeacherParentThreads(user?.userId ?? 0), ...initialTeacherThreads]);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  // The sidebar badge follows the inbox's default "진행 중 상담" filter.
+  const activeMessageCount = threads.filter((thread) => thread.status !== 'complete').length;
+  const dismissToast = useCallback(() => setToastMessage(null), []);
+  // Submission keys already handled, so a double click or retry stores the reply only once.
+  const sentReplyKeysRef = useRef(new Set<string>());
 
   useEffect(() => {
     const refresh = () => setThreads((current) => [
@@ -2350,8 +2296,11 @@ export function TeacherMessages({
       view: MessagesRouteView | null;
     }) => {
       setDraftPromptThreadId(null);
-      setInitialDetailTabRequest(null);
-      setInitialOriginalViewerRequest(null);
+      // pushTeacherMessageRoute also fires popstate, so keep a request aimed at the detail being opened.
+      const keepRequest = <T extends { threadId: string }>(current: T | null) =>
+        current?.threadId === routeState.threadId && routeState.view !== 'reply' ? current : null;
+      setInitialDetailTabRequest(keepRequest);
+      setInitialOriginalViewerRequest(keepRequest);
       setReplyComposerThreadId(
         routeState.view === 'reply' ? routeState.threadId : null,
       );
@@ -2378,13 +2327,9 @@ export function TeacherMessages({
   }, [syncRouteState]);
 
   const filteredThreads = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
+    const normalizedQuery = filters.query.trim().toLowerCase();
 
     return threads.filter((thread) => {
-      const matchesFilter =
-        activeFilter === 'all' ||
-        (activeFilter === 'active' && thread.status !== 'complete') ||
-        (activeFilter === 'complete' && thread.status === 'complete');
       const searchableText = [
         thread.parentName,
         thread.studentName,
@@ -2399,9 +2344,13 @@ export function TeacherMessages({
         normalizedQuery.length === 0 ||
         searchableText.includes(normalizedQuery);
 
-      return matchesFilter && matchesQuery;
-    });
-  }, [activeFilter, query, threads]);
+      return (
+        matchesStatusFilter(thread.status, filters.status) &&
+        (filters.risk === 'all' || getThreadRiskLevel(thread) === filters.risk) &&
+        matchesQuery
+      );
+    }).sort((left, right) => compareThreads(left, right, filters.sort));
+  }, [filters, threads]);
 
   const starredThreads = filteredThreads.filter((thread) => thread.isPinned);
   const draftThreads = filteredThreads.filter(
@@ -2424,11 +2373,11 @@ export function TeacherMessages({
     if (!current) return false;
     const next = updater(current);
     try {
-      persistTeacherParentThread(user?.userId ?? 0, next);
+      persistTeacherParentThread(user?.userId ?? 0, next, current);
       setThreads((currentThreads) => currentThreads.map((thread) => thread.id === threadId ? next : thread));
       return true;
     } catch {
-      setStorageError('문의 처리 내용을 저장하지 못했습니다. 다시 시도해 주세요.');
+      setToastMessage('문의 처리 내용을 저장하지 못했습니다. 다시 시도해 주세요.');
       return false;
     }
   };
@@ -2479,21 +2428,36 @@ export function TeacherMessages({
   };
 
   const handleDraftChange = (threadId: string, value: string) => {
-    updateThread(threadId, (thread) => ({
-      ...thread,
-      aiDraftGenerated: value.trim() ? thread.aiDraftGenerated : false,
-      draftSavedAt: value.trim() ? thread.draftSavedAt : undefined,
-      officialTemplateApplied: value.trim()
-        ? thread.officialTemplateApplied
-        : false,
-      draftText: value,
-    }));
+    updateThread(threadId, (thread) => {
+      if (isReplyLocked(thread) || thread.appliedTemplate || (canUseOfficialReplyTemplate(thread) && findReplyTemplate(thread))) return thread;
+      return {
+        ...thread,
+        aiDraftGenerated: value.trim() ? thread.aiDraftGenerated : false,
+        draftSavedAt: value.trim() ? thread.draftSavedAt : undefined,
+        officialTemplateApplied: value.trim()
+          ? thread.officialTemplateApplied
+          : false,
+        appliedTemplate: value.trim() ? thread.appliedTemplate : undefined,
+        draftText: value,
+      };
+    });
+  };
+
+  const handleTemplateChange = (threadId: string, change: ReplyTemplateChange) => {
+    updateThread(threadId, (thread) => {
+      if (isReplyLocked(thread) || !thread.appliedTemplate || isAppliedTemplateInactive(thread)) return thread;
+      const template = getReplyTemplate(thread.appliedTemplate.templateId);
+      if (!template) return thread;
+      const draft = changeReplyTemplateDraft(template, thread.appliedTemplate, change);
+      return { ...thread, appliedTemplate: draft, draftSavedAt: undefined, draftText: renderReplyTemplate(template, thread, user?.name ?? '담임', draft) };
+    });
   };
 
   const handleDraftReset = (threadId: string) => {
     updateThread(threadId, (thread) => ({
       ...thread,
       aiDraftGenerated: false,
+      appliedTemplate: undefined,
       draftSavedAt: undefined,
       draftText: '',
       officialTemplateApplied: false,
@@ -2508,100 +2472,89 @@ export function TeacherMessages({
 
       const savedAt = formatNow();
 
-      return {
-        ...thread,
-        draftSavedAt: savedAt,
-        analysis: thread.analysis
-          ? {
-              ...thread.analysis,
-              activityLogs: [
-                ...thread.analysis.activityLogs,
-                {
-                  id: `${thread.id}-draft-save-${
-                    thread.analysis.activityLogs.length + 1
-                  }`,
-                  time: savedAt,
-                  actor: '조예인 선생님',
-                  action: '답변 초안 임시저장',
-                  detail: `작성 중인 답변 초안을 임시저장했습니다. 저장 시각: ${savedAt}.`,
-                },
-              ],
-            }
-          : thread.analysis,
-      };
+      return appendActivityLogs({ ...thread, draftSavedAt: savedAt }, [
+        {
+          actor: '조예인 선생님',
+          action: '답변 초안 임시저장',
+          detail: `작성 중인 답변 초안을 임시저장했습니다. 저장 시각: ${savedAt}.`,
+        },
+      ]);
     });
   };
 
   const handleGenerateAiDraft = (threadId: string) => {
-    updateThread(threadId, (thread) => {
-      if (!canGenerateReplyDraft(thread) || isReplyLocked(thread)) {
-        return thread;
-      }
+    const target = threads.find((thread) => thread.id === threadId);
 
-      const generatedDraft = createAiReplyDraft(thread);
+    if (!target || !canGenerateReplyDraft(target)) {
+      return;
+    }
 
-      return {
-        ...thread,
-        aiDraftGenerated: true,
-        draftSavedAt: undefined,
-        draftText: generatedDraft,
-        officialTemplateApplied: false,
-        analysis: thread.analysis
-          ? {
-              ...thread.analysis,
-              activityLogs: [
-                ...thread.analysis.activityLogs,
-                {
-                  id: `${thread.id}-ai-draft-${
-                    thread.analysis.activityLogs.length + 1
-                  }`,
-                  time: formatNow(),
-                  actor: 'AI 초안',
-                  action: '답변 초안 생성',
-                  detail:
-                    '학부모 메시지와 위험 요소를 참고해 교사용 답변 초안을 생성했습니다. 자동 전송은 진행되지 않았습니다.',
-                },
-              ],
-            }
-          : thread.analysis,
-      };
-    });
+    const regulationResult = searchRegulations(target);
+
+    if (regulationResult.status === 'error') {
+      setToastMessage('규정 검색이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.');
+      return;
+    }
+
+    // Drafts are generated only within retrieved regulations; nothing is generated without a source.
+    if (regulationResult.status === 'not_found') {
+      return;
+    }
+
+    updateThread(threadId, (thread) =>
+      appendActivityLogs(
+        {
+          ...thread,
+          aiDraftGenerated: true,
+          appliedTemplate: undefined,
+          draftSavedAt: undefined,
+          draftText: createAiReplyDraft(thread),
+          officialTemplateApplied: false,
+        },
+        [
+          {
+            actor: 'AI 초안',
+            action: '답변 초안 생성',
+            detail: `학부모 메시지와 관련 규정을 참고해 교사용 답변 초안을 생성했습니다. 출처: ${regulationResult.sources
+              .map(formatRegulationSource)
+              .join(' / ')}. 자동 전송은 진행되지 않았습니다.`,
+          },
+        ],
+      ),
+    );
   };
 
-  const handleApplyOfficialTemplate = (threadId: string) => {
-    updateThread(threadId, (thread) => {
-      if (!canUseOfficialReplyTemplate(thread) || isReplyLocked(thread)) {
-        return thread;
-      }
+  const handleApplyOfficialTemplate = (threadId: string, templateId?: string) => {
+    const target = threads.find((thread) => thread.id === threadId);
+    const template = target && canUseOfficialReplyTemplate(target)
+      ? findReplyTemplates(target).find((item) => !templateId || item.templateId === templateId)
+      : undefined;
 
-      const templateDraft = createOfficialTemplateReply(thread);
+    if (!template || !target) {
+      return;
+    }
 
-      return {
-        ...thread,
-        aiDraftGenerated: false,
-        draftSavedAt: undefined,
-        draftText: templateDraft,
-        officialTemplateApplied: true,
-        analysis: thread.analysis
-          ? {
-              ...thread.analysis,
-              activityLogs: [
-                ...thread.analysis.activityLogs,
-                {
-                  id: `${thread.id}-official-template-${
-                    thread.analysis.activityLogs.length + 1
-                  }`,
-                  time: formatNow(),
-                  actor: '조예인 선생님',
-                  action: '공식 응답 템플릿 적용',
-                  detail:
-                    '위험 단계 정책에 따라 개별 AI 초안 대신 승인된 공식 응답 템플릿을 답변 입력란에 적용했습니다.',
-                },
-              ],
-            }
-          : thread.analysis,
-      };
-    });
+    const draft = createReplyTemplateDraft(template, target, user?.name ?? '담임', target.appliedTemplate);
+
+    updateThread(threadId, (thread) =>
+      appendActivityLogs(
+        {
+          ...thread,
+          aiDraftGenerated: false,
+          appliedTemplate: draft,
+          draftSavedAt: undefined,
+          draftText: renderReplyTemplate(template, thread, user?.name ?? '담임', draft),
+          officialTemplateApplied: true,
+        },
+        [
+          {
+            actor: user?.name ?? '선생님',
+            action: '공식 응답 템플릿 적용',
+            detail: `위험 단계 정책에 따라 개별 AI 초안 대신 공식 응답 템플릿 "${template.title}" v${template.version}을 답변 입력란에 적용했습니다.`,
+          },
+        ],
+      ),
+    );
   };
 
   const handleEvidencePackageCreate = (threadId: string) => {
@@ -2636,12 +2589,25 @@ export function TeacherMessages({
     });
   };
 
+  const logReplyBlocked = (threadId: string) => {
+    updateThread(threadId, (thread) =>
+      appendActivityLogs(thread, [
+        {
+          actor: '시스템',
+          action: '답변 생성·전송 차단',
+          detail: '긴급 잠금 상태라 답변 작성 경로를 차단하고 공식 절차 안내로 이동했습니다.',
+        },
+      ]),
+    );
+  };
+
   const handleOpenReplyComposer = (threadId: string) => {
     const thread = threads.find((currentThread) => currentThread.id === threadId);
 
     setSelectedThreadId(threadId);
     setInitialOriginalViewerRequest(null);
     if (thread && isReplyLocked(thread)) {
+      logReplyBlocked(threadId);
       setInitialDetailTabRequest({ tab: 'risk', threadId });
       setReplyComposerThreadId(null);
       pushTeacherMessageRoute(threadId, 'detail');
@@ -2666,12 +2632,14 @@ export function TeacherMessages({
       const beforeLevel =
         thread.analysis.teacherReviewedRiskLevel ??
         thread.analysis.systemRiskLevel;
-      const beforeLevelIndex = systemRiskReviewLevels.indexOf(beforeLevel);
-      const afterLevelIndex = systemRiskReviewLevels.indexOf(review.level);
-      const isDownwardReview = afterLevelIndex < beforeLevelIndex;
-      const isUpwardReview = afterLevelIndex > beforeLevelIndex;
+      const beforeScore = thread.analysis.teacherRiskScore ?? defaultRiskScore[beforeLevel];
+      const afterLevel = riskScoreToLevel(review.score);
+      const isDownwardReview = review.score < beforeScore;
+      const isUpwardReview = review.score > beforeScore;
       const isEmergencyDowngrade =
-        beforeLevel === 'emergency' && isDownwardReview;
+        beforeLevel === 'emergency' && afterLevel !== 'emergency';
+      const beforeLabel = `${systemRiskLabel[beforeLevel]}(${beforeScore}점)`;
+      const afterLabel = `${systemRiskLabel[afterLevel]}(${review.score}점)`;
       const reviewReason = review.reason.trim();
 
       if (isDownwardReview && !reviewReason) {
@@ -2692,7 +2660,7 @@ export function TeacherMessages({
                 time: modifiedAt,
                 actor: '조예인 선생님',
                 action: '긴급 위험도 하향 확인 요청',
-                detail: `수정 전 위험도: ${systemRiskLabel[beforeLevel]}, 요청 위험도: ${systemRiskLabel[review.level]}, 수정 사유: "${reviewReason}", 수정자: 조예인 선생님, 수정 시각: ${modifiedAt}. 관리자 또는 별도 책임자의 확인 후 반영됩니다.`,
+                detail: `수정 전 위험도: ${beforeLabel}, 요청 위험도: ${afterLabel}, 수정 사유: "${reviewReason}", 수정자: 조예인 선생님, 수정 시각: ${modifiedAt}. 관리자 또는 별도 책임자의 확인 후 반영됩니다.`,
               },
             ],
             teacherReviewReason: reviewReason,
@@ -2720,15 +2688,50 @@ export function TeacherMessages({
               time: modifiedAt,
               actor: '조예인 선생님',
               action,
-              detail: `수정 전 위험도: ${systemRiskLabel[beforeLevel]}, 수정 후 위험도: ${systemRiskLabel[review.level]}, ${reasonDetail}, 수정자: 조예인 선생님, 수정 시각: ${modifiedAt}.`,
+              detail: `수정 전 위험도: ${beforeLabel}, 수정 후 위험도: ${afterLabel}, ${reasonDetail}, 수정자: 조예인 선생님, 수정 시각: ${modifiedAt}.`,
             },
           ],
-          safetyLock: false,
+          // Only a designated reviewer can lift the lock; raising to emergency sets it.
+          safetyLock:
+            thread.analysis.safetyLock || afterLevel === 'emergency',
           teacherReviewReason: reviewReason || undefined,
-          teacherReviewedRiskLevel: review.level,
+          teacherReviewedRiskLevel: afterLevel,
+          teacherRiskScore: review.score,
         },
-        risk: systemRiskTone[review.level],
+        risk: systemRiskTone[afterLevel],
         riskReviewRequired: false,
+      };
+    });
+  };
+
+  const handleAiObjection: RiskAnalysisPanelProps['onAiObjection'] = (threadId, objection) => {
+    updateThread(threadId, (thread) => {
+      if (!thread.analysis) {
+        return thread;
+      }
+
+      const createdAt = new Date().toISOString();
+      const objections = thread.analysis.aiObjections ?? [];
+
+      return {
+        ...thread,
+        analysis: {
+          ...thread.analysis,
+          aiObjections: [
+            ...objections,
+            { ...objection, createdAt, id: `${thread.id}-ai-objection-${objections.length + 1}` },
+          ],
+          activityLogs: [
+            ...thread.analysis.activityLogs,
+            {
+              id: `${thread.id}-ai-objection-log-${thread.analysis.activityLogs.length + 1}`,
+              time: formatNow(),
+              actor: user?.name ?? '선생님',
+              action: 'AI 판단 이의 제기',
+              detail: `유형: ${aiObjectionTypeLabel[objection.type]}, 사유: "${objection.reason}". 오판 사례로 평가 데이터에 저장됩니다.`,
+            },
+          ],
+        },
       };
     });
   };
@@ -2761,30 +2764,17 @@ export function TeacherMessages({
   };
 
   const handleOriginalViewed = (threadId: string, evidence?: string) => {
-    updateThread(threadId, (thread) => {
-      if (!thread.analysis) {
-        return thread;
-      }
-
-      return {
-        ...thread,
-        analysis: {
-          ...thread.analysis,
-          activityLogs: [
-            ...thread.analysis.activityLogs,
-            {
-              id: `${thread.id}-original-${thread.analysis.activityLogs.length + 1}`,
-              time: formatNow(),
-              actor: '조예인 선생님',
-              action: '원문 확인',
-              detail: evidence
-                ? `판단 근거 "${evidence}" 위치를 원문에서 확인했습니다.`
-                : '학부모 원문 전체를 확인했습니다.',
-            },
-          ],
+    updateThread(threadId, (thread) =>
+      appendActivityLogs(thread, [
+        {
+          actor: '조예인 선생님',
+          action: '원문 확인',
+          detail: evidence
+            ? `판단 근거 "${evidence}" 위치를 원문에서 확인했습니다.`
+            : '학부모 원문 전체를 확인했습니다.',
         },
-      };
-    });
+      ]),
+    );
   };
 
   const handleOpenOriginalPageFromComposer = (threadId: string) => {
@@ -2810,7 +2800,12 @@ export function TeacherMessages({
   const handleSubmitReply = (threadId: string) => {
     const thread = threads.find((currentThread) => currentThread.id === threadId);
 
-    if (thread && isReplyLocked(thread)) {
+    if (!thread) {
+      return;
+    }
+
+    if (isReplyLocked(thread)) {
+      logReplyBlocked(threadId);
       setSelectedThreadId(threadId);
       setInitialDetailTabRequest({ tab: 'risk', threadId });
       setReplyComposerThreadId(null);
@@ -2818,40 +2813,83 @@ export function TeacherMessages({
       return;
     }
 
-    const saved = updateThread(threadId, (thread) => {
-      const nextReply = thread.draftText.trim();
+    const nextReply = thread.draftText.trim();
 
-      if (!nextReply) {
-        return thread;
-      }
+    if (
+      !nextReply ||
+      isAppliedTemplateInactive(thread) ||
+      getReplyDraftErrors(thread, user?.name ?? '담임').length > 0
+    ) {
+      return;
+    }
 
-      return {
-        ...thread,
-        aiDraftGenerated: false,
-        draftSavedAt: undefined,
-        draftText: '',
-        officialTemplateApplied: false,
-        latestAt: new Date().toISOString(),
-        latestAtLabel: formatNow(),
-        latestMessage: nextReply,
-        replies: [
-          ...thread.replies,
+    // Same thread, same position and same text means a duplicate or retried send.
+    const submissionKey = `${threadId}:${thread.replies.length}:${nextReply}`;
+
+    if (sentReplyKeysRef.current.has(submissionKey)) {
+      return;
+    }
+
+    sentReplyKeysRef.current.add(submissionKey);
+
+    const templateLabel = getAppliedTemplateLabel(thread);
+    const replySource = templateLabel
+      ? `공식 템플릿(${templateLabel})`
+      : thread.aiDraftGenerated
+        ? 'AI 초안 수정본'
+        : '직접 작성';
+    const sentAt = new Date().toISOString();
+    const saved = updateThread(threadId, (current) =>
+      appendActivityLogs(
+        {
+          ...current,
+          aiDraftGenerated: false,
+          appliedTemplate: undefined,
+          draftSavedAt: undefined,
+          draftText: '',
+          officialTemplateApplied: false,
+          latestAt: sentAt,
+          latestAtLabel: formatNow(),
+          latestMessage: nextReply,
+          replies: [
+            ...current.replies,
+            {
+              id: `${current.id}-${current.replies.length + 1}`,
+              authorName: user?.name ?? '선생님',
+              authorRole: 'teacher',
+              content: nextReply,
+              deliveryStatus: 'SENT_TO_PARENT',
+              label: '선생님 답변',
+              readByParent: false,
+              time: formatNow(),
+              sentAt,
+            },
+          ],
+          needsTeacherReview: false,
+          status: 'inProgress',
+        },
+        [
+          ...(templateLabel
+            ? [
+                {
+                  actor: user?.name ?? '선생님',
+                  action: '공식 템플릿 채택',
+                  detail: `${templateLabel}을 기반으로 한 답변을 최종 답변으로 채택했습니다.`,
+                },
+              ]
+            : []),
           {
-            id: `${thread.id}-${thread.replies.length + 1}`,
-            authorName: user?.name ?? '선생님',
-            authorRole: 'teacher',
-            content: nextReply,
-            label: '선생님 답변',
-            readByParent: false,
-            time: formatNow(),
-            sentAt: new Date().toISOString(),
+            actor: user?.name ?? '선생님',
+            action: '답변 전송',
+            detail: `교사가 확인한 최종 답변을 학부모에게 전송했습니다(SENT_TO_PARENT). 작성 방식: ${replySource}.`,
           },
         ],
-        needsTeacherReview: false,
-        status: 'inProgress',
-      };
-    });
-    if (!saved) return;
+      ),
+    );
+    if (!saved) {
+      sentReplyKeysRef.current.delete(submissionKey);
+      return;
+    }
     setInitialDetailTabRequest(null);
     setInitialOriginalViewerRequest(null);
     setReplyComposerThreadId(null);
@@ -2860,20 +2898,24 @@ export function TeacherMessages({
     pushTeacherMessageRoute(threadId, 'detail');
   };
 
+  const workspaceProps = {
+    filters,
+    isDetailFilterOpen,
+    onDetailFilterToggle: () => setIsDetailFilterOpen((isOpen) => !isOpen),
+    onFiltersChange: (nextFilters: Partial<BoardFilters>) =>
+      setFilters((current) => ({ ...current, ...nextFilters })),
+  };
   const tabItems = [
     {
       value: 'all',
       label: <TabLabel count={filteredThreads.length} label="전체 메시지" />,
       content: (
         <BoardWorkspace
-          activeFilter={activeFilter}
           emptyDescription="검색어 또는 필터 조건을 바꾸면 다른 메시지를 볼 수 있습니다."
           emptyTitle="조건에 맞는 메시지가 없습니다"
-          onFilterChange={setActiveFilter}
-          onQueryChange={setQuery}
+          {...workspaceProps}
           onSelect={handleSelectThread}
           onToggleStar={handleToggleStar}
-          query={query}
           selectedThreadId={selectedThreadId ?? undefined}
           threads={filteredThreads}
         />
@@ -2884,14 +2926,11 @@ export function TeacherMessages({
       label: <TabLabel count={starredThreads.length} label="별표 메시지" />,
       content: (
         <BoardWorkspace
-          activeFilter={activeFilter}
           emptyDescription="중요하게 표시한 메시지가 이곳에 모입니다."
           emptyTitle="별표 메시지가 없습니다"
-          onFilterChange={setActiveFilter}
-          onQueryChange={setQuery}
+          {...workspaceProps}
           onSelect={handleSelectThread}
           onToggleStar={handleToggleStar}
-          query={query}
           selectedThreadId={selectedThreadId ?? undefined}
           threads={starredThreads}
         />
@@ -2902,14 +2941,11 @@ export function TeacherMessages({
       label: <TabLabel count={draftThreads.length} label="임시저장 답변" />,
       content: (
         <BoardWorkspace
-          activeFilter={activeFilter}
           emptyDescription="작성 중인 답변 초안이 생기면 이곳에 모입니다."
           emptyTitle="임시저장 답변이 없습니다"
-          onFilterChange={setActiveFilter}
-          onQueryChange={setQuery}
+          {...workspaceProps}
           onSelect={handleSelectThread}
           onToggleStar={handleToggleStar}
-          query={query}
           selectedThreadId={selectedThreadId ?? undefined}
           threads={draftThreads}
         />
@@ -2926,7 +2962,7 @@ export function TeacherMessages({
         <Sidebar
           activeItem="messages"
           defaultCollapsed={isSidebarCollapsed}
-          messageCount={2}
+          messageCount={activeMessageCount}
           onCollapsedChange={setIsSidebarCollapsed}
           onLogout={handleLogout}
           profileMeta={user?.email}
@@ -2942,6 +2978,7 @@ export function TeacherMessages({
               pushTeacherMessageRoute(replyComposerThread.id, 'detail');
             }}
             onDraftChange={handleDraftChange}
+            onTemplateChange={handleTemplateChange}
             onDraftReset={handleDraftReset}
             onDraftSave={handleDraftSave}
             onGenerateAiDraft={handleGenerateAiDraft}
@@ -2956,7 +2993,7 @@ export function TeacherMessages({
             onSubmitReply={handleSubmitReply}
             thread={replyComposerThread}
           />
-          {storageError ? <Toast message={storageError} onClose={dismissStorageError} /> : null}
+          {toastMessage ? <Toast message={toastMessage} onClose={dismissToast} /> : null}
         </main>
       </section>
     );
@@ -2968,7 +3005,7 @@ export function TeacherMessages({
         <Sidebar
           activeItem="messages"
           defaultCollapsed={isSidebarCollapsed}
-          messageCount={2}
+          messageCount={activeMessageCount}
           onCollapsedChange={setIsSidebarCollapsed}
           onLogout={handleLogout}
           profileMeta={user?.email}
@@ -2999,6 +3036,7 @@ export function TeacherMessages({
             onReturnToReplyComposer={handleReturnToReplyComposer}
             onReviewComplete={handleReviewComplete}
             onReviewRequest={handleReviewRequest}
+            onAiObjection={handleAiObjection}
             thread={selectedThread}
           />
           <ReplySendCompleteDialog
@@ -3006,7 +3044,7 @@ export function TeacherMessages({
             open={sendCompleteThreadId === selectedThread.id}
             thread={sendCompleteThread}
           />
-          {storageError ? <Toast message={storageError} onClose={dismissStorageError} /> : null}
+          {toastMessage ? <Toast message={toastMessage} onClose={dismissToast} /> : null}
         </main>
       </section>
     );
@@ -3017,7 +3055,7 @@ export function TeacherMessages({
       <Sidebar
         activeItem="messages"
         defaultCollapsed={isSidebarCollapsed}
-        messageCount={2}
+        messageCount={activeMessageCount}
         onCollapsedChange={setIsSidebarCollapsed}
         onLogout={handleLogout}
         profileMeta={user?.email}
@@ -3041,7 +3079,7 @@ export function TeacherMessages({
           />
         </section>
       </main>
-      {storageError ? <Toast message={storageError} onClose={dismissStorageError} /> : null}
+      {toastMessage ? <Toast message={toastMessage} onClose={dismissToast} /> : null}
       <DraftResumeDialog
         onClose={() => setDraftPromptThreadId(null)}
         onContinue={handleContinueDraft}

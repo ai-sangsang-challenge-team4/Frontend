@@ -3,18 +3,21 @@ import {
   ReplyCheckAlertIcon,
   WritingGuideIcon,
 } from './MessageIcons';
+import type { RegulationSearchResult, RegulationSource } from '../replyReferences';
 import { RagReferenceNotice } from './RagReferenceNotice';
 
 type ReplyCheckPanelProps = {
   isOpen: boolean;
-  onOpenReference: () => void;
+  onOpenReference: (source: RegulationSource) => void;
   onToggle: () => void;
+  regulationResult: RegulationSearchResult;
 };
 
 export function ReplyCheckPanel({
   isOpen,
   onOpenReference,
   onToggle,
+  regulationResult,
 }: ReplyCheckPanelProps) {
   return (
     <section className={`board-reply-check-panel${isOpen ? ' is-open' : ''}`}>
@@ -68,7 +71,7 @@ export function ReplyCheckPanel({
               <span>상담 가능한 일정(시간)을 제안하세요.</span>
             </p>
           </article>
-          <RagReferenceNotice onOpenReference={onOpenReference} />
+          <RagReferenceNotice onOpenReference={onOpenReference} result={regulationResult} />
         </div>
       ) : null}
     </section>

@@ -124,3 +124,63 @@
 .board-confirm-modal-action--primary {
   color: var(--color-primary);
 }
+
+.board-confirm-modal-action:disabled {
+  cursor: not-allowed;
+  color: var(--color-text-muted);
+  background: transparent;
+}
+
+.board-confirm-modal:has(.board-ai-objection-types) {
+  width: min(480px, calc(100vw - 32px));
+}
+
+.board-confirm-modal-content:has(.board-ai-objection-types) {
+  place-items: stretch;
+  gap: 16px;
+}
+
+.board-confirm-modal-content:has(.board-ai-objection-types) .board-confirm-modal-copy {
+  color: var(--color-text-secondary);
+  font-size: 15px;
+}
+
+.board-ai-objection-types {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.board-ai-objection-types legend,
+.board-ai-objection-reason-label {
+  margin-bottom: 4px;
+  color: var(--color-text-primary);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.board-ai-objection-types label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-text-primary);
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.board-ai-objection-types input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-primary);
+}
+
+.board-risk-review-textarea-shell.board-ai-objection-reason {
+  min-height: 132px;
+  padding: 14px 16px;
+}
+
+.board-ai-objection-reason textarea {
+  min-height: 72px;
+}
