@@ -27,7 +27,7 @@ export type AuthContextValue = {
 };
 
 export const ROLE_HOME_PATH: Record<UserRole, string> = {
-  PARENT: '/parent',
+  PARENT: '/parent/messages/new',
   TEACHER: '/teacher',
   ADMIN: '/admin',
 };

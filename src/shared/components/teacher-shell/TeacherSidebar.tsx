@@ -14,7 +14,7 @@ import {
 } from './icons';
 import './TeacherSidebar.css';
 
-export type SidebarItem = 'messages' | 'guide' | 'share' | 'settings';
+export type SidebarItem = 'messages' | 'guide' | 'share' | 'settings' | 'new' | 'history';
 
 type SidebarProps = {
   activeItem?: SidebarItem;
@@ -22,11 +22,20 @@ type SidebarProps = {
   messageCount?: number;
   onCollapsedChange?: (isCollapsed: boolean) => void;
   onLogout?: () => void;
+  onAccountClick?: () => void;
   profileMeta?: string;
   profileName?: string;
+  variant?: 'teacher' | 'parent';
 };
 
-const navItems = [
+type SidebarNavItem = {
+  href: string;
+  icon: typeof SidebarMessageIcon;
+  key: SidebarItem;
+  label: string;
+};
+
+const navItems: SidebarNavItem[] = [
   {
     href: '/teacher/messages',
     icon: SidebarMessageIcon,
@@ -45,17 +54,12 @@ const navItems = [
     key: 'share',
     label: '관리자 공유',
   },
-] satisfies {
-  href: string;
-  icon: typeof SidebarMessageIcon;
-  key: SidebarItem;
-  label: string;
-}[];
+];
 
-const mobileNavItems = [
-  ...navItems,
-  { href: '/teacher/settings', icon: SidebarSettingsIcon, key: 'settings', label: '설정/도움말' },
-] as const;
+const parentNavItems: SidebarNavItem[] = [
+  { href: '/parent/messages/new', icon: SidebarMessageIcon, key: 'new', label: '새 문의' },
+  { href: '/parent/messages', icon: SidebarGuideIcon, key: 'history', label: '문의 내역' },
+];
 
 export function Sidebar({
   activeItem = 'messages',
@@ -63,12 +67,16 @@ export function Sidebar({
   messageCount = 0,
   onCollapsedChange,
   onLogout,
+  onAccountClick,
   profileMeta = 'teacher@example.com',
   profileName = '교사 사용자',
+  variant = 'teacher',
 }: SidebarProps) {
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
   const isSettingsActive = activeItem === 'settings';
+  const items = variant === 'parent' ? parentNavItems : navItems;
+  const menuLabel = variant === 'parent' ? '학부모 메뉴' : '교사 메뉴';
 
   const handleToggleCollapsed = () => {
     const nextValue = !isCollapsed;
@@ -80,15 +88,17 @@ export function Sidebar({
   return (
     <aside
       className={`sidebar-shell${isCollapsed ? ' is-collapsed' : ''}`}
-      aria-label="교사 메뉴"
+      aria-label={menuLabel}
     >
       <MobileSidebarMenu
         activeItem={activeItem}
         key={location.key}
         messageCount={messageCount}
         onLogout={onLogout}
+        onAccountClick={onAccountClick}
         profileMeta={profileMeta}
         profileName={profileName}
+        variant={variant}
       />
       <div className="sidebar-brand">
         <span className="sidebar-logo">(로고)</span>
@@ -106,7 +116,7 @@ export function Sidebar({
       </button>
 
       <nav className="sidebar-nav" aria-label="주요 메뉴">
-        {navItems.map(({ href, icon: Icon, key, label }) => {
+        {items.map(({ href, icon: Icon, key, label }) => {
           const isActive = activeItem === key;
 
           return (
@@ -130,16 +140,29 @@ export function Sidebar({
 
       <div className="sidebar-divider" aria-hidden="true" />
 
-      <NavLink
-        aria-current={isSettingsActive ? 'page' : undefined}
-        aria-label="설정/도움말"
-        className={`sidebar-utility-link${isSettingsActive ? ' is-active' : ''}`}
-        to="/teacher/settings"
-        title="설정/도움말"
-      >
-        <SidebarSettingsIcon className="sidebar-link-icon" />
-        <span className="sidebar-link-label">설정/도움말</span>
-      </NavLink>
+      {variant === 'parent' ? (
+        <button
+          aria-label="설정/도움말"
+          className="sidebar-utility-link"
+          onClick={onAccountClick}
+          title="설정/도움말"
+          type="button"
+        >
+          <SidebarSettingsIcon className="sidebar-link-icon" />
+          <span className="sidebar-link-label">설정/도움말</span>
+        </button>
+      ) : (
+        <NavLink
+          aria-current={isSettingsActive ? 'page' : undefined}
+          aria-label="설정/도움말"
+          className={`sidebar-utility-link${isSettingsActive ? ' is-active' : ''}`}
+          to="/teacher/settings"
+          title="설정/도움말"
+        >
+          <SidebarSettingsIcon className="sidebar-link-icon" />
+          <span className="sidebar-link-label">설정/도움말</span>
+        </NavLink>
+      )}
 
       <div className="sidebar-profile">
         {isCollapsed && onLogout ? (
@@ -182,10 +205,18 @@ function MobileSidebarMenu({
   activeItem,
   messageCount,
   onLogout,
+  onAccountClick,
   profileMeta,
   profileName,
-}: Pick<SidebarProps, 'activeItem' | 'messageCount' | 'onLogout' | 'profileMeta' | 'profileName'>) {
+  variant,
+}: Pick<SidebarProps, 'activeItem' | 'messageCount' | 'onLogout' | 'onAccountClick' | 'profileMeta' | 'profileName' | 'variant'>) {
   const [isOpen, setIsOpen] = useState(false);
+  const isParent = variant === 'parent';
+  const menuLabel = isParent ? '학부모 메뉴' : '교사 메뉴';
+  const mobileNavItems = isParent ? parentNavItems : [
+    ...navItems,
+    { href: '/teacher/settings', icon: SidebarSettingsIcon, key: 'settings', label: '설정/도움말' },
+  ];
 
   useEffect(() => {
     const mobileViewport = window.matchMedia('(max-width: 980px)');
@@ -199,7 +230,7 @@ function MobileSidebarMenu({
 
   const closeMenu = () => setIsOpen(false);
   const brand = (
-    <NavLink className="sidebar-mobile-brand" onClick={closeMenu} to="/teacher/messages">
+    <NavLink className="sidebar-mobile-brand" onClick={closeMenu} to={isParent ? '/parent/messages/new' : '/teacher/messages'}>
       <span aria-hidden="true" className="sidebar-mobile-brand-mark">TH</span>
       Teacher Hub
     </NavLink>
@@ -212,10 +243,10 @@ function MobileSidebarMenu({
         <button
           aria-expanded={isOpen}
           aria-haspopup="dialog"
-          aria-label="교사 메뉴 더보기"
+          aria-label={`${menuLabel} 더보기`}
           className="sidebar-mobile-toggle"
           onClick={() => setIsOpen(true)}
-          title="교사 메뉴 더보기"
+          title={`${menuLabel} 더보기`}
           type="button"
         >
           <Menu aria-hidden="true" size={24} />
@@ -225,9 +256,9 @@ function MobileSidebarMenu({
         className="teacher-mobile-menu"
         onOpenChange={setIsOpen}
         open={isOpen}
-        title={<>{brand}<span className="sr-only">교사 메뉴</span></>}
+        title={<>{brand}<span className="sr-only">{menuLabel}</span></>}
       >
-        <nav aria-label="모바일 교사 메뉴" className="sidebar-mobile-nav">
+        <nav aria-label={`모바일 ${menuLabel}`} className="sidebar-mobile-nav">
           {mobileNavItems.map(({ href, icon: Icon, key, label }) => (
             <NavLink
               aria-current={activeItem === key ? 'page' : undefined}
@@ -244,6 +275,19 @@ function MobileSidebarMenu({
               ) : null}
             </NavLink>
           ))}
+          {isParent ? (
+            <button
+              className="sidebar-mobile-link"
+              onClick={() => {
+                closeMenu();
+                onAccountClick?.();
+              }}
+              type="button"
+            >
+              <SidebarSettingsIcon className="sidebar-link-icon" />
+              <span>설정/도움말</span>
+            </button>
+          ) : null}
         </nav>
         <div className="sidebar-mobile-account">
           <div className="sidebar-mobile-profile">

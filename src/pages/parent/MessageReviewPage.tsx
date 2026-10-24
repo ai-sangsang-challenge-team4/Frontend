@@ -1,13 +1,10 @@
 import { useParams } from 'react-router-dom';
-import { PageHeader } from '../../shared/components';
+import { useAuth } from '../../features/auth';
+import { ParentMessageReview } from '../../features/parent-message/ParentMessageReview';
 
 export function MessageReviewPage() {
   const { messageId } = useParams();
+  const { user } = useAuth();
 
-  return (
-    <section className="page">
-      <PageHeader eyebrow="Parent Review" title="수정안 검토" />
-      <p className="route-meta">messageId: {messageId}</p>
-    </section>
-  );
+  return user && messageId ? <ParentMessageReview key={`${user.userId}-${messageId}`} messageId={messageId} userId={user.userId} /> : null;
 }

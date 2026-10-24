@@ -7,7 +7,7 @@ const SETTINGS_KEY = 'teacher-hub.auth-mock-settings';
 const ACCOUNTS_KEY = 'teacher-hub.auth-accounts';
 
 const accounts = [
-  { role: 'PARENT', email: 'parent@example.com', password: 'password123', home: '/parent' },
+  { role: 'PARENT', email: 'parent@example.com', password: 'password123', home: '/parent/messages/new' },
   { role: 'TEACHER', email: 'teacher@example.com', password: 'password123', home: '/teacher/messages' },
   { role: 'ADMIN', email: 'admin@teacherhub.local', password: 'admin1234', home: '/admin' },
 ] as const;
@@ -64,10 +64,12 @@ async function loginAs(page: Page, account: typeof accounts[number]) {
   await expect(page).toHaveURL(new RegExp(`${account.home}$`));
 }
 
-async function openTeacherMenuIfNeeded(page: Page) {
-  if (page.viewportSize()!.width <= 980 && new URL(page.url()).pathname.startsWith('/teacher')) {
-    await page.getByRole('button', { name: '교사 메뉴 더보기', exact: true }).click();
-  }
+async function openAppMenuIfNeeded(page: Page) {
+  if (page.viewportSize()!.width > 980) return;
+  const pathname = new URL(page.url()).pathname;
+  const menuLabel = pathname.startsWith('/parent') ? '학부모 메뉴 더보기'
+    : pathname.startsWith('/teacher') ? '교사 메뉴 더보기' : null;
+  if (menuLabel) await page.getByRole('button', { name: menuLabel, exact: true }).click();
 }
 
 async function requestVerification(page: Page, email: string) {
@@ -97,7 +99,7 @@ for (const account of accounts) {
     expect(session?.expiresAt).toBeGreaterThan(Date.now());
 
     await page.reload();
-    await openTeacherMenuIfNeeded(page);
+    await openAppMenuIfNeeded(page);
     await expect(page.getByRole('button', { name: '로그아웃', exact: true }).first()).toBeAttached();
     await expect(page).toHaveURL(new RegExp(`${account.home}$`));
 
@@ -106,7 +108,7 @@ for (const account of accounts) {
       await expect(page).toHaveURL(new RegExp(`${account.home}$`));
     }
 
-    await openTeacherMenuIfNeeded(page);
+    await openAppMenuIfNeeded(page);
     const logoutButton = page.getByRole('button', { name: '로그아웃', exact: true }).first();
     await logoutButton.click();
     await expect(page).toHaveURL(/\/login$/);
@@ -139,7 +141,7 @@ for (const role of ['PARENT', 'TEACHER'] as const) {
     await expect(page.locator('input[name="email"]')).toHaveValue(email);
     await page.locator('input[name="password"]').fill('newpassword123');
     await page.getByRole('button', { name: '로그인', exact: true }).click();
-    await expect(page).toHaveURL(new RegExp(`${role === 'PARENT' ? '/parent' : '/teacher/messages'}$`));
+    await expect(page).toHaveURL(new RegExp(`${role === 'PARENT' ? '/parent/messages/new' : '/teacher/messages'}$`));
     expect((await readSession(page))?.user.role).toBe(role);
   });
 }
@@ -203,13 +205,14 @@ test('로그인 서비스 오류 후 다시 로그인할 수 있다', async ({ p
   expect(await readSession(page)).toBeNull();
   await configureMock(page, { failures: {} });
   await button.click();
-  await expect(page).toHaveURL(/\/parent$/);
+  await expect(page).toHaveURL(/\/parent\/messages\/new$/);
 });
 
 test('로그아웃 서비스 오류가 발생해도 로컬 세션만 먼저 제거한다', async ({ page }) => {
   await loginAs(page, accounts[0]);
   const session = await readSession(page);
   await configureMock(page, { failures: { logout: 503 } });
+  await openAppMenuIfNeeded(page);
   await page.getByRole('button', { name: '로그아웃', exact: true }).click();
   await expect(page).toHaveURL(/\/login$/);
   expect(await readSession(page)).toBeNull();
@@ -228,7 +231,7 @@ test('응답 지연 중에는 로딩을 표시하고 중복 로그인 요청을 
   await expect(button).toBeDisabled();
   await expect(button).toHaveAttribute('aria-busy', 'true');
   await page.locator('input[name="password"]').press('Enter');
-  await expect(page).toHaveURL(/\/parent$/);
+  await expect(page).toHaveURL(/\/parent\/messages\/new$/);
   expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? '[]').length, ISSUED_KEY)).toBe(1);
 });
 
@@ -241,7 +244,7 @@ test('저장된 사용자 역할 대신 토큰 조회 결과로 사용자 정보
     localStorage.setItem(key, JSON.stringify(session));
   }, SESSION_KEY);
   await page.goto('/admin');
-  await expect(page).toHaveURL(/\/parent$/);
+  await expect(page).toHaveURL(/\/parent\/messages\/new$/);
   const restored = await readSession(page);
   expect(restored?.user.role).toBe('PARENT');
   expect(restored?.user.name).toBe('학부모 사용자');
@@ -252,9 +255,9 @@ test('사용자 조회 중에는 보호된 페이지를 로그인 화면으로 �
   await configureMock(page, { delayMs: 1000 });
   await page.reload();
   await expect(page.getByRole('status')).toHaveText('로그인 정보를 확인하고 있습니다.');
-  await expect(page).toHaveURL(/\/parent$/);
+  await expect(page).toHaveURL(/\/parent\/messages\/new$/);
   await expect(page.getByRole('heading', { name: '로그인', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: '학부모 홈', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '새 문의 작성', exact: true })).toBeVisible();
 });
 
 test('사용 중 토큰이 만료되면 로그인으로 이동하고 일회성 토스트로 안내한다', async ({ page }) => {
@@ -327,10 +330,10 @@ test('사용자 조회의 일시적 오류는 세션을 보존하고 재시도�
   await page.reload();
   await expect(page.getByRole('alert')).toContainText('인증 서비스를 이용할 수 없습니다.');
   expect(await readSession(page)).not.toBeNull();
-  await expect(page).toHaveURL(/\/parent$/);
+  await expect(page).toHaveURL(/\/parent\/messages\/new$/);
   await configureMock(page, { failures: {} });
   await page.getByRole('button', { name: '다시 시도', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '학부모 홈', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '새 문의 작성', exact: true })).toBeVisible();
 });
 
 test('사용자 조회의 401 응답은 인증 상태를 초기화하고 닫을 수 있는 토스트로 안내한다', async ({ page }) => {
@@ -355,9 +358,10 @@ test('다른 탭의 로그아웃을 반영하고 늦은 사용자 조회가 세�
   await loginAs(page, accounts[0]);
   const otherTab = await context.newPage();
   await otherTab.goto('/parent');
-  await expect(otherTab.getByRole('heading', { name: '학부모 홈', exact: true })).toBeVisible();
+  await expect(otherTab.getByRole('heading', { name: '새 문의 작성', exact: true })).toBeVisible();
   await configureMock(page, { delayMs: 1000 });
   await otherTab.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await openAppMenuIfNeeded(page);
   await page.getByRole('button', { name: '로그아웃', exact: true }).click();
   await expect(page).toHaveURL(/\/login$/);
   await expect(otherTab).toHaveURL(/\/login$/);
@@ -371,6 +375,7 @@ test('다른 탭에서 로그인하면 새 사용자 역할을 반영한다', as
   await loginAs(page, accounts[0]);
   const otherTab = await context.newPage();
   await otherTab.goto('/parent');
+  await openAppMenuIfNeeded(otherTab);
   await expect(otherTab.getByRole('button', { name: '로그아웃', exact: true })).toBeVisible();
   await otherTab.getByRole('button', { name: '로그아웃', exact: true }).click();
   await expect(page).toHaveURL(/\/login$/);
@@ -418,7 +423,7 @@ test('비밀번호 재설정 후 새 비밀번호로 로그인한다', async ({ 
   await expect(page.getByRole('alert')).toContainText('이메일 또는 비밀번호가 올바르지 않습니다.');
   await page.locator('input[name="password"]').fill('changedpassword123');
   await page.getByRole('button', { name: '로그인', exact: true }).click();
-  await expect(page).toHaveURL(/\/parent$/);
+  await expect(page).toHaveURL(/\/parent\/messages\/new$/);
   const storedAccounts = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? '[]'), ACCOUNTS_KEY);
   expect(storedAccounts.filter((entry: { email: string }) => entry.email === accounts[0].email)).toHaveLength(1);
 });
@@ -435,7 +440,7 @@ test('현재 세션 계정의 비밀번호 재설정은 다른 탭의 인증 상
   await loginAs(page, accounts[0]);
   const otherTab = await context.newPage();
   await otherTab.goto('/parent');
-  await expect(otherTab.getByRole('heading', { name: '학부모 홈', exact: true })).toBeVisible();
+  await expect(otherTab.getByRole('heading', { name: '새 문의 작성', exact: true })).toBeVisible();
 
   await completePasswordReset(page, accounts[0].email, 'parentnewpass2');
 

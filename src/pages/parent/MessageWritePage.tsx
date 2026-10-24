@@ -1,9 +1,8 @@
-import { PageHeader } from '../../shared/components';
+import { useAuth } from '../../features/auth';
+import { ParentMessageComposer } from '../../features/parent-message/ParentMessageComposer';
 
 export function MessageWritePage() {
-  return (
-    <section className="page">
-      <PageHeader eyebrow="Parent" title="메시지 작성" />
-    </section>
-  );
+  const { user } = useAuth();
+
+  return user ? <ParentMessageComposer key={user.userId} userId={user.userId} /> : null;
 }
