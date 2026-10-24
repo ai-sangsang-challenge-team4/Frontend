@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../features/auth';
+import { useActiveMessageCount } from '../../../features/message/useActiveMessageCount';
 import { Header } from './TeacherHeader';
 import { Sidebar, type SidebarItem } from './TeacherSidebar';
 
@@ -19,6 +20,7 @@ export function AppLayout({
 }: AppLayoutProps) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const { logout, user } = useAuth();
+  const activeMessageCount = useActiveMessageCount(user?.userId ?? 0);
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -33,7 +35,7 @@ export function AppLayout({
       <Sidebar
         activeItem={activeItem}
         defaultCollapsed={isSidebarCollapsed}
-        messageCount={2}
+        messageCount={activeMessageCount}
         onCollapsedChange={setIsSidebarCollapsed}
         onLogout={handleLogout}
         profileMeta={user?.email}

@@ -1,3 +1,5 @@
+import type { ReplyTemplateDraft } from './replyTemplates';
+
 export type ThreadStatus = 'before' | 'inProgress' | 'complete';
 export type RiskLevel = 'normal' | 'attention' | 'danger' | 'urgent';
 export type SystemRiskLevel = 'low' | 'medium' | 'high' | 'emergency';
@@ -6,7 +8,12 @@ export type RiskFactorStatus = 'detected' | 'boundary' | 'unknown';
 export type SummaryStatus = 'ready' | 'failed';
 export type ThreadTab = 'all' | 'starred' | 'drafts';
 export type DetailTab = 'conversation' | 'risk' | 'activity';
-export type FilterValue = 'all' | 'active' | 'complete';
+export type FilterValue = 'active' | 'complete' | 'all';
+export type RiskFilterValue = 'all' | SystemRiskLevel;
+export type SortValue = 'latest' | 'risk' | 'status';
+// Teacher's own 1 (very safe) to 7 (very dangerous) rating; it maps onto SystemRiskLevel for locks and templates.
+export type RiskScore = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+export type AiObjectionType = 'overestimated' | 'underestimated' | 'wrongEvidence' | 'other';
 export type RiskGuideAction = 'original' | 'procedure';
 export type MessagesRouteView = 'detail' | 'reply';
 export type RiskFactorIconKind =
@@ -38,7 +45,16 @@ export type ActivityLog = {
   time: string;
 };
 
+// A teacher's report that the AI judgement was wrong; collected as misjudgement cases for evaluation.
+export type AiObjection = {
+  createdAt: string;
+  id: string;
+  reason: string;
+  type: AiObjectionType;
+};
+
 export type ThreadAnalysis = {
+  aiObjections?: AiObjection[];
   activityLogs: ActivityLog[];
   canReviewRisk: boolean;
   canViewActivityLog: boolean;
@@ -52,6 +68,7 @@ export type ThreadAnalysis = {
   systemRiskLevel: SystemRiskLevel;
   teacherReviewReason?: string;
   teacherReviewedRiskLevel?: SystemRiskLevel;
+  teacherRiskScore?: RiskScore;
 };
 
 export type BoardReply = {
@@ -93,7 +110,7 @@ export type BoardThread = {
   moderatedSummary?: string;
   officialTemplateApplied?: boolean;
   // The High template version the current draft was built from; checked again before sending.
-  appliedTemplate?: { templateId: string; version: number };
+  appliedTemplate?: ReplyTemplateDraft;
   officialTemplates?: string[];
   originalMessage?: string;
   parentName: string;
@@ -108,8 +125,8 @@ export type BoardThread = {
 };
 
 export type RiskReviewSubmission = {
-  level: SystemRiskLevel;
   reason: string;
+  score: RiskScore;
 };
 
 export type OriginalMessageRequest = {

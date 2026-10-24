@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { LogOut, Menu } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
+import logoImage from '../../assets/logo.png';
 import defaultProfileImage from '../../assets/profile.png';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
@@ -101,7 +102,7 @@ export function Sidebar({
         variant={variant}
       />
       <div className="sidebar-brand">
-        <span className="sidebar-logo">(로고)</span>
+        <img alt="" className="sidebar-logo" src={logoImage} />
         <strong>Teacher Hub</strong>
       </div>
 
@@ -235,7 +236,7 @@ function MobileSidebarMenu({
   const closeMenu = () => setIsOpen(false);
   const brand = (
     <NavLink className="sidebar-mobile-brand" onClick={closeMenu} to={isParent ? '/parent/messages/new' : '/teacher/messages'}>
-      <span aria-hidden="true" className="sidebar-mobile-brand-mark">TH</span>
+      <img alt="" className="sidebar-mobile-brand-mark" src={logoImage} />
       Teacher Hub
     </NavLink>
   );

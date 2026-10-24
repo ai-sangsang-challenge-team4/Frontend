@@ -1,3 +1,5 @@
+import type { ReplyTemplateDraft } from '../message/replyTemplates';
+
 export const MESSAGE_MAX_LENGTH = 1500;
 
 export type MessageSource = 'AI' | 'ORIGINAL';
@@ -57,6 +59,7 @@ export type SentParentMessage = {
   teacherDraftText?: string;
   teacherDraftSavedAt?: string;
   teacherPinned?: boolean;
+  teacherReplyTemplate?: ReplyTemplateDraft;
 };
 
 export function createMessageReview(analysis: ParentMessageAnalysis): MessageReview {

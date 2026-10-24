@@ -1,6 +1,7 @@
 import { ChevronRight, Menu } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import logoImage from '../shared/assets/logo.png';
 import { ButtonLink, Modal } from '../shared/components/ui';
 
 export function PublicLayout() {
@@ -38,9 +39,7 @@ export function PublicLayout() {
 function PublicBrand({ onClick }: { onClick?: () => void }) {
   return (
     <NavLink className="brand" onClick={onClick} to="/">
-      <span className="brand__mark" aria-hidden="true">
-        TH
-      </span>
+      <img alt="" className="brand__mark" src={logoImage} />
       Teacher Hub
     </NavLink>
   );

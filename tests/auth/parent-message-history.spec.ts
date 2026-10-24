@@ -137,7 +137,7 @@ test('완료된 문의에 추가 질문을 연결하고 교사가 재확인 및 
   await row.getByRole('button', { name: /메시지 상세 보기/ }).click();
   const controls = page.locator('.board-consultation-controls');
   await expect(page.getByRole('button', { name: /확인했어요/ })).toHaveCount(0);
-  await expect(controls.getByText('재확인 필요', { exact: true })).toBeVisible();
+  await expect(controls.getByText('재확인 필요', { exact: true })).toHaveCount(0);
   await expect(page.locator('.board-detail-page .ui-status-chip, .board-consultation-controls .ui-status-chip')).toHaveCount(0);
   await page.getByRole('button', { name: '답변 작성하러 가기', exact: true }).click();
   await page.getByLabel('선생님 답변', { exact: true }).fill('학교 출결 규정에 따라 안내드리겠습니다.');
@@ -147,7 +147,7 @@ test('완료된 문의에 추가 질문을 연결하고 교사가 재확인 및 
   await confirm.getByRole('button', { name: '최종 전송', exact: true }).click();
   await page.getByRole('dialog', { name: '답변 전송 완료', exact: true }).getByRole('button', { name: '확인', exact: true }).click();
   expect(await storedStatus(page, 'done')).toBe('inProgress');
-  await expect(controls.getByText('재확인 필요', { exact: true })).toHaveCount(0);
+  await expect(row.getByText('재확인 필요', { exact: true })).toHaveCount(0);
   await page.locator('.board-answer-actions').getByRole('button', { name: '상담 완료 처리', exact: true }).click();
   await page.reload();
   await expect(page.getByRole('button', { name: '상담 완료됨', exact: true })).toBeDisabled();
@@ -220,6 +220,32 @@ test('완료되지 않은 문의의 추가 질문은 재확인 필요로 표시�
   }
   await page.goto('/parent/messages');
   await expect(page.getByText('재확인 필요', { exact: true })).toHaveCount(0);
+});
+
+test('교사 화면이 후속 문의를 반영하기 전에 초안을 수정해도 재확인 상태를 유지한다', async ({ page }) => {
+  await login(page, 'TEACHER');
+  await seed(page);
+  await page.goto('/teacher/messages/done');
+  await page.getByRole('button', { name: '답변 작성하러 가기', exact: true }).click();
+  // Simulates a follow-up from another tab: a same-tab write fires no storage event, so this teacher view stays stale.
+  await page.evaluate((key) => {
+    const messages = JSON.parse(localStorage.getItem(key)!);
+    const done = messages.find((entry: { messageId: string }) => entry.messageId === 'done');
+    done.conversation = [
+      { id: 'done', authorRole: 'parent', body: done.finalBody, sentAt: done.sentAt },
+      { id: 'done-follow-up', authorRole: 'parent', body: '추가로 문의드립니다.', sentAt: '2026-08-11T10:00:00+09:00' },
+    ];
+    done.consultationStatus = 'inProgress';
+    done.needsTeacherReview = true;
+    localStorage.setItem(key, JSON.stringify(messages));
+  }, sentKey);
+  await page.getByLabel('선생님 답변', { exact: true }).fill('출결 규정을 확인하고 있습니다.');
+  const thread = (await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), sentKey))
+    .find((entry: { messageId: string }) => entry.messageId === 'done');
+  expect(thread.teacherDraftText).toBe('출결 규정을 확인하고 있습니다.');
+  expect(thread.consultationStatus).toBe('inProgress');
+  expect(thread.needsTeacherReview).toBe(true);
+  expect(thread.conversation).toHaveLength(2);
 });
 
 test('새 주제는 별도 문의를 만들고 기존 문의의 완료 상태를 유지한다', async ({ page }) => {

@@ -2,6 +2,7 @@ import { formatMessageDate, getConversation } from '../parent-message/conversati
 import { mockConnectedTeachers, readSentMessages, updateSentMessage } from '../parent-message/messageDraft';
 import type { ConversationMessage } from '../parent-message/parentMessageTypes';
 import type { BoardThread, ConversationSummary } from './types';
+import { isReplyTemplateDraft } from './replyTemplates';
 
 const mockSummaryRules = [
   { keywords: ['상담 일정', '상담을 요청', '상담 가능'], text: '상담 일정 조율' },
@@ -67,6 +68,8 @@ export function readTeacherParentThreads(teacherUserId: number): BoardThread[] {
           status: message.consultationStatus ?? 'before', needsTeacherReview: message.needsTeacherReview,
           parentAcknowledgedAt: message.parentAcknowledgedAt, risk: 'normal', riskReviewRequired: false,
           isPinned: message.teacherPinned ?? false, draftText: message.teacherDraftText ?? '', draftSavedAt: message.teacherDraftSavedAt,
+          appliedTemplate: isReplyTemplateDraft(message.teacherReplyTemplate) ? message.teacherReplyTemplate : undefined,
+          officialTemplateApplied: isReplyTemplateDraft(message.teacherReplyTemplate),
           replies: conversation.map((entry) => ({
             id: entry.id, authorRole: entry.authorRole, authorName: entry.authorRole === 'teacher' ? message.teacherName : parentName,
             content: entry.body, label: entry.authorRole === 'teacher' ? '선생님 답변' : '학부모 문의', time: formatReplyTime(entry.sentAt, message.sentAt), sentAt: entry.sentAt,
@@ -80,7 +83,8 @@ export function readTeacherParentThreads(teacherUserId: number): BoardThread[] {
   return threads.sort((a, b) => b.latestAt.localeCompare(a.latestAt));
 }
 
-export function persistTeacherParentThread(teacherUserId: number, thread: BoardThread) {
+// Status fields are written only when this update changed them, so a stale tab cannot clear a newer follow-up's recheck flag.
+export function persistTeacherParentThread(teacherUserId: number, thread: BoardThread, previous?: BoardThread) {
   if (thread.parentUserId === undefined) return;
   updateSentMessage(thread.parentUserId, thread.id, (message) => {
     if (!mockConnectedTeachers.some((teacher) => teacher.userId === teacherUserId && teacher.value === message.teacherId)) {
@@ -90,9 +94,11 @@ export function persistTeacherParentThread(teacherUserId: number, thread: BoardT
     const addedReplies = thread.replies.filter((reply) => reply.authorRole === 'teacher' && !existing.some((entry) => entry.id === reply.id));
     return {
       ...message,
-      consultationStatus: thread.status,
-      needsTeacherReview: thread.needsTeacherReview,
+      consultationStatus: !previous || previous.status !== thread.status ? thread.status : message.consultationStatus,
+      needsTeacherReview: !previous || previous.needsTeacherReview !== thread.needsTeacherReview
+        ? thread.needsTeacherReview : message.needsTeacherReview,
       teacherDraftText: thread.draftText, teacherDraftSavedAt: thread.draftSavedAt, teacherPinned: thread.isPinned,
+      teacherReplyTemplate: thread.appliedTemplate,
       conversation: [...existing, ...addedReplies.map((reply) => ({
         id: reply.id, authorRole: 'teacher' as const, body: reply.content, sentAt: reply.sentAt ?? thread.latestAt,
       }))],

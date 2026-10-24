@@ -3,12 +3,12 @@ import {
   ReplyCheckAlertIcon,
   WritingGuideIcon,
 } from './MessageIcons';
-import type { RegulationSearchResult } from '../replyReferences';
+import type { RegulationSearchResult, RegulationSource } from '../replyReferences';
 import { RagReferenceNotice } from './RagReferenceNotice';
 
 type ReplyCheckPanelProps = {
   isOpen: boolean;
-  onOpenReference: () => void;
+  onOpenReference: (source: RegulationSource) => void;
   onToggle: () => void;
   regulationResult: RegulationSearchResult;
 };
