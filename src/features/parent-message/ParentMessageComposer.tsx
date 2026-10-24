@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { ChevronDown, ContactRound, LockKeyhole, Save, Send } from 'lucide-react';
+import { ChevronDown, LockKeyhole, Save, Send } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import analysisIllustration from '../../shared/assets/parent/message-analysis.svg';
 import { Button, EmptyState, Select, TextareaField, TextField, Toast } from '../../shared/components/ui';
@@ -171,7 +171,6 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
           <>
             <section className="parent-write-notice" aria-labelledby="parent-write-notice-title">
               <div className="parent-write-notice-heading">
-                <ContactRound aria-hidden="true" size={40} strokeWidth={1.8} />
                 <h2 id="parent-write-notice-title">문의 전 확인해 주세요</h2>
               </div>
               <ul>

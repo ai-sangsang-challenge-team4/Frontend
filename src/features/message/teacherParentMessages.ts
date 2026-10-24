@@ -1,6 +1,37 @@
 import { formatMessageDate, getConversation } from '../parent-message/conversation';
 import { mockConnectedTeachers, readSentMessages, updateSentMessage } from '../parent-message/messageDraft';
-import type { BoardThread } from './types';
+import type { ConversationMessage } from '../parent-message/parentMessageTypes';
+import type { BoardThread, ConversationSummary } from './types';
+
+const mockSummaryRules = [
+  { keywords: ['상담 일정', '상담을 요청', '상담 가능'], text: '상담 일정 조율' },
+  { keywords: ['진행된 사항', '조치', '확인되거나'], text: '진행 상황 안내' },
+  { keywords: ['출결', '결석', '지각'], text: '출결 처리 기준 확인' },
+  { keywords: ['준비물'], text: '준비물 안내' },
+  { keywords: ['친구', '갈등', '다툼'], text: '교우 관계 상황 확인' },
+  { keywords: ['급식'], text: '급식 관련 안내' },
+];
+
+function withObjectParticle(word: string) {
+  const code = word.charCodeAt(word.length - 1) - 0xac00;
+  return `${word}${code >= 0 && code <= 11171 && code % 28 !== 0 ? '을' : '를'}`;
+}
+
+// Mock until the analysis API returns a conversation summary.
+function createMockConversationSummary(title: string, conversation: ConversationMessage[]): ConversationSummary {
+  const parentText = conversation.filter((entry) => entry.authorRole === 'parent').map((entry) => entry.body).join(' ');
+  const requests = mockSummaryRules.filter((rule) => rule.keywords.some((keyword) => parentText.includes(keyword))).map((rule) => rule.text);
+  const followUps = conversation.filter((entry) => entry.authorRole === 'parent').length - 1;
+  const text = requests.length > 0 ? `${withObjectParticle(requests.join(', '))} 요청함.` : `${title}에 대해 문의함.`;
+  return { topic: title, text: followUps > 0 ? `${text} 추가 문의 ${followUps}건 포함.` : text };
+}
+
+// The date chip shows the first day, so replies on that day show only the time.
+function formatReplyTime(at: string, threadStartedAt: string) {
+  const time = new Date(at).toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: 'numeric', minute: '2-digit' });
+  if (formatMessageDate(at, false) === formatMessageDate(threadStartedAt, false)) return time;
+  return `${new Date(at).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul', month: 'long', day: 'numeric' })} ${time}`;
+}
 
 function readParentUserIds(): number[] {
   try {
@@ -29,15 +60,16 @@ export function readTeacherParentThreads(teacherUserId: number): BoardThread[] {
         const latest = conversation[conversation.length - 1];
         const parentName = message.parentName?.trim() || '학부모';
         threads.push({
+          conversationSummary: createMockConversationSummary(message.title, conversation),
           id: message.messageId, parentUserId, parentName, studentName: '', className: teacher.className,
           title: message.title, latestMessage: latest.body, latestAt: latest.sentAt, latestAtLabel: formatMessageDate(latest.sentAt),
           messageDateLabel: formatMessageDate(message.sentAt, false), originalMessage: message.finalBody,
           status: message.consultationStatus ?? 'before', needsTeacherReview: message.needsTeacherReview,
-          teacherAcknowledgedAt: message.teacherAcknowledgedAt, risk: 'normal', riskReviewRequired: false,
+          parentAcknowledgedAt: message.parentAcknowledgedAt, risk: 'normal', riskReviewRequired: false,
           isPinned: message.teacherPinned ?? false, draftText: message.teacherDraftText ?? '', draftSavedAt: message.teacherDraftSavedAt,
           replies: conversation.map((entry) => ({
             id: entry.id, authorRole: entry.authorRole, authorName: entry.authorRole === 'teacher' ? message.teacherName : parentName,
-            content: entry.body, label: entry.authorRole === 'teacher' ? '선생님 답변' : '학부모 문의', time: formatMessageDate(entry.sentAt), sentAt: entry.sentAt,
+            content: entry.body, label: entry.authorRole === 'teacher' ? '선생님 답변' : '학부모 문의', time: formatReplyTime(entry.sentAt, message.sentAt), sentAt: entry.sentAt,
           })),
         });
       }
@@ -60,7 +92,6 @@ export function persistTeacherParentThread(teacherUserId: number, thread: BoardT
       ...message,
       consultationStatus: thread.status,
       needsTeacherReview: thread.needsTeacherReview,
-      teacherAcknowledgedAt: thread.teacherAcknowledgedAt,
       teacherDraftText: thread.draftText, teacherDraftSavedAt: thread.draftSavedAt, teacherPinned: thread.isPinned,
       conversation: [...existing, ...addedReplies.map((reply) => ({
         id: reply.id, authorRole: 'teacher' as const, body: reply.content, sentAt: reply.sentAt ?? thread.latestAt,

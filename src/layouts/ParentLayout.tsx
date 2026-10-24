@@ -13,9 +13,8 @@ export function ParentLayout() {
   const location = useLocation();
   const isFollowUpPage = location.pathname.endsWith('/follow-up');
   const isDetailPage = /^\/parent\/messages\/[^/]+$/.test(location.pathname) && location.pathname !== '/parent/messages/new';
-  const sidebarMode = isDetailPage || isFollowUpPage ? 'conversation' : 'default';
-  const [sidebarPreferences, setSidebarPreferences] = useState({ default: false, conversation: true });
-  const isSidebarCollapsed = sidebarPreferences[sidebarMode];
+  // One sidebar state for every parent page so the page header does not shift between list and detail.
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isAccountOpen, setIsAccountOpen] = useState(false);
   const isHistoryPage = location.pathname === '/parent/messages' ||
     (location.pathname.startsWith('/parent/messages/') && location.pathname !== '/parent/messages/new');
@@ -33,11 +32,10 @@ export function ParentLayout() {
   return (
     <div className={`app-layout parent-app-layout${isSidebarCollapsed ? ' is-sidebar-collapsed' : ''}${location.pathname === '/parent/messages' ? ' parent-history-layout' : ''}${isDetailPage ? ' parent-detail-layout' : ''}${isFollowUpPage ? ' parent-follow-up-layout' : ''}`}>
       <Sidebar
-        key={sidebarMode}
         activeItem={activeItem}
         defaultCollapsed={isSidebarCollapsed}
         onAccountClick={() => setIsAccountOpen(true)}
-        onCollapsedChange={(collapsed) => setSidebarPreferences((previous) => ({ ...previous, [sidebarMode]: collapsed }))}
+        onCollapsedChange={setIsSidebarCollapsed}
         onLogout={handleLogout}
         profileMeta={user?.email}
         profileName={user?.name}

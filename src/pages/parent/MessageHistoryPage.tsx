@@ -4,7 +4,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../features/auth';
 import { ProfileAvatar } from '../../features/message/components/ProfileAvatar';
 import { mockConnectedTeachers, updateSentMessage, type MessageDraft } from '../../features/parent-message/messageDraft';
-import { consultationChips, formatHistoryTime, formatMessageDate, getConversation, getDraftPath } from '../../features/parent-message/conversation';
+import { consultationChips, formatHistoryTime, formatMessageDate, getConversation, getDraftPath, needsParentReview } from '../../features/parent-message/conversation';
 import { ParentMessageHeader } from '../../features/parent-message/ParentMessageHeader';
 import { useParentMessages } from '../../features/parent-message/useParentMessages';
 import { Badge, Button, EmptyState, Modal, StatusChip, Tabs, TextField, Toast } from '../../shared/components/ui';
@@ -69,7 +69,7 @@ function MessageHistory({ userId }: { userId: number }) {
                 </button>
                 <Link className="parent-history-link parent-inquiry-link" to={`/parent/messages/${encodeURIComponent(message.messageId)}`}>
                   <span className="parent-inquiry-teacher"><ProfileAvatar className="parent-inquiry-avatar" /><span><strong>{message.teacherName}</strong><small>{teacher?.className ?? '문의 대상 교사'}</small></span></span>
-                  <span className="parent-inquiry-copy"><strong>{message.title}</strong><span>{conversation[conversation.length - 1].body}</span>{message.needsTeacherReview ? <small className="parent-inquiry-recheck">재확인 필요</small> : null}</span>
+                  <span className="parent-inquiry-copy"><span className="parent-inquiry-title-row"><strong>{message.title}</strong>{needsParentReview(message) ? <small className="parent-inquiry-recheck">재확인 필요</small> : null}</span><span>{conversation[conversation.length - 1].body}</span></span>
                   <span className="parent-inquiry-meta"><StatusChip status={consultationChips[message.consultationStatus ?? 'before']} /><time aria-label={formatMessageDate(message.sentAt)} dateTime={message.sentAt} title={formatMessageDate(message.sentAt)}>{formatHistoryTime(message.sentAt)}</time></span>
                 </Link>
               </li>;

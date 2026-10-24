@@ -190,7 +190,7 @@ function openGuidePostFromMessages(
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
-const initialThreads: BoardThread[] = [
+const exampleThreads: BoardThread[] = [
   {
     id: 'thread-001',
     parentName: '최유진 학부모',
@@ -530,6 +530,12 @@ const initialThreads: BoardThread[] = [
     ],
   },
 ];
+
+// The example threads ship with their AI summary in title/latestMessage; keep it fixed as replies arrive.
+const initialThreads = exampleThreads.map((thread) => ({
+  ...thread,
+  conversationSummary: thread.conversationSummary ?? { topic: thread.title, text: thread.latestMessage },
+}));
 
 const detailTabLabel: Record<DetailTab, string> = {
   conversation: '대화',
@@ -1589,9 +1595,13 @@ function ActivityLogPanel({ thread }: ActivityLogPanelProps) {
   );
 }
 
+// The parent's 확인했어요 counts only when it is newer than the latest teacher reply.
+function isAcknowledgedByParent(thread: BoardThread) {
+  const latestTeacherReply = thread.replies.filter((reply) => reply.authorRole === 'teacher').at(-1);
+  return Boolean(thread.parentAcknowledgedAt && latestTeacherReply?.sentAt && thread.parentAcknowledgedAt >= latestTeacherReply.sentAt);
+}
+
 type DetailProps = {
-  onAcknowledge: (threadId: string) => void;
-  onConsultationStart: (threadId: string) => void;
   onConsultationComplete: (threadId: string) => void;
   initialOriginalViewer?: OriginalMessageRequest;
   initialTab?: DetailTab;
@@ -1606,8 +1616,6 @@ type DetailProps = {
 };
 
 function ThreadDetail({
-  onAcknowledge,
-  onConsultationStart,
   onConsultationComplete,
   initialOriginalViewer,
   initialTab,
@@ -1773,15 +1781,12 @@ function ThreadDetail({
       </nav>
 
       <MessageContextCard thread={thread} />
-      <div className="board-consultation-controls">
-        <StatusChip status={statusChipStatus[thread.status]} />
-        {thread.needsTeacherReview ? <Badge variant="warning">재확인 필요</Badge> : null}
-        <Button onClick={() => onAcknowledge(thread.id)} variant="outline" disabled={Boolean(thread.teacherAcknowledgedAt) && !thread.needsTeacherReview}>
-          {thread.teacherAcknowledgedAt && !thread.needsTeacherReview ? '확인 완료' : '확인했어요'}
-        </Button>
-        {thread.status === 'before' ? <Button onClick={() => onConsultationStart(thread.id)} variant="outline">상담 시작</Button> : null}
-        <Button onClick={() => onConsultationComplete(thread.id)} variant="outline" disabled={thread.status === 'complete'}>상담 완료 처리</Button>
-      </div>
+      {thread.needsTeacherReview || isAcknowledgedByParent(thread) ? (
+        <div className="board-consultation-controls">
+          {thread.needsTeacherReview ? <Badge variant="warning">재확인 필요</Badge> : null}
+          {isAcknowledgedByParent(thread) ? <Badge>학부모 확인</Badge> : null}
+        </div>
+      ) : null}
 
       {originalViewer ? (
         <OriginalMessageViewer
@@ -1903,6 +1908,14 @@ function ThreadDetail({
                 </p>
               </div>
               <div className="board-answer-actions">
+                <button
+                  className="board-outline-button board-consultation-complete-button"
+                  disabled={thread.status === 'complete'}
+                  onClick={() => onConsultationComplete(thread.id)}
+                  type="button"
+                >
+                  {thread.status === 'complete' ? '상담 완료됨' : '상담 완료 처리'}
+                </button>
                 <button
                   className="board-primary-button board-reply-compose-button"
                   onClick={() => onOpenReplyComposer(thread.id)}
@@ -2834,6 +2847,7 @@ export function TeacherMessages({
             sentAt: new Date().toISOString(),
           },
         ],
+        needsTeacherReview: false,
         status: 'inProgress',
       };
     });
@@ -2962,8 +2976,6 @@ export function TeacherMessages({
         />
         <main className="board-detail-page">
           <ThreadDetail
-            onAcknowledge={(threadId) => updateThread(threadId, (thread) => ({ ...thread, needsTeacherReview: false, teacherAcknowledgedAt: new Date().toISOString() }))}
-            onConsultationStart={(threadId) => updateThread(threadId, (thread) => ({ ...thread, status: 'inProgress' }))}
             onConsultationComplete={(threadId) => updateThread(threadId, (thread) => ({ ...thread, status: 'complete', needsTeacherReview: false }))}
             initialOriginalViewer={
               initialOriginalViewerRequest?.threadId === selectedThread.id

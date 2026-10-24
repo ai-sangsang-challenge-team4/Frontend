@@ -65,10 +65,17 @@ export type BoardReply = {
   sentAt?: string;
 };
 
+// AI summary of the whole conversation: its topic and what the parent is asking for.
+export type ConversationSummary = {
+  topic: string;
+  text: string;
+};
+
 export type BoardThread = {
+  conversationSummary?: ConversationSummary;
   parentUserId?: number;
   needsTeacherReview?: boolean;
-  teacherAcknowledgedAt?: string;
+  parentAcknowledgedAt?: string;
   analysis?: ThreadAnalysis;
   aiDraftGenerated?: boolean;
   className: string;

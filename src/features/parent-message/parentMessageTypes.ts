@@ -52,7 +52,7 @@ export type SentParentMessage = {
   conversation?: ConversationMessage[];
   isImportant?: boolean;
   needsTeacherReview?: boolean;
-  teacherAcknowledgedAt?: string;
+  parentAcknowledgedAt?: string;
   updatedAt?: string;
   teacherDraftText?: string;
   teacherDraftSavedAt?: string;

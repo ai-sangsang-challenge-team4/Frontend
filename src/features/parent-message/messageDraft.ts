@@ -52,7 +52,7 @@ function isSentMessage(value: unknown): value is SentParentMessage {
       .every((field) => typeof value[field] === 'string') &&
     (value.selectionType === 'AI' || value.selectionType === 'ORIGINAL' || value.selectionType === 'CUSTOM') &&
     (value.selectionSource === 'AI' || value.selectionSource === 'ORIGINAL') &&
-    ['parentName', 'updatedAt', 'teacherAcknowledgedAt', 'teacherDraftText', 'teacherDraftSavedAt']
+    ['parentName', 'updatedAt', 'parentAcknowledgedAt', 'teacherDraftText', 'teacherDraftSavedAt']
       .every((field) => value[field] === undefined || typeof value[field] === 'string') &&
     ['isImportant', 'needsTeacherReview', 'teacherPinned']
       .every((field) => value[field] === undefined || typeof value[field] === 'boolean') &&

@@ -25,6 +25,15 @@ export function formatHistoryTime(at: string) {
     : date.toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul', month: 'long', day: 'numeric' });
 }
 
+// Parent-side recheck: the teacher replied after the parent's last message and the parent has not confirmed it yet.
+export function needsParentReview(message: SentParentMessage) {
+  const conversation = getConversation(message);
+  const latestTeacherReply = conversation.filter((entry) => entry.authorRole === 'teacher').at(-1);
+  const latestParentMessage = conversation.filter((entry) => entry.authorRole === 'parent').at(-1);
+  if (!latestTeacherReply || (latestParentMessage && latestParentMessage.sentAt > latestTeacherReply.sentAt)) return false;
+  return !message.parentAcknowledgedAt || message.parentAcknowledgedAt < latestTeacherReply.sentAt;
+}
+
 export function getDraftPath(draft: MessageDraft) {
   return draft.threadId
     ? `/parent/messages/${encodeURIComponent(draft.threadId)}/follow-up?draft=${encodeURIComponent(draft.messageId)}`
@@ -45,6 +54,7 @@ export function appendFollowUp(userId: number, draft: MessageDraft, submission: 
   return updateSentMessage(userId, draft.threadId!, (thread) => {
     if (getConversation(thread).some((entry) => entry.id === draft.messageId)) return thread;
     if (thread.teacherId !== draft.teacherId || thread.title !== draft.title) throw new Error('기존 문의 정보를 다시 확인해 주세요.');
+    const isComplete = thread.consultationStatus === 'complete';
     return {
       ...thread,
       parentName: thread.parentName ?? submission.parentName,
@@ -52,8 +62,9 @@ export function appendFollowUp(userId: number, draft: MessageDraft, submission: 
         id: submission.messageId, authorRole: 'parent', body: submission.finalBody, sentAt: submission.sentAt,
       }],
       updatedAt: submission.sentAt,
-      consultationStatus: thread.consultationStatus === 'complete' ? 'inProgress' : thread.consultationStatus ?? 'before',
-      needsTeacherReview: true,
+      consultationStatus: isComplete ? 'inProgress' : thread.consultationStatus ?? 'before',
+      // Only a follow-up on a completed consultation asks the teacher to recheck; an open flag stays until the teacher replies.
+      needsTeacherReview: isComplete || thread.needsTeacherReview,
       auditLog: [...thread.auditLog, ...submission.auditLog],
     };
   });

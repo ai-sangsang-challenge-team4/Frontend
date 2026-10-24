@@ -19,10 +19,12 @@
 .parent-inquiry-teacher > span, .parent-inquiry-copy { display: grid; gap: 9px; }
 .parent-inquiry-teacher strong, .parent-inquiry-copy strong { font-size: 20px; font-weight: 500; line-height: 1.3; overflow-wrap: anywhere; }
 .parent-inquiry-teacher strong { white-space: nowrap; }
-.parent-inquiry-teacher small, .parent-inquiry-copy > span { font-size: 16px; color: var(--color-text-secondary); }
-.parent-inquiry-copy > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.parent-inquiry-teacher small, .parent-inquiry-copy > span:not(.parent-inquiry-title-row) { font-size: 16px; color: var(--color-text-secondary); }
+.parent-inquiry-copy > span:not(.parent-inquiry-title-row) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .parent-inquiry-copy small { color: var(--color-text-muted); font-size: 13px; }
-.parent-inquiry-copy .parent-inquiry-recheck { color: var(--color-primary); }
+.parent-inquiry-title-row { display: flex; min-width: 0; align-items: center; gap: 10px; }
+.parent-inquiry-title-row strong { min-width: 0; }
+.parent-inquiry-copy .parent-inquiry-recheck { flex-shrink: 0; color: var(--color-primary); font-size: 14px; font-weight: 600; white-space: nowrap; }
 .parent-inquiry-meta { display: flex; align-items: center; gap: 40px; }
 .parent-inquiry-meta .ui-status-chip { width: 83px; min-height: 37px; justify-content: center; flex-shrink: 0; font-size: 16px; }
 .parent-inquiry-meta time { flex: 1; color: var(--color-text-secondary); font-size: 16px; white-space: nowrap; }
@@ -41,6 +43,16 @@
 .parent-draft-dialog .ui-modal-footer .ui-button { width: 100%; min-height: 58px; padding: 12px; border: 0; border-radius: 0 0 12px 12px; background: transparent; color: var(--color-danger); font-size: 16px; font-weight: 400; }
 .parent-draft-dialog .ui-modal-footer .ui-button:hover { background: #eee; }
 .parent-conversation-main { margin-top: 100px; }
+.parent-conversation-card { display: grid; grid-template-columns: 204px minmax(0, 1fr) max-content; align-items: center; column-gap: 16px; margin-bottom: 24px; padding: 22px 24px; border-radius: 8px; background: var(--color-bg-surface); box-shadow: var(--shadow-sm); }
+.parent-conversation-card-profile { display: grid; min-width: 0; grid-template-columns: 64px minmax(0, 1fr); align-items: center; gap: 12px; }
+.parent-conversation-card-avatar { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; }
+.parent-conversation-card-profile > span, .parent-conversation-card-topic { display: grid; min-width: 0; gap: 5px; }
+.parent-conversation-card-profile strong, .parent-conversation-card-topic strong { overflow: hidden; color: var(--color-text-primary); font-size: 20px; font-weight: 500; line-height: 24px; text-overflow: ellipsis; white-space: nowrap; }
+.parent-conversation-card-profile small, .parent-conversation-card-topic span { overflow: hidden; color: var(--color-text-secondary); font-size: 16px; font-weight: 500; line-height: 24px; text-overflow: ellipsis; white-space: nowrap; }
+.parent-conversation-card-topic span { display: -webkit-box; white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.parent-conversation-card-meta-group { display: grid; min-width: 0; grid-template-columns: auto 154px; align-items: center; justify-content: end; column-gap: 24px; }
+.parent-conversation-card-meta { display: grid; min-width: 0; justify-items: center; gap: 6px; }
+.parent-conversation-card-meta > span:first-child, .parent-conversation-card-meta time { font-size: 16px; font-weight: 500; white-space: nowrap; }
 .parent-conversation-notice { display: flex; gap: 20px; align-items: center; padding: 32px; border-radius: 12px; background: var(--color-bg-canvas); }
 .parent-conversation-notice svg { flex-shrink: 0; color: var(--color-bg-icon); }
 .parent-conversation-notice p { color: var(--color-text-secondary); font-size: 20px; line-height: 32px; word-break: keep-all; }
@@ -52,12 +64,12 @@
 .parent-chat-avatar { width: 27px; height: 27px; border-radius: 50%; object-fit: cover; }
 .parent-chat-message.is-parent { justify-items: end; }
 .parent-chat-row { display: flex; align-items: flex-end; gap: 12px; max-width: 100%; }
-.parent-chat-message.is-parent .parent-chat-row { flex-direction: row-reverse; width: min(815px, 100%); }
+.parent-chat-message.is-parent .parent-chat-row { flex-direction: row-reverse; max-width: min(815px, 100%); }
 .parent-chat-message.is-teacher .parent-chat-row { margin-left: 36px; }
 .parent-chat-row time { flex-shrink: 0; color: var(--color-text-secondary); font-size: 12px; line-height: 16px; }
-.parent-chat-bubble { max-width: 634px; padding: 12px 16px; border-radius: 16px 16px 16px 0; background: white; color: var(--color-text-secondary); }
-.parent-chat-bubble p { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 20px; line-height: 24px; }
-.parent-chat-message.is-parent .parent-chat-bubble { flex: 1; max-width: 752px; background: var(--color-primary); color: white; border-radius: 16px 16px 0 16px; }
+.parent-chat-bubble { min-width: 0; flex: 0 1 auto; max-width: 634px; padding: 12px 16px; border-radius: 16px 16px 16px 0; background: white; color: var(--color-text-secondary); }
+.parent-chat-bubble p { white-space: pre-wrap; overflow-wrap: anywhere; word-break: keep-all; font-size: 20px; line-height: 24px; }
+.parent-chat-message.is-parent .parent-chat-bubble { max-width: 752px; background: var(--color-primary); color: white; border-radius: 16px 16px 0 16px; }
 .parent-conversation-actions { display: grid; gap: 24px; min-height: 153px; background: white; box-shadow: var(--shadow-sm); padding: 31px 24px 28px; }
 .parent-conversation-primary-actions { display: flex; align-items: center; justify-content: flex-end; gap: 24px; }
 .parent-conversation-primary-actions .ui-button { min-width: 185px; height: 37px; min-height: 37px; padding: 4px 12px; font-size: 16px; }
@@ -83,6 +95,9 @@
   .parent-conversation-messages { padding: 48px 32px 64px; }
 }
 @media (max-width: 980px) {
+  .parent-conversation-card { grid-template-columns: 1fr; row-gap: 16px; }
+  .parent-conversation-card-meta-group { grid-template-columns: minmax(0, 1fr); justify-content: stretch; row-gap: 12px; }
+  .parent-conversation-card-meta { grid-template-columns: 88px minmax(0, 1fr); justify-items: start; align-items: center; gap: 12px; }
   .parent-history-main, .parent-conversation-main { margin-top: 40px; }
   .parent-conversation-messages { min-height: 580px; }
 }
@@ -100,7 +115,7 @@
   .parent-inquiry-teacher > span { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .parent-inquiry-avatar { width: 32px; height: 32px; }
   .parent-inquiry-copy strong { font-size: 16px; }
-  .parent-inquiry-copy > span { font-size: 14px; }
+  .parent-inquiry-copy > span:not(.parent-inquiry-title-row) { font-size: 14px; }
   .parent-inquiry-meta .ui-status-chip { width: auto; min-height: 32px; font-size: 14px; }
   .parent-inquiry-meta time { font-size: 12px; }
   .parent-draft-row { grid-template-columns: minmax(0, 1fr) auto; gap: 12px; padding: 20px 4px; }
@@ -116,8 +131,6 @@
   .parent-chat-author { font-size: 16px; }
   .parent-chat-message { gap: 12px; }
   .parent-chat-row { gap: 8px; }
-  .parent-chat-message.is-parent .parent-chat-row { width: auto; }
-  .parent-chat-message.is-parent .parent-chat-bubble { flex: initial; }
   .parent-chat-message.is-teacher .parent-chat-row { margin-left: 0; }
   .parent-chat-row time { font-size: 10px; }
   .parent-chat-bubble { padding: 12px 14px; }

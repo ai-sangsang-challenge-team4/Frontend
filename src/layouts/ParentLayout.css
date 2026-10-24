@@ -1,6 +1,5 @@
 .parent-history-layout {
   --app-content-max: 984px;
-  --app-page-top-offset: 124px;
 }
 
 .parent-detail-layout {
@@ -9,7 +8,6 @@
 
 .parent-follow-up-layout {
   --app-content-max: 1053px;
-  --app-page-top-offset: 106px;
 }
 
 .parent-detail-layout .parent-write-heading,
