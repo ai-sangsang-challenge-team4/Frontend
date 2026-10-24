@@ -22,6 +22,7 @@ type ReplyEditorProps = {
   onDraftSave: () => void;
   onSubmit: () => void;
   stageNotice: string;
+  submitDisabled: boolean;
 };
 
 export function ReplyEditor({
@@ -40,6 +41,7 @@ export function ReplyEditor({
   onDraftSave,
   onSubmit,
   stageNotice,
+  submitDisabled,
 }: ReplyEditorProps) {
   const replyTextareaDescription = [isLocked ? lockNoticeId : undefined, aiNoticeId]
     .filter(Boolean)
@@ -53,8 +55,9 @@ export function ReplyEditor({
       </div>
       {isLocked ? (
         <p className="board-reply-lock-notice" id={lockNoticeId}>
-          긴급 위험도 검토가 필요한 메시지는 위험 요소 탭에서 검토를 완료한
-          뒤 답변을 전송할 수 있습니다.
+          긴급 단계로 잠긴 메시지는 지정 검토자가 잠금을 해제하기 전까지
+          답변을 생성하거나 전송할 수 없습니다. 위험 요소 탭에서 공식 절차를
+          확인해 주세요.
         </p>
       ) : null}
       <textarea
@@ -104,7 +107,7 @@ export function ReplyEditor({
           <button
             aria-describedby={isLocked ? lockNoticeId : undefined}
             className="board-composer-action-button board-composer-action-button--primary"
-            disabled={isLocked || !hasDraft}
+            disabled={isLocked || !hasDraft || submitDisabled}
             onClick={onSubmit}
             type="button"
           >

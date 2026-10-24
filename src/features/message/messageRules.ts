@@ -142,7 +142,7 @@ export const riskStageGuides: Record<
     ],
     lockTitle: '‘긴급’ 단계에서는 답변 작성이 제한됩니다.',
     lockDescription:
-      '위험도 검토가 끝난 뒤 공식 절차에 맞춰 답변을 진행할 수 있습니다.',
+      '지정 검토자가 잠금을 해제하기 전까지 답변 생성과 전송이 차단됩니다.',
   },
 };
 
@@ -154,18 +154,20 @@ export function getThreadRiskLevel(thread: BoardThread): SystemRiskLevel {
   );
 }
 
+// safetyLock is set by the analysis and only a designated reviewer can lift it,
+// so it blocks replies even after a teacher lowers the risk level.
+export function isReplyLocked(thread: BoardThread) {
+  return getThreadRiskLevel(thread) === 'emergency' || Boolean(thread.analysis?.safetyLock);
+}
+
 export function canGenerateReplyDraft(thread: BoardThread) {
   const riskLevel = getThreadRiskLevel(thread);
 
-  return riskLevel === 'low' || riskLevel === 'medium';
+  return (riskLevel === 'low' || riskLevel === 'medium') && !isReplyLocked(thread);
 }
 
 export function canUseOfficialReplyTemplate(thread: BoardThread) {
-  return getThreadRiskLevel(thread) === 'high';
-}
-
-export function isReplyLocked(thread: BoardThread) {
-  return getThreadRiskLevel(thread) === 'emergency';
+  return getThreadRiskLevel(thread) === 'high' && !isReplyLocked(thread);
 }
 
 export function getVisibleRiskFactors(thread: BoardThread) {

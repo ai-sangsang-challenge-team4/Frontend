@@ -1,10 +1,12 @@
+import { formatRegulationSource, type RegulationSearchResult } from '../replyReferences';
 import { ExternalLinkIcon, ReferenceBookIcon } from './MessageIcons';
 
 type RagReferenceNoticeProps = {
   onOpenReference: () => void;
+  result: RegulationSearchResult;
 };
 
-export function RagReferenceNotice({ onOpenReference }: RagReferenceNoticeProps) {
+export function RagReferenceNotice({ onOpenReference, result }: RagReferenceNoticeProps) {
   return (
     <article>
       <span>
@@ -13,16 +15,29 @@ export function RagReferenceNotice({ onOpenReference }: RagReferenceNoticeProps)
       </span>
       <div className="board-reply-check-reference">
         <p>
-          <span>제3조(상담 운영 시간), 제4조(상담 신청)</span>
+          {result.status === 'found' ? (
+            result.sources.map((source) => (
+              <span key={source.url}>
+                {formatRegulationSource(source)}
+                {source.isOutdated ? ' · 구버전 문서일 수 있어 최신 규정을 함께 확인해 주세요.' : null}
+              </span>
+            ))
+          ) : result.status === 'not_found' ? (
+            <span>관련 규정이 등록된 자료에 없어 AI 초안을 생성하지 않습니다. 직접 작성해 주세요.</span>
+          ) : (
+            <span>규정 검색이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.</span>
+          )}
         </p>
-        <button
-          className="board-outline-button board-risk-action-button"
-          onClick={onOpenReference}
-          type="button"
-        >
-          <span>자세히 보기</span>
-          <ExternalLinkIcon />
-        </button>
+        {result.status === 'found' ? (
+          <button
+            className="board-outline-button board-risk-action-button"
+            onClick={onOpenReference}
+            type="button"
+          >
+            <span>자세히 보기</span>
+            <ExternalLinkIcon />
+          </button>
+        ) : null}
       </div>
     </article>
   );

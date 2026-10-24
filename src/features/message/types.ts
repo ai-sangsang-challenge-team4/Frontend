@@ -60,6 +60,8 @@ export type BoardReply = {
   content: string;
   id: string;
   label: string;
+  // Set once the reply is stored as the final answer delivered to the parent.
+  deliveryStatus?: 'SENT_TO_PARENT';
   readByParent?: boolean;
   time: string;
   sentAt?: string;
@@ -90,9 +92,13 @@ export type BoardThread = {
   messageDateLabel?: string;
   moderatedSummary?: string;
   officialTemplateApplied?: boolean;
+  // The High template version the current draft was built from; checked again before sending.
+  appliedTemplate?: { templateId: string; version: number };
   officialTemplates?: string[];
   originalMessage?: string;
   parentName: string;
+  // Mock switch for a regulation search timeout until the RAG API is connected.
+  ragSearchFailed?: boolean;
   replies: BoardReply[];
   risk: RiskLevel;
   riskReviewRequired: boolean;
