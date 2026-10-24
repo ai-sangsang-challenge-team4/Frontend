@@ -6,8 +6,6 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type ReactNode,
-  type SVGProps,
 } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Sidebar } from '../../shared/components/teacher-shell/TeacherSidebar';
@@ -28,6 +26,8 @@ import {
   emergencyOfficialProcedurePostId,
 } from '../safety/guidePostIds';
 import { useAuth } from '../auth';
+import { AdminShareSection } from './components/AdminShareSection';
+import { BoardConfirmDialog } from './components/BoardConfirmDialog';
 import { BufferedSummaryCard } from './components/BufferedSummaryCard';
 import {
   BreadcrumbSeparator,
@@ -101,6 +101,7 @@ import type {
 } from './types';
 import './TeacherMessages.css';
 import { compareMessageTimes, formatMessageDate } from '../parent-message/conversation';
+import { canShareWithAdmin } from './escalationSnapshot';
 import { initialTeacherThreads } from './mockThreads';
 import { persistTeacherParentThread, readTeacherParentThreads } from './teacherParentMessages';
 
@@ -623,136 +624,6 @@ type DraftResumeDialogProps = {
   open: boolean;
 };
 
-type BoardConfirmDialogAction = {
-  disabled?: boolean;
-  label: string;
-  onClick: () => void;
-  tone?: 'danger' | 'primary';
-};
-
-type BoardConfirmDialogProps = {
-  actions: BoardConfirmDialogAction[];
-  children?: ReactNode;
-  descriptionId?: string;
-  onClose: () => void;
-  open: boolean;
-  title: ReactNode;
-  titleHidden?: boolean;
-  titleId: string;
-};
-
-function ConfirmCloseIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      fill="none"
-      viewBox="0 0 24 24"
-      xmlns="http://www.w3.org/2000/svg"
-      {...props}
-    >
-      <path
-        d="M6.4 19 5 17.6 10.6 12 5 6.4 6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
-
-function BoardConfirmDialog({
-  actions,
-  children,
-  descriptionId,
-  onClose,
-  open,
-  title,
-  titleHidden = false,
-  titleId,
-}: BoardConfirmDialogProps) {
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    const previousOverflow = document.body.style.overflow;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    document.body.style.overflow = 'hidden';
-    document.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [onClose, open]);
-
-  if (!open) {
-    return null;
-  }
-
-  return (
-    <div
-      className="board-confirm-modal-overlay"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
-          onClose();
-        }
-      }}
-      role="presentation"
-    >
-      <section
-        aria-describedby={descriptionId}
-        aria-labelledby={titleId}
-        aria-modal="true"
-        className="board-confirm-modal"
-        role="dialog"
-      >
-        <button
-          aria-label="닫기"
-          className="board-confirm-modal-close"
-          onClick={onClose}
-          type="button"
-        >
-          <ConfirmCloseIcon aria-hidden="true" />
-        </button>
-        <div className="board-confirm-modal-content">
-          <h2
-            className={titleHidden ? 'sr-only' : 'board-confirm-modal-title'}
-            id={titleId}
-          >
-            {title}
-          </h2>
-          {children}
-        </div>
-        <div className="board-confirm-modal-actions">
-          {actions.map((action, index) => {
-            const className = [
-              'board-confirm-modal-action',
-              action.tone ? `board-confirm-modal-action--${action.tone}` : '',
-            ]
-              .filter(Boolean)
-              .join(' ');
-
-            return (
-              <button
-                className={className}
-                disabled={action.disabled}
-                key={`${action.label}-${index}`}
-                onClick={action.onClick}
-                type="button"
-              >
-                {action.label}
-              </button>
-            );
-          })}
-        </div>
-      </section>
-    </div>
-  );
-}
-
 function DraftResumeDialog({
   onClose,
   onContinue,
@@ -1113,6 +984,7 @@ function RiskReviewPanel({
 }
 
 type RiskAnalysisPanelProps = {
+  onAdminShared: (threadId: string, escalation: { adminName: string; reason: string }) => void;
   onAiObjection: (threadId: string, objection: Pick<AiObjection, 'reason' | 'type'>) => void;
   onEvidencePackageCreate: (threadId: string) => void;
   onReviewComplete: (threadId: string, review: RiskReviewSubmission) => void;
@@ -1122,6 +994,7 @@ type RiskAnalysisPanelProps = {
 };
 
 function RiskAnalysisPanel({
+  onAdminShared,
   onAiObjection,
   onEvidencePackageCreate,
   onReviewComplete,
@@ -1409,6 +1282,10 @@ function RiskAnalysisPanel({
         </section>
       ) : null}
 
+      {canShareWithAdmin(thread) ? (
+        <AdminShareSection onShared={onAdminShared} thread={thread} />
+      ) : null}
+
       {canShowStudentSafetyCard ? (
         <section className="board-student-safety-card">
           <div className="board-student-safety-content">
@@ -1502,11 +1379,13 @@ type DetailProps = {
   onReturnToReplyComposer: (threadId: string) => void;
   onReviewComplete: (threadId: string, review: RiskReviewSubmission) => void;
   onReviewRequest: (threadId: string) => void;
+  onAdminShared: RiskAnalysisPanelProps['onAdminShared'];
   onAiObjection: RiskAnalysisPanelProps['onAiObjection'];
   thread: BoardThread;
 };
 
 function ThreadDetail({
+  onAdminShared,
   onAiObjection,
   onConsultationComplete,
   initialOriginalViewer,
@@ -1822,6 +1701,7 @@ function ThreadDetail({
 
       {!originalViewer && activeDetailTab === 'risk' ? (
         <RiskAnalysisPanel
+          onAdminShared={onAdminShared}
           onAiObjection={onAiObjection}
           onEvidencePackageCreate={onEvidencePackageCreate}
           onReviewComplete={onReviewComplete}
@@ -2589,6 +2469,18 @@ export function TeacherMessages({
     });
   };
 
+  const handleAdminShared = (threadId: string, escalation: { adminName: string; reason: string }) => {
+    updateThread(threadId, (thread) =>
+      appendActivityLogs(thread, [
+        {
+          actor: user?.name ?? '선생님',
+          action: '관리자 공유',
+          detail: `${escalation.adminName}에게 공동 검토를 요청했습니다. 공유 사유: "${escalation.reason}"`,
+        },
+      ]),
+    );
+  };
+
   const logReplyBlocked = (threadId: string) => {
     updateThread(threadId, (thread) =>
       appendActivityLogs(thread, [
@@ -3036,6 +2928,7 @@ export function TeacherMessages({
             onReturnToReplyComposer={handleReturnToReplyComposer}
             onReviewComplete={handleReviewComplete}
             onReviewRequest={handleReviewRequest}
+            onAdminShared={handleAdminShared}
             onAiObjection={handleAiObjection}
             thread={selectedThread}
           />

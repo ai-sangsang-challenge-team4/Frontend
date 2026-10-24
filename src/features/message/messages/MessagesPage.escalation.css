@@ -1,0 +1,93 @@
+.board-admin-share-panel .board-risk-section-header > div {
+  gap: 12px;
+}
+
+.board-admin-share-panel .board-risk-section-header svg:first-child {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  color: var(--color-pink-3);
+}
+
+.board-risk-action-button.board-admin-share-button {
+  width: auto;
+  padding: 4px 14px;
+}
+
+.board-admin-share-button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.board-admin-share-summary {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+}
+
+.board-admin-share-summary div {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 16px;
+}
+
+.board-admin-share-summary dt {
+  color: var(--color-text-muted);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 24px;
+}
+
+.board-admin-share-summary dd {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 16px;
+  line-height: 24px;
+  white-space: pre-wrap;
+  word-break: keep-all;
+}
+
+.board-admin-share-form {
+  display: grid;
+  width: 100%;
+  gap: 12px;
+}
+
+.board-admin-share-form .board-confirm-modal-copy {
+  color: var(--color-text-secondary);
+  font-size: 15px;
+  text-align: left;
+}
+
+.board-admin-share-form .board-ai-objection-reason-label strong {
+  color: #fd2d27;
+}
+
+.board-admin-share-options input:disabled + span {
+  color: var(--color-text-muted);
+}
+
+.board-admin-share-error {
+  margin: 0;
+  color: var(--color-text-danger);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.board-admin-share-retry {
+  color: var(--color-primary);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+@media (max-width: 640px) {
+  .board-admin-share-panel .board-risk-section-header {
+    flex-wrap: wrap;
+  }
+
+  .board-admin-share-summary div {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}

@@ -9,7 +9,7 @@ const ACCOUNTS_KEY = 'teacher-hub.auth-accounts';
 const accounts = [
   { role: 'PARENT', email: 'parent@example.com', password: 'password123', home: '/parent/messages/new' },
   { role: 'TEACHER', email: 'teacher@example.com', password: 'password123', home: '/teacher/messages' },
-  { role: 'ADMIN', email: 'admin@teacherhub.local', password: 'admin1234', home: '/admin' },
+  { role: 'ADMIN', email: 'admin@teacherhub.local', password: 'admin1234', home: '/admin/messages' },
 ] as const;
 
 type MockSettings = {
@@ -68,7 +68,8 @@ async function openAppMenuIfNeeded(page: Page) {
   if (page.viewportSize()!.width > 980) return;
   const pathname = new URL(page.url()).pathname;
   const menuLabel = pathname.startsWith('/parent') ? '학부모 메뉴 더보기'
-    : pathname.startsWith('/teacher') ? '교사 메뉴 더보기' : null;
+    : pathname.startsWith('/teacher') ? '교사 메뉴 더보기'
+      : pathname.startsWith('/admin') ? '관리자 메뉴 더보기' : null;
   if (menuLabel) await page.getByRole('button', { name: menuLabel, exact: true }).click();
 }
 

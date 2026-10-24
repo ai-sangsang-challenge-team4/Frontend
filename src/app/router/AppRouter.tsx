@@ -3,7 +3,6 @@ import { AdminLayout } from '../../layouts/AdminLayout';
 import { ParentLayout } from '../../layouts/ParentLayout';
 import { PublicLayout } from '../../layouts/PublicLayout';
 import { TeacherLayout } from '../../layouts/TeacherLayout';
-import { AdminHomePage } from '../../pages/admin/AdminHomePage';
 import { SharedMessageDetailPage } from '../../pages/admin/SharedMessageDetailPage';
 import { SharedMessageListPage } from '../../pages/admin/SharedMessageListPage';
 import { ForgotPasswordPage } from '../../pages/common/ForgotPasswordPage';
@@ -83,10 +82,10 @@ export function AppRouter() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<AdminHomePage />} />
+        <Route index element={<Navigate to="/admin/messages" replace />} />
         <Route path="messages" element={<SharedMessageListPage />} />
         <Route path="messages/:messageId" element={<SharedMessageDetailPage />} />
-        <Route path="*" element={<Navigate to="/admin" replace />} />
+        <Route path="*" element={<Navigate to="/admin/messages" replace />} />
       </Route>
 
       <Route path="*" element={<NotFoundPage />} />
