@@ -15,3 +15,18 @@ export type ComplaintType =
   | 'EVALUATION_OBJECTION'
   | 'STUDENT_GUIDANCE'
   | 'OTHER';
+
+export type ComplaintStatus =
+  | 'DRAFT'
+  | 'RECEIVED'
+  | 'ANALYZED'
+  | 'IN_REVIEW'
+  | 'ANSWERED'
+  | 'ESCALATED'
+  | 'CLOSED';
+
+export type GenerationMode =
+  | 'RAG_GENERATED'
+  | 'APPROVED_TEMPLATE'
+  | 'PROCEDURE_ONLY'
+  | 'BLOCKED_NO_EVIDENCE';
