@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { API_ERROR_COPY, configureApiClient } from '../../shared/api';
 import { Toast } from '../../shared/components/ui';
 import {
   AUTH_SESSION_STORAGE_KEY,
@@ -41,6 +42,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setAuthNotice(notice);
     clearAuthSession();
   }, []);
+
+  useEffect(() => {
+    configureApiClient({
+      getAccessToken: () => sessionRef.current?.accessToken ?? null,
+      onUnauthorized: () => invalidateSession(API_ERROR_COPY.UNAUTHORIZED.description),
+    });
+    return () => configureApiClient({ getAccessToken: () => null, onUnauthorized: () => undefined });
+  }, [invalidateSession]);
 
   const restoreSession = useCallback(async (blocking = true) => {
     const storedSession = readAuthSession();

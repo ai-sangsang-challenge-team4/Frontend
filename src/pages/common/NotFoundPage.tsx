@@ -1,13 +1,15 @@
-import { Link } from 'react-router-dom';
-import { PageHeader } from '../../shared/components';
+import { getDefaultRolePath, useAuth } from '../../features/auth';
+import { ApiError } from '../../shared/api';
+import { ApiErrorFallback } from '../../shared/components';
+
+const notFoundError = new ApiError({ status: 404 });
 
 export function NotFoundPage() {
+  const { user } = useAuth();
+
   return (
-    <section className="page page--center">
-      <PageHeader eyebrow="404" title="페이지를 찾을 수 없습니다" />
-      <Link className="button-link" to="/">
-        홈으로 이동
-      </Link>
-    </section>
+    <main>
+      <ApiErrorFallback error={notFoundError} homePath={user ? getDefaultRolePath(user.role) : '/'} />
+    </main>
   );
 }
