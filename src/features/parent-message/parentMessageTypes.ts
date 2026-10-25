@@ -1,4 +1,5 @@
 import type { ReplyTemplateDraft } from '../message/replyTemplates';
+import type { ReplyDraftState, ReplyDraftTab } from '../message/types';
 
 export const MESSAGE_MAX_LENGTH = 1500;
 
@@ -67,6 +68,8 @@ export type SentParentMessage = {
   updatedAt?: string;
   teacherDraftText?: string;
   teacherDraftSavedAt?: string;
+  teacherReplyDraftTab?: ReplyDraftTab;
+  teacherReplyDrafts?: Partial<Record<ReplyDraftTab, ReplyDraftState>>;
   teacherPinned?: boolean;
   teacherReplyTemplate?: ReplyTemplateDraft;
   // Teacher-side processing history; threads from the parent bridge have no analysis to hold it.

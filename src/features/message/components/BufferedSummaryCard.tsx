@@ -1,5 +1,6 @@
 import { ProfileAvatar } from './ProfileAvatar';
 import type { BoardThread } from '../types';
+import { formatConversationTime } from '../messageDates';
 
 type BufferedSummaryCardProps = {
   canInspectOriginal: boolean;
@@ -61,7 +62,11 @@ export function BufferedSummaryCard({
             </button>
           </div>
         </div>
-        <time>{thread.replies[0]?.time ?? thread.latestAtLabel}</time>
+        <time dateTime={thread.replies[0]?.sentAt}>
+          {thread.replies[0]?.sentAt
+            ? formatConversationTime(thread.replies[0].sentAt)
+            : thread.replies[0]?.time ?? formatConversationTime(thread.latestAt)}
+        </time>
       </div>
     </article>
   );

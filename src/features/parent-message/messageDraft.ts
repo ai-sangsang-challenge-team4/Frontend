@@ -56,6 +56,13 @@ function isSentMessage(value: unknown): value is SentParentMessage {
       .every((field) => value[field] === undefined || typeof value[field] === 'string') &&
     ['isImportant', 'needsTeacherReview', 'teacherPinned']
       .every((field) => value[field] === undefined || typeof value[field] === 'boolean') &&
+    (value.teacherReplyDraftTab === undefined || value.teacherReplyDraftTab === 'ai' || value.teacherReplyDraftTab === 'manual') &&
+    (value.teacherReplyDrafts === undefined || (isRecord(value.teacherReplyDrafts) &&
+      Object.entries(value.teacherReplyDrafts).every(([tab, draft]) => (
+        (tab === 'ai' || tab === 'manual') && isRecord(draft) && typeof draft.draftText === 'string' &&
+        (draft.draftSavedAt === undefined || typeof draft.draftSavedAt === 'string') &&
+        ['aiDraftGenerated', 'officialTemplateApplied'].every((field) => draft[field] === undefined || typeof draft[field] === 'boolean')
+      )))) &&
     (value.consultationStatus === undefined || ['before', 'inProgress', 'complete'].includes(String(value.consultationStatus))) &&
     (value.conversation === undefined || (Array.isArray(value.conversation) && value.conversation.every((entry: unknown) => (
       isRecord(entry) && typeof entry.id === 'string' && typeof entry.body === 'string' &&

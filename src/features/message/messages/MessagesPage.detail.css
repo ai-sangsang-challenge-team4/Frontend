@@ -244,6 +244,46 @@
   gap: 18px;
 }
 
+.board-reply-draft-tabs {
+  min-width: 0;
+}
+
+.board-reply-draft-tabs .ui-tabs-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-flow: column;
+}
+
+.board-reply-draft-tabs .ui-tabs-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.board-reply-draft-tabs .ui-tabs-trigger {
+  min-width: 0;
+  padding: 12px 8px;
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.board-reply-draft-tabs .ui-tabs-trigger:disabled {
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
+}
+
+.board-reply-draft-tabs textarea {
+  width: 100%;
+}
+
+.board-reply-draft-hint {
+  flex: 0 1 40%;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  line-height: 22px;
+  text-align: right;
+}
+
 .board-reply-compose-panel label {
   color: var(--color-text-primary);
   font-size: 20px;
@@ -487,11 +527,20 @@
 }
 
 .board-reply-ai-note {
+  flex: 1;
+  min-width: 0;
   margin: 0;
   color: var(--color-text-muted);
   font-size: 14px;
   font-weight: 500;
   line-height: 22px;
+}
+
+.board-reply-notices {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px 24px;
 }
 
 .board-reply-bottom-actions {

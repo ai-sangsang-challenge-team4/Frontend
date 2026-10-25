@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useCallback,
   useEffect,
   useId,
@@ -28,6 +29,7 @@ import {
 import { useAuth } from '../auth';
 import { AdminShareSection } from './components/AdminShareSection';
 import { BoardConfirmDialog } from './components/BoardConfirmDialog';
+import { ConversationDateChip } from './components/ConversationDateChip';
 import { BufferedSummaryCard } from './components/BufferedSummaryCard';
 import {
   BreadcrumbSeparator,
@@ -73,6 +75,8 @@ import {
   systemRiskTone,
 } from './messageRules';
 import { formatRegulationSource, searchRegulations, type RegulationSource } from './replyReferences';
+import { getReplyDraftTab, hasReplyDraft, selectReplyDraft } from './replyDrafts';
+import { formatConversationDate, formatConversationTime } from './messageDates';
 import {
   findCautionExpressions,
   changeReplyTemplateDraft,
@@ -93,6 +97,7 @@ import type {
   FilterValue,
   MessagesRouteView,
   OriginalMessageRequest,
+  ReplyDraftTab,
   RiskFilterValue,
   RiskReviewSubmission,
   RiskScore,
@@ -300,6 +305,25 @@ function appendActivityLogs(
   return thread.analysis
     ? { ...thread, analysis: { ...thread.analysis, activityLogs } }
     : { ...thread, activityLogs };
+}
+
+function generateAiReplyDraft(thread: BoardThread, sources: RegulationSource[]) {
+  return appendActivityLogs(
+    {
+      ...thread,
+      aiDraftGenerated: true,
+      appliedTemplate: undefined,
+      draftSavedAt: undefined,
+      draftText: createAiReplyDraft(thread),
+      officialTemplateApplied: false,
+    },
+    [{
+      actor: 'AI 초안',
+      action: '답변 초안 생성',
+      detail: `학부모 메시지와 관련 규정을 참고해 교사용 답변 초안을 생성했습니다. 출처: ${sources
+        .map(formatRegulationSource).join(' / ')}. 자동 전송은 진행되지 않았습니다.`,
+    }],
+  );
 }
 
 // A draft built from a template that was deactivated or replaced by a newer version cannot be sent.
@@ -1407,13 +1431,16 @@ function ThreadDetail({
     useState<OriginalMessageRequest | null>(initialOriginalViewer ?? null);
   const isLocked = isReplyLocked(thread);
   const effectiveRiskLevel = getThreadRiskLevel(thread);
-  const hasDraft = thread.draftText.trim().length > 0;
+  const hasDraft = hasReplyDraft(thread);
   // Shown only while locked, which always means the emergency safety lock.
   const lockedGuide = riskStageGuides.emergency;
   const bufferedSummaryText = getBufferedSummaryText(thread);
   const visibleConversationReplies = bufferedSummaryText
     ? thread.replies.filter((reply) => reply.authorRole !== 'parent')
     : thread.replies;
+  const initialConversationDate = thread.messageDateLabel ?? formatConversationDate(
+    thread.replies[0]?.sentAt ?? thread.latestAt,
+  );
   const showBufferedSummaryOnly =
     Boolean(bufferedSummaryText) && visibleConversationReplies.length === 0;
   const canInspectOriginal = Boolean(
@@ -1576,20 +1603,7 @@ function ThreadDetail({
             }`}
             aria-label="게시글 답글 스레드"
           >
-        <div className="board-date-chip">
-          <svg
-            aria-hidden="true"
-            fill="none"
-            viewBox="0 0 18 20"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              d="M2 20c-.55 0-1.021-.196-1.412-.588A1.926 1.926 0 0 1 0 18V4c0-.55.196-1.02.588-1.412A1.926 1.926 0 0 1 2 2h1V0h2v2h8V0h2v2h1c.55 0 1.02.196 1.412.588C17.804 2.979 18 3.45 18 4v14c0 .55-.196 1.02-.588 1.412A1.926 1.926 0 0 1 16 20H2Zm0-2h14V8H2v10Zm0-12h14V4H2v2Zm7 6a.967.967 0 0 1-.713-.288A.967.967 0 0 1 8 11c0-.283.096-.52.287-.712A.967.967 0 0 1 9 10c.283 0 .52.096.713.288.191.191.287.429.287.712 0 .283-.096.52-.287.712A.967.967 0 0 1 9 12Zm-4 0a.967.967 0 0 1-.713-.288A.967.967 0 0 1 4 11c0-.283.096-.52.287-.712A.967.967 0 0 1 5 10c.283 0 .52.096.713.288.191.191.287.429.287.712 0 .283-.096.52-.287.712A.967.967 0 0 1 5 12Zm8 0a.967.967 0 0 1-.713-.288A.967.967 0 0 1 12 11c0-.283.096-.52.287-.712A.967.967 0 0 1 13 10c.283 0 .52.096.713.288.191.191.287.429.287.712 0 .283-.096.52-.287.712A.967.967 0 0 1 13 12Zm-4 4a.967.967 0 0 1-.713-.288A.967.967 0 0 1 8 15c0-.283.096-.52.287-.712A.967.967 0 0 1 9 14c.283 0 .52.096.713.288.191.191.287.429.287.712 0 .283-.096.52-.287.712A.967.967 0 0 1 9 16Zm-4 0a.967.967 0 0 1-.713-.288A.967.967 0 0 1 4 15c0-.283.096-.52.287-.712A.967.967 0 0 1 5 14c.283 0 .52.096.713.288.191.191.287.429.287.712 0 .283-.096.52-.287.712A.967.967 0 0 1 5 16Zm8 0a.967.967 0 0 1-.713-.288A.967.967 0 0 1 12 15c0-.283.096-.52.287-.712A.967.967 0 0 1 13 14c.283 0 .52.096.713.288.191.191.287.429.287.712 0 .283-.096.52-.287.712A.967.967 0 0 1 13 16Z"
-              fill="currentColor"
-            />
-          </svg>
-          <span>{thread.messageDateLabel ?? '2026년 8월 10일 월요일'}</span>
-        </div>
+        <ConversationDateChip label={initialConversationDate} />
 
         {bufferedSummaryText ? (
           <BufferedSummaryCard
@@ -1601,30 +1615,39 @@ function ThreadDetail({
           />
         ) : null}
 
-        {visibleConversationReplies.map((reply) => (
-          <article
-            className={`board-reply board-reply-${reply.authorRole}`}
-            key={reply.id}
-          >
-            <div className="board-reply-author">
-              <ProfileAvatar className="board-mini-avatar" />
-              <strong>{reply.authorName}</strong>
-            </div>
-            <div className="board-reply-row">
-              {reply.authorRole === 'teacher' ? (
-                <div className="board-reply-time">
-                  {reply.readByParent ? <span>1</span> : null}
-                  <time>{reply.time}</time>
+        {visibleConversationReplies.map((reply, index) => {
+          const dateLabel = reply.sentAt ? formatConversationDate(reply.sentAt) : initialConversationDate;
+          const previousReply = visibleConversationReplies[index - 1];
+          const previousDateLabel = previousReply?.sentAt
+            ? formatConversationDate(previousReply.sentAt)
+            : initialConversationDate;
+          const time = reply.sentAt ? formatConversationTime(reply.sentAt) : reply.time;
+
+          return (
+            <Fragment key={reply.id}>
+              {dateLabel !== previousDateLabel ? <ConversationDateChip label={dateLabel} /> : null}
+              <article className={`board-reply board-reply-${reply.authorRole}`}>
+                <div className="board-reply-author">
+                  <ProfileAvatar className="board-mini-avatar" />
+                  <strong>{reply.authorName}</strong>
                 </div>
-              ) : null}
-              <div className="board-reply-bubble">
-                <span>{reply.label}</span>
-                <p>{reply.content}</p>
-              </div>
-              {reply.authorRole === 'parent' ? <time>{reply.time}</time> : null}
-            </div>
-          </article>
-        ))}
+                <div className="board-reply-row">
+                  {reply.authorRole === 'teacher' ? (
+                    <div className="board-reply-time">
+                      {reply.readByParent ? <span>1</span> : null}
+                      <time dateTime={reply.sentAt}>{time}</time>
+                    </div>
+                  ) : null}
+                  <div className="board-reply-bubble">
+                    <span>{reply.label}</span>
+                    <p>{reply.content}</p>
+                  </div>
+                  {reply.authorRole === 'parent' ? <time dateTime={reply.sentAt}>{time}</time> : null}
+                </div>
+              </article>
+            </Fragment>
+          );
+        })}
         <div className={`board-answer-box${isLocked ? ' is-locked' : ''}`}>
           {isLocked ? (
             <>
@@ -1848,13 +1871,14 @@ function ReplySendCompleteDialog({
 }
 
 type ReplyComposerPageProps = {
+  onInitializeDraft: (threadId: string) => void;
+  onDraftTabChange: (threadId: string, tab: ReplyDraftTab) => void;
   onApplyOfficialTemplate: (threadId: string, templateId?: string) => void;
   onTemplateChange: (threadId: string, change: ReplyTemplateChange) => void;
   onBack: () => void;
   onDraftChange: (threadId: string, value: string) => void;
   onDraftReset: (threadId: string) => void;
   onDraftSave: (threadId: string) => void;
-  onGenerateAiDraft: (threadId: string) => void;
   onListOpen: () => void;
   onOpenOriginalPage: (threadId: string) => void;
   onSubmitReply: (threadId: string) => void;
@@ -1862,13 +1886,14 @@ type ReplyComposerPageProps = {
 };
 
 function ReplyComposerPage({
+  onInitializeDraft,
+  onDraftTabChange,
   onApplyOfficialTemplate,
   onTemplateChange,
   onBack,
   onDraftChange,
   onDraftReset,
   onDraftSave,
-  onGenerateAiDraft,
   onListOpen,
   onOpenOriginalPage,
   onSubmitReply,
@@ -1880,19 +1905,23 @@ function ReplyComposerPage({
   const [isCheckPanelOpen, setIsCheckPanelOpen] = useState(true);
   const [isOriginalConfirmOpen, setIsOriginalConfirmOpen] = useState(false);
   const [referenceSource, setReferenceSource] = useState<RegulationSource | null>(null);
+  const initializedThreadRef = useRef<string | null>(null);
+  const activeDraftTab = getReplyDraftTab(thread);
   const hasDraft = thread.draftText.trim().length > 0;
   const bufferedSummaryText = getBufferedSummaryText(thread);
   const isLocked = isReplyLocked(thread);
   const riskLevel = getThreadRiskLevel(thread);
   const regulationResult = useMemo(() => searchRegulations(thread), [thread]);
-  // No corpus match means no AI draft at all; a search failure keeps the button so the teacher can retry.
   const isAiDraftAvailable =
-    canGenerateReplyDraft(thread) && regulationResult.status !== 'not_found';
+    canGenerateReplyDraft(thread) && regulationResult.status === 'found';
   const isOfficialTemplateAvailable = canUseOfficialReplyTemplate(thread);
   const replyTemplate = isOfficialTemplateAvailable
     ? findReplyTemplate(thread)
     : undefined;
   const isTemplateInactive = isAppliedTemplateInactive(thread);
+  const isManualTabDisabled = Boolean(thread.appliedTemplate || replyTemplate);
+  const isDraftInputDisabled = activeDraftTab === 'ai' && !replyTemplate && !thread.appliedTemplate &&
+    !isAiDraftAvailable;
   const draftErrors = getReplyDraftErrors(thread, teacherName);
   const matchingTemplates = findReplyTemplates(thread);
   const appliedTemplateLabel = getAppliedTemplateLabel(thread);
@@ -1908,15 +1937,10 @@ function ReplyComposerPage({
     ? (bufferedSummaryText ?? getPrimaryParentMessage(thread))
     : getPrimaryParentMessage(thread);
   const shouldShowOriginalButton = riskLevel !== 'low' && canInspectOriginal;
-  const assistButtonLabel = isOfficialTemplateAvailable
-    ? thread.officialTemplateApplied
-      ? '템플릿 다시 적용'
-      : '공식 템플릿 적용'
-    : thread.aiDraftGenerated
-      ? 'AI 다시 생성'
-      : 'AI 답변 생성';
-  const assistButtonDisabled =
-    isLocked || (!isAiDraftAvailable && !replyTemplate);
+  const assistButtonLabel = thread.officialTemplateApplied
+    ? '템플릿 다시 적용'
+    : '공식 템플릿 적용';
+  const assistButtonDisabled = isLocked || !replyTemplate;
   const stageNotice = isLocked
     ? '긴급 단계: 개별 답변 초안은 제공되지 않으며 즉시 오프라인 공식 절차에 따라 대응합니다.'
     : riskLevel === 'high'
@@ -1947,11 +1971,6 @@ function ReplyComposerPage({
     if (replyTemplate) {
       const selected = matchingTemplates.find((template) => template.templateId === thread.appliedTemplate?.templateId);
       onApplyOfficialTemplate(thread.id, selected?.templateId ?? replyTemplate.templateId);
-      return;
-    }
-
-    if (isAiDraftAvailable) {
-      onGenerateAiDraft(thread.id);
     }
   };
   const requestOriginalOpen = () => {
@@ -1961,6 +1980,13 @@ function ReplyComposerPage({
 
     setIsOriginalConfirmOpen(true);
   };
+
+  useEffect(() => {
+    if (initializedThreadRef.current !== thread.id) {
+      initializedThreadRef.current = thread.id;
+      onInitializeDraft(thread.id);
+    }
+  }, [onInitializeDraft, thread.id]);
 
   useEffect(() => {
     setIsConfirmOpen(false);
@@ -2044,6 +2070,7 @@ function ReplyComposerPage({
         </section>
 
         <ReplyEditor
+          activeDraftTab={activeDraftTab}
           aiNoticeId={aiNoticeId}
           assistButtonDisabled={assistButtonDisabled}
           assistButtonLabel={assistButtonLabel}
@@ -2051,16 +2078,19 @@ function ReplyComposerPage({
           draftText={thread.draftText}
           hasDraft={hasDraft}
           isLocked={isLocked}
+          isDraftInputDisabled={isDraftInputDisabled}
+          isManualTabDisabled={isManualTabDisabled}
           isOfficialTemplateAvailable={isOfficialTemplateAvailable}
           lockNoticeId={lockNoticeId}
           onAssist={handleAssistAction}
           onDraftChange={(value) => onDraftChange(thread.id, value)}
+          onDraftTabChange={(tab) => onDraftTabChange(thread.id, tab)}
           onDraftReset={() => onDraftReset(thread.id)}
           onDraftSave={() => onDraftSave(thread.id)}
           onSubmit={() => setIsConfirmOpen(true)}
           onOpenProcedure={() => openGuidePostFromMessages(thread.id, 'reply', emergencyOfficialProcedurePostId)}
           stageNotice={stageNotice}
-          submitDisabled={isTemplateInactive || draftErrors.length > 0}
+          submitDisabled={isTemplateInactive || draftErrors.length > 0 || isDraftInputDisabled}
           templateEditor={!isLocked && (thread.appliedTemplate || replyTemplate) ? (
             <>
               {isTemplateInactive ? (
@@ -2234,7 +2264,7 @@ export function TeacherMessages({
 
   const starredThreads = filteredThreads.filter((thread) => thread.isPinned);
   const draftThreads = filteredThreads.filter(
-    (thread) => thread.draftText.trim().length > 0,
+    hasReplyDraft,
   );
   const selectedThread =
     threads.find((thread) => thread.id === selectedThreadId) ?? null;
@@ -2275,7 +2305,7 @@ export function TeacherMessages({
     setInitialOriginalViewerRequest(null);
     setReplyComposerThreadId(null);
 
-    if (thread?.draftText.trim()) {
+    if (thread && hasReplyDraft(thread)) {
       setDraftPromptThreadId(threadId);
       return;
     }
@@ -2310,16 +2340,40 @@ export function TeacherMessages({
   const handleDraftChange = (threadId: string, value: string) => {
     updateThread(threadId, (thread) => {
       if (isReplyLocked(thread) || thread.appliedTemplate || (canUseOfficialReplyTemplate(thread) && findReplyTemplate(thread))) return thread;
+      if (getReplyDraftTab(thread) === 'ai' && (!canGenerateReplyDraft(thread) || searchRegulations(thread).status === 'not_found')) return thread;
       return {
         ...thread,
         aiDraftGenerated: value.trim() ? thread.aiDraftGenerated : false,
-        draftSavedAt: value.trim() ? thread.draftSavedAt : undefined,
+        draftSavedAt: undefined,
         officialTemplateApplied: value.trim()
           ? thread.officialTemplateApplied
           : false,
         appliedTemplate: value.trim() ? thread.appliedTemplate : undefined,
         draftText: value,
       };
+    });
+  };
+
+  const handleInitializeDraft = (threadId: string) => {
+    updateThread(threadId, (thread) => {
+      if (isReplyLocked(thread)) return thread;
+      // An existing AI tab still counts after its contents have been cleared.
+      const hasAiDraft = thread.replyDrafts?.ai !== undefined || (
+        getReplyDraftTab(thread) === 'ai' && Boolean(thread.draftText || thread.appliedTemplate)
+      );
+      const next = selectReplyDraft(thread, 'ai');
+      const result = searchRegulations(next);
+      return !hasAiDraft && canGenerateReplyDraft(next) && result.status === 'found'
+        ? generateAiReplyDraft(next, result.sources)
+        : next;
+    });
+  };
+
+  const handleDraftTabChange = (threadId: string, tab: ReplyDraftTab) => {
+    updateThread(threadId, (thread) => {
+      if (isReplyLocked(thread)) return thread;
+      if (tab === 'manual' && (thread.appliedTemplate || (canUseOfficialReplyTemplate(thread) && findReplyTemplate(thread)))) return thread;
+      return selectReplyDraft(thread, tab);
     });
   };
 
@@ -2334,7 +2388,7 @@ export function TeacherMessages({
   };
 
   const handleDraftReset = (threadId: string) => {
-    updateThread(threadId, (thread) => ({
+    updateThread(threadId, (thread) => isReplyLocked(thread) ? thread : ({
       ...thread,
       aiDraftGenerated: false,
       appliedTemplate: undefined,
@@ -2362,48 +2416,6 @@ export function TeacherMessages({
     });
   };
 
-  const handleGenerateAiDraft = (threadId: string) => {
-    const target = threads.find((thread) => thread.id === threadId);
-
-    if (!target || !canGenerateReplyDraft(target)) {
-      return;
-    }
-
-    const regulationResult = searchRegulations(target);
-
-    if (regulationResult.status === 'error') {
-      setToastMessage('규정 검색이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.');
-      return;
-    }
-
-    // Drafts are generated only within retrieved regulations; nothing is generated without a source.
-    if (regulationResult.status === 'not_found') {
-      return;
-    }
-
-    updateThread(threadId, (thread) =>
-      appendActivityLogs(
-        {
-          ...thread,
-          aiDraftGenerated: true,
-          appliedTemplate: undefined,
-          draftSavedAt: undefined,
-          draftText: createAiReplyDraft(thread),
-          officialTemplateApplied: false,
-        },
-        [
-          {
-            actor: 'AI 초안',
-            action: '답변 초안 생성',
-            detail: `학부모 메시지와 관련 규정을 참고해 교사용 답변 초안을 생성했습니다. 출처: ${regulationResult.sources
-              .map(formatRegulationSource)
-              .join(' / ')}. 자동 전송은 진행되지 않았습니다.`,
-          },
-        ],
-      ),
-    );
-  };
-
   const handleApplyOfficialTemplate = (threadId: string, templateId?: string) => {
     const target = threads.find((thread) => thread.id === threadId);
     const template = target && canUseOfficialReplyTemplate(target)
@@ -2419,7 +2431,7 @@ export function TeacherMessages({
     updateThread(threadId, (thread) =>
       appendActivityLogs(
         {
-          ...thread,
+          ...selectReplyDraft(thread, 'ai'),
           aiDraftGenerated: false,
           appliedTemplate: draft,
           draftSavedAt: undefined,
@@ -2709,6 +2721,8 @@ export function TeacherMessages({
 
     if (
       !nextReply ||
+      (getReplyDraftTab(thread) === 'ai' && !thread.appliedTemplate &&
+        (!canGenerateReplyDraft(thread) || searchRegulations(thread).status === 'not_found')) ||
       isAppliedTemplateInactive(thread) ||
       getReplyDraftErrors(thread, user?.name ?? '담임').length > 0
     ) {
@@ -2739,9 +2753,14 @@ export function TeacherMessages({
           appliedTemplate: undefined,
           draftSavedAt: undefined,
           draftText: '',
+          replyDraftTab: undefined,
+          replyDrafts: undefined,
           officialTemplateApplied: false,
           latestAt: sentAt,
           latestAtLabel: formatNow(),
+          messageDateLabel: current.messageDateLabel ?? formatConversationDate(
+            current.replies[0]?.sentAt ?? current.latestAt,
+          ),
           latestMessage: nextReply,
           replies: [
             ...current.replies,
@@ -2753,7 +2772,7 @@ export function TeacherMessages({
               deliveryStatus: 'SENT_TO_PARENT',
               label: '선생님 답변',
               readByParent: false,
-              time: formatNow(),
+              time: formatConversationTime(sentAt),
               sentAt,
             },
           ],
@@ -2862,6 +2881,8 @@ export function TeacherMessages({
         />
         <main className="board-detail-page">
           <ReplyComposerPage
+            onInitializeDraft={handleInitializeDraft}
+            onDraftTabChange={handleDraftTabChange}
             onApplyOfficialTemplate={handleApplyOfficialTemplate}
             onBack={() => {
               setInitialOriginalViewerRequest(null);
@@ -2873,7 +2894,6 @@ export function TeacherMessages({
             onTemplateChange={handleTemplateChange}
             onDraftReset={handleDraftReset}
             onDraftSave={handleDraftSave}
-            onGenerateAiDraft={handleGenerateAiDraft}
             onListOpen={() => {
               setInitialDetailTabRequest(null);
               setInitialOriginalViewerRequest(null);

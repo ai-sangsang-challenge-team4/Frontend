@@ -9,6 +9,14 @@ export type RiskFactorStatus = 'detected' | 'boundary' | 'unknown';
 export type SummaryStatus = 'ready' | 'failed';
 export type ThreadTab = 'all' | 'starred' | 'drafts';
 export type DetailTab = 'conversation' | 'risk' | 'activity';
+export type ReplyDraftTab = 'ai' | 'manual';
+export type ReplyDraftState = {
+  draftText: string;
+  draftSavedAt?: string;
+  aiDraftGenerated?: boolean;
+  officialTemplateApplied?: boolean;
+  appliedTemplate?: ReplyTemplateDraft;
+};
 export type FilterValue = 'active' | 'complete' | 'all';
 export type RiskFilterValue = 'all' | SystemRiskLevel;
 export type SortValue = 'latest' | 'risk' | 'status';
@@ -97,6 +105,8 @@ export type BoardThread = {
   className: string;
   draftSavedAt?: string;
   draftText: string;
+  replyDraftTab?: ReplyDraftTab;
+  replyDrafts?: Partial<Record<ReplyDraftTab, ReplyDraftState>>;
   evidencePackageGenerated?: boolean;
   id: string;
   isPinned: boolean;
