@@ -8,6 +8,12 @@ import {
   type SignupRole,
 } from '../../features/auth';
 import { PasswordField } from '../../features/auth/components';
+import { ChildInformationFields } from '../../features/auth/components/ChildInformationFields';
+import {
+  createEmptyChildSignupInfo,
+  validateChildSignupInfo,
+  type ChildSignupErrors,
+} from '../../features/auth/childSignup';
 import { useEmailVerification } from '../../features/auth/hooks/useEmailVerification';
 import { Button, TextField } from '../../shared/components/ui';
 
@@ -21,7 +27,7 @@ type SignupFormErrors = Partial<
     | 'verification',
     string
   >
->;
+> & { child?: ChildSignupErrors };
 
 export function SignupPage() {
   const [searchParams] = useSearchParams();
@@ -49,6 +55,7 @@ export function SignupPage() {
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
+  const [child, setChild] = useState(createEmptyChildSignupInfo);
   const [formErrors, setFormErrors] = useState<SignupFormErrors>({});
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -58,7 +65,7 @@ export function SignupPage() {
 
     const nextErrors: SignupFormErrors = {};
 
-    if (!name.trim()) {
+    if (role === 'TEACHER' && !name.trim()) {
       nextErrors.name = '이름을 입력해 주세요.';
     }
 
@@ -78,6 +85,11 @@ export function SignupPage() {
       nextErrors.verification = '이메일 인증을 완료해 주세요.';
     }
 
+    if (role === 'PARENT') {
+      const childErrors = validateChildSignupInfo(child);
+      if (Object.keys(childErrors).length > 0) nextErrors.child = childErrors;
+    }
+
     setFormErrors(nextErrors);
 
     if (Object.keys(nextErrors).length > 0) {
@@ -87,9 +99,10 @@ export function SignupPage() {
     try {
       await signup({
         email: email.trim(),
-        name: name.trim(),
         password,
-        role,
+        ...(role === 'PARENT'
+          ? { role, child: { ...child, name: child.name.trim() } }
+          : { role, name: name.trim() }),
       });
       navigate(`/login?role=${role}`, {
         replace: true,
@@ -143,7 +156,7 @@ export function SignupPage() {
                       name="role"
                       onChange={() => {
                         setRole(option);
-                        setFormErrors((errors) => ({ ...errors, role: '' }));
+                        setFormErrors((errors) => ({ ...errors, name: '', role: '', child: undefined, submit: '' }));
                       }}
                       type="radio"
                       value={option}
@@ -166,19 +179,37 @@ export function SignupPage() {
               ) : null}
             </fieldset>
 
-            <TextField
-              autoComplete="name"
-              error={formErrors.name}
-              fieldSize="lg"
-              label={<RequiredLabel>이름</RequiredLabel>}
-              name="name"
-              onChange={(event) => {
-                setName(event.target.value);
-                setFormErrors((errors) => ({ ...errors, name: '', submit: '' }));
-              }}
-              placeholder="이름을 입력해주세요."
-              value={name}
-            />
+            {role === 'PARENT' ? (
+              <ChildInformationFields
+                disabled={isLoading}
+                errors={formErrors.child}
+                onChange={(nextChild) => {
+                  setChild(nextChild);
+                  setFormErrors((errors) => ({
+                    ...errors,
+                    child: errors.child ? validateChildSignupInfo(nextChild) : undefined,
+                    submit: '',
+                  }));
+                }}
+                value={child}
+              />
+            ) : null}
+
+            {role === 'TEACHER' ? (
+              <TextField
+                autoComplete="name"
+                error={formErrors.name}
+                fieldSize="lg"
+                label={<RequiredLabel>이름</RequiredLabel>}
+                name="name"
+                onChange={(event) => {
+                  setName(event.target.value);
+                  setFormErrors((errors) => ({ ...errors, name: '', submit: '' }));
+                }}
+                placeholder="이름을 입력해주세요."
+                value={name}
+              />
+            ) : null}
 
             <div className="auth-stacked-field">
               <div className="auth-inline-row">
@@ -338,6 +369,7 @@ export function SignupPage() {
               placeholder="비밀번호를 다시 한 번 입력해주세요."
               value={passwordConfirmation}
             />
+
           </div>
 
           <div className="auth-submit-row">

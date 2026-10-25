@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { AuthSession } from '../../src/features/auth/api/authApiContract';
+import { fillChildInformation } from './helpers/childSignup';
 
 const SESSION_KEY = 'teacher-hub.auth-session';
 const ISSUED_KEY = 'teacher-hub.auth-mock-sessions';
@@ -116,7 +117,11 @@ for (const role of ['PARENT', 'TEACHER'] as const) {
     await page.goto(`/signup?role=${role}`);
     await expect(page.getByRole('radio', { name: role === 'PARENT' ? '학부모' : '교사' })).toBeChecked();
     await expect(page.getByRole('radio')).toHaveCount(2);
-    await page.locator('input[name="name"]').fill('테스트 사용자');
+    if (role === 'TEACHER') {
+      await page.locator('input[name="name"]').fill('테스트 사용자');
+    } else {
+      await expect(page.locator('input[name="name"]')).toHaveCount(0);
+    }
     const email = `${role.toLowerCase()}-signup@example.com`;
     await requestVerification(page, email);
     await page.locator('input[name="verificationCode"]').fill('123456');
@@ -124,10 +129,23 @@ for (const role of ['PARENT', 'TEACHER'] as const) {
     await expect(page.getByRole('button', { name: '인증 완료', exact: true })).toBeVisible();
     await page.locator('input[name="password"]').fill('newpassword123');
     await page.locator('input[name="passwordConfirmation"]').fill('newpassword123');
+    if (role === 'PARENT') await fillChildInformation(page);
     await page.getByRole('button', { name: '회원가입', exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/login\\?role=${role}$`));
     await expect(page.getByRole('status')).toHaveText('회원가입이 완료되었습니다. 로그인해 주세요.');
     await expect(page.locator('input[name="email"]')).toHaveValue(email);
+    const account = await page.evaluate((email) => {
+      const accounts = JSON.parse(localStorage.getItem('teacher-hub.auth-accounts') ?? '[]');
+      return accounts.find((account: { email: string }) => account.email === email);
+    }, email);
+    if (role === 'PARENT') {
+      expect(account.name).toBe('학부모');
+      expect(account.child).toEqual({
+        schoolId: 'mock-elementary', grade: 6, classNumber: 2, studentNumber: 17, name: '김상상',
+      });
+    } else {
+      expect(account).not.toHaveProperty('child');
+    }
     await page.locator('input[name="password"]').fill('newpassword123');
     await page.getByRole('button', { name: '로그인', exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`${role === 'PARENT' ? '/parent/messages/new' : '/teacher/messages'}$`));
@@ -152,7 +170,7 @@ test('로그인 후 원래 요청한 역할 내부 페이지로 돌아간다', a
 });
 
 test('회원가입 필수값, 이메일 형식, 비밀번호 불일치를 표시한다', async ({ page }) => {
-  await page.goto('/signup');
+  await page.goto('/signup?role=TEACHER');
   await page.getByRole('button', { name: '회원가입', exact: true }).click();
   await expect(page.getByText('이름을 입력해 주세요.', { exact: true })).toBeVisible();
   await expect(page.getByText('비밀번호는 8자 이상 20자 이하로 입력해 주세요.', { exact: true })).toBeVisible();

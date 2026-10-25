@@ -1,5 +1,6 @@
 import type { User } from '../../../shared/types';
 import { isUser, type LoginInput, type SignupInput } from '../authState';
+import { validateChildSignupInfo, type ChildSignupInfo } from '../childSignup';
 import {
   AuthApiError,
   isValidEmail,
@@ -13,7 +14,7 @@ import {
   writeStoredJson,
 } from './authStorage';
 
-type AuthAccount = User & { password: string };
+type AuthAccount = User & { password: string; child?: ChildSignupInfo };
 type IssuedSession = Omit<AuthSession, 'user'> & { userId: number };
 type StoredVerification = VerificationCodeResult & { email: string; verified: boolean };
 type MockSettings = {
@@ -94,11 +95,17 @@ async function signup(input: SignupInput): Promise<User> {
   assertValidEmail(input.email);
   assertValidPassword(input.password);
 
-  if (!input.name.trim()) {
+  if (input.role === 'TEACHER' && !input.name?.trim()) {
     throw new AuthApiError({ code: 'NAME_REQUIRED', message: '이름을 입력해 주세요.' });
   }
   if (input.role !== 'PARENT' && input.role !== 'TEACHER') {
     throw new AuthApiError({ code: 'INVALID_ROLE', message: '학부모 또는 교사를 선택해 주세요.' });
+  }
+
+  if (input.role === 'PARENT') {
+    const errors = validateChildSignupInfo(input.child);
+    const message = Object.values(errors)[0];
+    if (message) throw new AuthApiError({ code: 'INVALID_CHILD_INFO', message });
   }
 
   const email = normalizeEmail(input.email);
@@ -112,9 +119,11 @@ async function signup(input: SignupInput): Promise<User> {
   const account: AuthAccount = {
     userId: Math.max(300, ...accounts.map((entry) => entry.userId)) + 1,
     email,
-    name: input.name.trim(),
+    // Parents do not provide a personal name; retain the existing User display-name shape.
+    name: input.role === 'TEACHER' ? input.name.trim() : '학부모',
     password: input.password,
     role: input.role,
+    ...(input.role === 'PARENT' ? { child: { ...input.child, name: input.child.name.trim() } } : {}),
   };
   writeStoredJson(ACCOUNT_STORAGE_KEY, [...accounts, account]);
   removeStoredValue(SIGNUP_VERIFICATION_STORAGE_KEY);
