@@ -1,0 +1,142 @@
+.auth-child-information__heading {
+  display: flex;
+  width: 100%;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.auth-child-information__title {
+  flex-shrink: 0;
+}
+
+.auth-child-information__notice {
+  margin: 0;
+  color: #666666;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.auth-child-information__fields {
+  display: grid;
+  gap: 52px;
+  margin-top: 24px;
+}
+
+.auth-screen .auth-child-row {
+  grid-template-columns: 60px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px 14px;
+}
+
+.auth-child-row > .ui-field-label {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.auth-screen .auth-child-row > .ui-input-shell,
+.auth-screen .auth-child-row > .ui-select-shell {
+  grid-column: 2;
+  grid-row: 1;
+  min-height: 40px;
+  border-radius: 6px;
+  padding: 0 20px;
+}
+
+.auth-child-row > .ui-field-message {
+  grid-column: 2;
+}
+
+.auth-school-search {
+  position: relative;
+  min-width: 0;
+}
+
+.auth-school-search__results {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 74px;
+  overflow: auto;
+  max-height: 240px;
+  border: 1px solid #a2a2a2;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 6px 16px rgb(0 0 0 / 10%);
+}
+
+.auth-school-search__results ul {
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+}
+
+.auth-school-search__results li {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-radius: 4px;
+  padding: 10px 12px;
+  color: #1c1a1a;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.auth-school-search__results li:hover,
+.auth-school-search__results li.is-active,
+.auth-school-search__results li[aria-selected='true'] {
+  background: #ebeffb;
+}
+
+.auth-school-search__results small {
+  flex-shrink: 0;
+  color: #666666;
+  font-size: 12px;
+}
+
+.auth-school-search__results p {
+  margin: 0;
+  padding: 12px;
+  color: #666666;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+@media (max-width: 600px) {
+  .auth-child-information__heading {
+    gap: 8px;
+  }
+
+  .auth-child-information__notice {
+    font-size: 12px;
+  }
+
+  .auth-child-information__fields {
+    gap: 42px;
+  }
+
+  .auth-screen .auth-child-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+  }
+
+  .auth-screen .auth-child-row > .ui-input-shell,
+  .auth-screen .auth-child-row > .ui-select-shell {
+    grid-column: 1;
+    grid-row: 2;
+    min-height: 52px;
+    padding: 0 12px;
+  }
+
+  .auth-child-row > .ui-field-message {
+    grid-column: 1;
+  }
+
+  .auth-school-search__results {
+    left: 0;
+  }
+}

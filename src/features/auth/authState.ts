@@ -1,4 +1,5 @@
 import type { User, UserRole } from '../../shared/types';
+import type { ChildSignupInfo } from './childSignup';
 
 export type LoginInput = {
   email: string;
@@ -9,10 +10,11 @@ export type SignupRole = Exclude<UserRole, 'ADMIN'>;
 
 export type SignupInput = {
   email: string;
-  name: string;
   password: string;
-  role: SignupRole;
-};
+} & (
+  | { role: 'PARENT'; child: ChildSignupInfo; name?: never }
+  | { role: 'TEACHER'; name: string; child?: never }
+);
 
 export type AuthContextValue = {
   user: User | null;
