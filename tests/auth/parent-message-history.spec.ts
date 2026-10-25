@@ -248,6 +248,58 @@ test('교사 화면이 후속 문의를 반영하기 전에 초안을 수정해�
   expect(thread.conversation).toHaveLength(2);
 });
 
+test('교사 답변 두 탭을 새로고침 후 복원하고 선택한 답변을 학부모에게 전송한다', async ({ page }, testInfo) => {
+  await login(page, 'TEACHER');
+  await seed(page);
+  await page.goto('/teacher/messages/before/response');
+  const aiTab = page.getByRole('tab', { name: 'AI 초안 활용', exact: true });
+  const manualTab = page.getByRole('tab', { name: '직접 작성', exact: true });
+  const editor = page.getByLabel('선생님 답변', { exact: true });
+  await expect(editor).toHaveValue(/현장체험학습 준비물/);
+  await editor.fill('준비물 관련 AI 초안을 수정했습니다.');
+  await page.getByRole('button', { name: '임시저장', exact: true }).click();
+  await manualTab.click();
+  await expect(editor).toHaveValue('');
+  await editor.fill('도시락과 물은 안내장에 따라 준비해 주세요.');
+  await page.getByRole('button', { name: '임시저장', exact: true }).click();
+  await page.reload();
+  await expect(aiTab).toHaveAttribute('aria-selected', 'true');
+  await expect(editor).toHaveValue('준비물 관련 AI 초안을 수정했습니다.');
+  await expect(page.locator('.board-reply-compose-header')).toContainText('마지막 임시저장');
+  await manualTab.click();
+  await expect(editor).toHaveValue('도시락과 물은 안내장에 따라 준비해 주세요.');
+  await expect(page.locator('.board-reply-compose-header')).toContainText('마지막 임시저장');
+  await page.getByRole('button', { name: '초기화', exact: true }).click();
+  await page.getByRole('button', { name: '메시지 상세로 돌아가기', exact: true }).click();
+  await page.getByRole('button', { name: '답변 이어서 작성하기', exact: true }).click();
+  await expect(aiTab).toHaveAttribute('aria-selected', 'true');
+  await expect(editor).toHaveValue('준비물 관련 AI 초안을 수정했습니다.');
+  await page.locator('.board-reply-compose-panel').screenshot({ path: testInfo.outputPath('teacher-reply-ai-tab.png') });
+  await page.getByRole('button', { name: '초기화', exact: true }).click();
+  await page.reload();
+  await expect(editor).toHaveValue('');
+  await expect(page.getByRole('button', { name: /^AI (다시 생성|답변 생성)$/ })).toHaveCount(0);
+  await manualTab.click();
+  await expect(editor).toHaveValue('');
+  await editor.fill('도시락과 물은 안내장에 따라 준비해 주세요.');
+  await page.locator('.board-reply-compose-panel').screenshot({ path: testInfo.outputPath('teacher-reply-manual-tab.png') });
+  await page.getByRole('button', { name: '검토 후 전송', exact: true }).click();
+  const confirm = page.getByRole('dialog', { name: '답변 전 확인', exact: true });
+  await expect(confirm).toContainText('도시락과 물은 안내장에 따라 준비해 주세요.');
+  await expect(confirm).not.toContainText('준비물 관련 AI 초안을 수정했습니다.');
+  await confirm.getByRole('checkbox').check();
+  await confirm.getByRole('button', { name: '최종 전송', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: '답변 전송 완료', exact: true })).toBeVisible();
+  const messages = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), sentKey);
+  const thread = messages.find((entry: { messageId: string }) => entry.messageId === 'before');
+  expect(thread.conversation.filter((entry: { authorRole: string }) => entry.authorRole === 'teacher')).toEqual([
+    expect.objectContaining({ body: '도시락과 물은 안내장에 따라 준비해 주세요.', deliveryStatus: 'SENT_TO_PARENT' }),
+  ]);
+  expect(thread.teacherDraftText).toBe('');
+  expect(thread.teacherReplyDrafts).toBeUndefined();
+  expect(thread.activityLogs.filter((entry: { action: string }) => entry.action === '답변 초안 생성')).toHaveLength(1);
+});
+
 test('새 주제는 별도 문의를 만들고 기존 문의의 완료 상태를 유지한다', async ({ page }) => {
   await login(page);
   await seed(page);
@@ -335,6 +387,31 @@ test('저장소 접근이 막혀도 교사 문의 화면을 표시한다', async
   });
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(page.locator('.board-thread-copy').first()).toBeVisible();
+});
+
+test('교사 대화 날짜를 한국 날짜별로 나누고 새로고침 후에도 시간만 표시한다', async ({ page }) => {
+  await login(page, 'TEACHER');
+  await seed(page);
+  await page.evaluate((key) => {
+    const messages = JSON.parse(localStorage.getItem(key)!);
+    const active = messages.find((entry: { messageId: string }) => entry.messageId === 'active');
+    active.sentAt = '2026-08-23T14:50:00Z';
+    active.conversation = [
+      { id: 'first', authorRole: 'parent', body: '상담을 요청드립니다.', sentAt: active.sentAt },
+      { id: 'after-midnight', authorRole: 'teacher', body: '상담 가능 시간을 확인하겠습니다.', sentAt: '2026-08-23T15:10:00Z' },
+      { id: 'same-day', authorRole: 'parent', body: '확인 부탁드립니다.', sentAt: '2026-08-24T09:20:00+09:00' },
+      { id: 'later', authorRole: 'teacher', body: '확인한 내용을 안내드립니다.', sentAt: '2026-10-25T05:12:00Z' },
+    ];
+    localStorage.setItem(key, JSON.stringify(messages));
+  }, sentKey);
+  await page.goto('/teacher/messages/active');
+  const dates = ['2026년 8월 23일 일요일', '2026년 8월 24일 월요일', '2026년 10월 25일 일요일'];
+  const times = ['오후 11:50', '오전 12:10', '오전 09:20', '오후 02:12'];
+  await expect(page.locator('.board-date-chip')).toHaveText(dates);
+  await expect(page.locator('.board-reply time')).toHaveText(times);
+  await page.reload();
+  await expect(page.locator('.board-date-chip')).toHaveText(dates);
+  await expect(page.locator('.board-reply time')).toHaveText(times);
 });
 
 test('긴 메시지에서도 교사 화면의 메시지 시간이 잘리지 않는다', async ({ page }) => {

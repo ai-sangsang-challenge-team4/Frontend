@@ -27,6 +27,8 @@ test.beforeEach(async ({ page }) => {
 
 test('High는 고정 문장을 유지하고 선택한 안내의 빈칸만 검사한다', async ({ page }) => {
   await page.goto('/teacher/messages/thread-004/response');
+  await expect(page.getByRole('tab', { name: 'AI 초안 활용', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('tab', { name: '직접 작성', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: '공식 템플릿 적용', exact: true }).click();
   const body = page.getByRole('group', { name: '답장 예시 편집', exact: true });
   await expect(body.locator('textarea')).toHaveCount(1);
@@ -88,6 +90,7 @@ test('High에서 맞는 예시가 없으면 AI 생성 없이 직접 작성한다
   await expect(page.locator('.board-reply-ai-note')).toContainText('맞는 공식 템플릿이 없습니다');
   await expect(page.getByRole('button', { name: 'AI 답변 생성', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: '공식 템플릿 적용', exact: true })).toBeDisabled();
+  await page.getByRole('tab', { name: '직접 작성', exact: true }).click();
   const editor = page.locator('#board-reply-composer-input');
   await editor.fill('학교 생활을 확인한 뒤 다시 안내드리겠습니다.');
   await confirmSend(page);
@@ -123,14 +126,32 @@ test('Low 메시지는 출처가 있는 AI 초안을 수정해 한 번만 전송
   await expect(page.getByText(/현장체험학습 운영 계획 v0\.9 · 학교 A · 제5조/)).toBeVisible();
   await expect(page.getByText(/구버전 문서일 수 있어/)).toBeVisible();
 
-  await page.getByRole('button', { name: 'AI 답변 생성', exact: true }).click();
   const editor = page.locator('#board-reply-composer-input');
+  await expect(page.getByRole('tab', { name: 'AI 초안 활용', exact: true })).toHaveAttribute('aria-selected', 'true');
   await expect(editor).toHaveValue(/현장체험학습 준비물/);
   await editor.fill('안녕하세요. 준비물은 안내장 기준으로 챙겨 주시면 됩니다. 감사합니다.');
   await confirmSend(page);
 
   await expect(page.locator('.board-reply-teacher')).toHaveCount(1);
   await expect(page.getByText('안녕하세요. 준비물은 안내장 기준으로 챙겨 주시면 됩니다. 감사합니다.')).toHaveCount(1);
+});
+
+test('답변 전송 시 날짜는 날짜 칩에 표시하고 메시지 옆에는 시간만 표시한다', async ({ page }, testInfo) => {
+  await page.clock.setFixedTime(new Date('2026-10-25T14:12:00+09:00'));
+  await page.goto('/teacher/messages/thread-002/response');
+  await page.getByLabel('선생님 답변', { exact: true }).fill('학생 상황을 확인하고 다시 안내드리겠습니다.');
+  await confirmSend(page);
+
+  await expect(page.locator('.board-date-chip')).toHaveText([
+    '2026년 8월 23일 일요일',
+    '2026년 10월 25일 일요일',
+  ]);
+  const reply = page.locator('.board-reply-teacher').last();
+  await expect(reply.locator('time')).toHaveText('오후 02:12');
+  await expect(reply.locator('time')).toHaveAttribute('datetime', '2026-10-25T05:12:00.000Z');
+  expect(await page.locator('.board-date-chip').last().evaluate((chip) => chip.nextElementSibling?.textContent))
+    .toContain('학생 상황을 확인하고 다시 안내드리겠습니다.');
+  await page.locator('.board-conversation').screenshot({ path: testInfo.outputPath('teacher-reply-date-chip.png') });
 });
 
 test('규정 자료에 없는 문의는 AI 초안을 만들지 않고 직접 작성만 허용한다', async ({ page }) => {
@@ -144,8 +165,10 @@ test('규정 자료에 없는 문의는 AI 초안을 만들지 않고 직접 작
     }]));
   });
   await page.goto('/teacher/messages/lunch/response');
-  await expect(page.getByRole('button', { name: 'AI 답변 생성', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'AI 답변 생성', exact: true })).toHaveCount(0);
   await expect(page.getByText(/관련 규정이 등록된 자료에 없어/).first()).toBeVisible();
+  await expect(page.locator('#board-reply-composer-input')).toBeDisabled();
+  await page.getByRole('tab', { name: '직접 작성', exact: true }).click();
 
   await page.locator('#board-reply-composer-input').fill('다음 주 급식 메뉴는 학교 홈페이지에서 확인하실 수 있습니다.');
   await confirmSend(page);
@@ -187,6 +210,7 @@ test('Emergency 잠금은 위험도 검토 후에도 유지되고 답변 생성�
   await expect(page.getByRole('textbox', { name: '선생님 답변', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'AI 답변 생성', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: '검토 후 전송', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('tablist', { name: '답변 작성 방식', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: '절차 안내 보기', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '절차 안내 보기', exact: true }).click();
   await expect(page).toHaveURL(/\/teacher\/guide\?post=guide-emergency-official-procedure$/);
@@ -197,4 +221,94 @@ test('Emergency 잠금은 위험도 검토 후에도 유지되고 답변 생성�
   await page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name: '대화', exact: true }).click();
   await expect(page.getByText('지정 검토자가 잠금을 해제하기 전까지 답변 생성과 전송이 차단됩니다.')).toBeVisible();
   await expect(page.getByRole('button', { name: /답변 (작성하러 가기|이어서 작성하기)/ })).toHaveCount(0);
+});
+
+test('탭마다 작성 내용을 유지하고 선택한 직접 작성 답변만 검토 후 전송한다', async ({ page }) => {
+  await page.goto('/teacher/messages/thread-003/response');
+  const aiTab = page.getByRole('tab', { name: 'AI 초안 활용', exact: true });
+  const manualTab = page.getByRole('tab', { name: '직접 작성', exact: true });
+  const editor = page.getByRole('textbox', { name: '선생님 답변', exact: true });
+  await expect(aiTab).toHaveAttribute('aria-selected', 'true');
+  await expect(editor).toHaveValue(/현장체험학습 준비물/);
+  const aiTabBox = (await aiTab.boundingBox())!;
+  const manualTabBox = (await manualTab.boundingBox())!;
+  expect(Math.abs(aiTabBox.y - manualTabBox.y)).toBeLessThan(1);
+  expect(manualTabBox.x).toBeGreaterThan(aiTabBox.x);
+  const hintBox = (await page.locator('.board-reply-draft-hint').boundingBox())!;
+  const noteBox = (await page.locator('.board-reply-ai-note').boundingBox())!;
+  if (page.viewportSize()!.width > 980) {
+    expect(Math.abs(hintBox.y - noteBox.y)).toBeLessThan(1);
+    expect(hintBox.x).toBeGreaterThan(noteBox.x);
+  } else {
+    expect(noteBox.y).toBeGreaterThanOrEqual(hintBox.y + hintBox.height);
+  }
+  await editor.fill('AI 초안을 수정한 답변입니다.');
+  await manualTab.click();
+  await expect(editor).toHaveValue('');
+  await expect(page.getByRole('button', { name: '검토 후 전송', exact: true })).toBeDisabled();
+  await editor.fill('선생님이 직접 작성한 답변입니다.');
+  await manualTab.press('ArrowLeft');
+  await expect(aiTab).toBeFocused();
+  await expect(editor).toHaveValue('AI 초안을 수정한 답변입니다.');
+  await aiTab.press('ArrowRight');
+  await expect(manualTab).toBeFocused();
+  await expect(editor).toHaveValue('선생님이 직접 작성한 답변입니다.');
+  await page.getByRole('button', { name: '검토 후 전송', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '답변 전 확인', exact: true });
+  await expect(dialog).toContainText('선생님이 직접 작성한 답변입니다.');
+  await expect(dialog).not.toContainText('AI 초안을 수정한 답변입니다.');
+  await dialog.getByRole('button', { name: '취소', exact: true }).click();
+  await confirmSend(page);
+  await expect(page.locator('.board-reply-teacher')).toHaveCount(1);
+  await expect(page.locator('.board-reply-teacher')).toContainText('선생님이 직접 작성한 답변입니다.');
+  await page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name: '처리 기록', exact: true }).click();
+  await expect(page.getByText(/작성 방식: 직접 작성/)).toBeVisible();
+});
+
+test('임시저장·초기화는 현재 탭에만 적용하고 AI 초안은 한 번만 생성한다', async ({ page }) => {
+  await page.goto('/teacher/messages/thread-003/response');
+  const aiTab = page.getByRole('tab', { name: 'AI 초안 활용', exact: true });
+  const manualTab = page.getByRole('tab', { name: '직접 작성', exact: true });
+  const editor = page.locator('#board-reply-composer-input');
+  const status = page.locator('.board-reply-compose-header');
+  const aiButtons = page.getByRole('button', { name: /^AI (다시 생성|답변 생성)$/ });
+  await expect(editor).toHaveValue(/현장체험학습 준비물/);
+  await expect(aiButtons).toHaveCount(0);
+  await editor.fill('수정한 AI 답변');
+  await page.getByRole('button', { name: '임시저장', exact: true }).click();
+  await expect(status).toContainText('마지막 임시저장');
+  await manualTab.click();
+  await expect(status).not.toContainText('마지막 임시저장');
+  await editor.fill('직접 작성한 답변');
+  await aiTab.click();
+  await expect(status).toContainText('마지막 임시저장');
+  await page.getByRole('button', { name: '초기화', exact: true }).click();
+  await expect(editor).toHaveValue('');
+  await manualTab.click();
+  await expect(editor).toHaveValue('직접 작성한 답변');
+  await aiTab.click();
+  await expect(editor).toHaveValue('');
+  await expect(aiButtons).toHaveCount(0);
+  await page.getByRole('button', { name: '메시지 상세로 돌아가기', exact: true }).click();
+  await page.getByRole('button', { name: '답변 이어서 작성하기', exact: true }).click();
+  await expect(editor).toHaveValue('');
+  await expect(aiButtons).toHaveCount(0);
+  await manualTab.click();
+  await expect(editor).toHaveValue('직접 작성한 답변');
+  await page.getByRole('button', { name: '초기화', exact: true }).click();
+  await expect(editor).toHaveValue('');
+  await aiTab.click();
+  await expect(editor).toHaveValue('');
+  await page.getByRole('button', { name: '메시지 상세로 돌아가기', exact: true }).click();
+  await page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name: '처리 기록', exact: true }).click();
+  await expect(page.getByText('답변 초안 생성', { exact: true })).toHaveCount(1);
+});
+
+test('기존 직접 작성 초안을 보존하고 주의 단계에서도 AI 초안을 기본으로 표시한다', async ({ page }) => {
+  await page.goto('/teacher/messages/thread-002/response');
+  const editor = page.locator('#board-reply-composer-input');
+  await expect(page.getByRole('tab', { name: 'AI 초안 활용', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(editor).toHaveValue(/박서준 학부모님/);
+  await page.getByRole('tab', { name: '직접 작성', exact: true }).click();
+  await expect(editor).toHaveValue('안녕하세요, 학부모님. 말씀해 주신 상황을 확인한 뒤 오늘 하교 전까지 안내드리겠습니다.');
 });

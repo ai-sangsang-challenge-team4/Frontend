@@ -1,13 +1,15 @@
 import type { ReactNode } from 'react';
+import { Tabs } from '../../../shared/components/ui';
+import type { ReplyDraftTab } from '../types';
 import {
   ResetIcon,
   SaveIcon,
   SendIcon,
-  SparkleIcon,
   WritingGuideIcon,
 } from './MessageIcons';
 
 type ReplyEditorProps = {
+  activeDraftTab: ReplyDraftTab;
   aiNoticeId: string;
   assistButtonDisabled: boolean;
   assistButtonLabel: string;
@@ -15,10 +17,13 @@ type ReplyEditorProps = {
   draftText: string;
   hasDraft: boolean;
   isLocked: boolean;
+  isDraftInputDisabled: boolean;
+  isManualTabDisabled: boolean;
   isOfficialTemplateAvailable: boolean;
   lockNoticeId: string;
   onAssist: () => void;
   onDraftChange: (value: string) => void;
+  onDraftTabChange: (tab: ReplyDraftTab) => void;
   onDraftReset: () => void;
   onDraftSave: () => void;
   onSubmit: () => void;
@@ -29,6 +34,7 @@ type ReplyEditorProps = {
 };
 
 export function ReplyEditor({
+  activeDraftTab,
   aiNoticeId,
   assistButtonDisabled,
   assistButtonLabel,
@@ -36,10 +42,13 @@ export function ReplyEditor({
   draftText,
   hasDraft,
   isLocked,
+  isDraftInputDisabled,
+  isManualTabDisabled,
   isOfficialTemplateAvailable,
   lockNoticeId,
   onAssist,
   onDraftChange,
+  onDraftTabChange,
   onDraftReset,
   onDraftSave,
   onSubmit,
@@ -63,26 +72,48 @@ export function ReplyEditor({
     );
   }
 
+  const draftEditor = templateEditor ?? <textarea
+    aria-describedby={replyTextareaDescription || undefined}
+    disabled={isDraftInputDisabled}
+    id="board-reply-composer-input"
+    onChange={(event) => onDraftChange(event.target.value)}
+    placeholder={isDraftInputDisabled
+      ? 'AI 초안을 제공할 수 없습니다. 직접 작성 탭에서 답변을 작성해 주세요.'
+      : '학부모에게 전달할 답변을 작성하세요.'}
+    rows={11}
+    value={draftText}
+  />;
+
   return (
     <section className="board-reply-compose-panel">
       <div className="board-reply-compose-header">
         <label htmlFor={templateEditor ? undefined : 'board-reply-composer-input'}>선생님 답변</label>
         <span aria-live="polite">{draftStatusText}</span>
       </div>
-      {templateEditor ?? <textarea
-        aria-describedby={replyTextareaDescription || undefined}
-        disabled={isLocked}
-        id="board-reply-composer-input"
-        onChange={(event) => onDraftChange(event.target.value)}
-        placeholder="학부모에게 전달할 답변을 작성하세요."
-        rows={11}
-        value={draftText}
-      />}
-      <p className="board-reply-ai-note" id={aiNoticeId}>
-        {stageNotice}
-        <br />
-        답변은 자동 전송되지 않습니다. 내용을 확인하고 필요한 수정을 마친 뒤 전송해 주세요.
-      </p>
+      <Tabs
+        ariaLabel="답변 작성 방식"
+        className="board-reply-draft-tabs"
+        items={[
+          { value: 'ai', label: 'AI 초안 활용', content: draftEditor },
+          { value: 'manual', label: '직접 작성', disabled: isManualTabDisabled, content: draftEditor },
+        ]}
+        onValueChange={(value) => onDraftTabChange(value as ReplyDraftTab)}
+        value={activeDraftTab}
+      />
+      <div className="board-reply-notices">
+        <p className="board-reply-ai-note" id={aiNoticeId}>
+          {stageNotice}
+          <br />
+          답변은 자동 전송되지 않습니다. 내용을 확인하고 필요한 수정을 마친 뒤 전송해 주세요.
+        </p>
+        {!templateEditor && !isDraftInputDisabled ? (
+          <p className="board-reply-draft-hint">
+            {activeDraftTab === 'ai'
+              ? 'AI 초안을 바탕으로 자유롭게 수정해 보세요.'
+              : '학부모에게 전달할 답변을 직접 작성해 주세요.'}
+          </p>
+        ) : null}
+      </div>
       <div className="board-reply-bottom-actions">
         <button
           className="board-composer-action-button"
@@ -94,15 +125,15 @@ export function ReplyEditor({
           <span>임시저장</span>
         </button>
         <div className="board-composer-action-group">
-          <button
+          {activeDraftTab === 'ai' && isOfficialTemplateAvailable ? <button
             className="board-composer-action-button"
             disabled={assistButtonDisabled}
             onClick={onAssist}
             type="button"
           >
-            {isOfficialTemplateAvailable ? <WritingGuideIcon /> : <SparkleIcon />}
+            <WritingGuideIcon />
             <span>{assistButtonLabel}</span>
-          </button>
+          </button> : null}
           <button
             className="board-composer-action-button"
             disabled={isLocked || !hasDraft}

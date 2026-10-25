@@ -88,6 +88,16 @@
     width: 100%;
   }
 
+  .board-reply-notices {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .board-reply-draft-hint {
+    flex-basis: auto;
+    order: -1;
+  }
+
   .board-reply-check-content {
     grid-template-columns: 1fr;
     row-gap: 22px;
