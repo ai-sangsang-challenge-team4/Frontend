@@ -5,12 +5,9 @@ import {
   isValidEmail,
   type AuthApi,
   type AuthSession,
-  type ResetPasswordInput,
   type VerificationCodeResult,
 } from './authApiContract';
 import {
-  clearAuthSession,
-  readAuthSession,
   readStoredJson,
   removeStoredValue,
   writeStoredJson,
@@ -28,7 +25,6 @@ type MockSettings = {
 const ACCOUNT_STORAGE_KEY = 'teacher-hub.auth-accounts';
 const ISSUED_SESSION_STORAGE_KEY = 'teacher-hub.auth-mock-sessions';
 const SIGNUP_VERIFICATION_STORAGE_KEY = 'teacher-hub.auth-signup-code';
-const PASSWORD_RESET_STORAGE_KEY = 'teacher-hub.auth-password-reset-code';
 const SETTINGS_STORAGE_KEY = 'teacher-hub.auth-mock-settings';
 const MOCK_VERIFICATION_CODE = '123456';
 const DEFAULT_SESSION_DURATION_MS = 30 * 60 * 1000;
@@ -140,45 +136,6 @@ async function verifyEmailCode(email: string, code: string) {
   return true;
 }
 
-async function sendPasswordResetVerificationCode(emailInput: string) {
-  await waitForRequest('sendPasswordResetVerificationCode');
-  assertValidEmail(emailInput);
-  const email = normalizeEmail(emailInput);
-  if (!readAccounts().some((entry) => normalizeEmail(entry.email) === email)) {
-    throw new AuthApiError({ code: 'EMAIL_NOT_FOUND', message: '가입된 이메일을 찾을 수 없습니다.', status: 404 });
-  }
-  return persistVerification(PASSWORD_RESET_STORAGE_KEY, email);
-}
-
-async function resetPassword(input: ResetPasswordInput) {
-  await waitForRequest('resetPassword');
-  assertValidPassword(input.newPassword);
-  assertValidVerification(PASSWORD_RESET_STORAGE_KEY, input.email, input.code);
-  const accounts = readAccounts();
-  const account = accounts.find((entry) => normalizeEmail(entry.email) === normalizeEmail(input.email));
-  if (!account) {
-    throw new AuthApiError({ code: 'EMAIL_NOT_FOUND', message: '가입된 이메일을 찾을 수 없습니다.', status: 404 });
-  }
-  writeStoredJson(ACCOUNT_STORAGE_KEY,
-    accounts.map((entry) => entry.userId === account.userId ? { ...entry, password: input.newPassword } : entry),
-  );
-  const issuedSessions = readIssuedSessions();
-  const currentSession = readAuthSession();
-  writeStoredJson(ISSUED_SESSION_STORAGE_KEY,
-    issuedSessions.filter((entry) => entry.userId !== account.userId),
-  );
-  if (
-    currentSession &&
-    issuedSessions.some((entry) =>
-      entry.userId === account.userId && entry.accessToken === currentSession.accessToken,
-    )
-  ) {
-    clearAuthSession();
-  }
-  removeStoredValue(PASSWORD_RESET_STORAGE_KEY);
-  return true;
-}
-
 export const mockAuthApi: AuthApi = {
   login,
   signup,
@@ -186,8 +143,6 @@ export const mockAuthApi: AuthApi = {
   logout,
   sendEmailVerificationCode,
   verifyEmailCode,
-  sendPasswordResetVerificationCode,
-  resetPassword,
 };
 
 function readAccounts(): AuthAccount[] {

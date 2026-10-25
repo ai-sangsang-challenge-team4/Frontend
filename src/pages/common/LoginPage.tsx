@@ -171,9 +171,8 @@ export function LoginPage() {
           </div>
         </form>
 
-        <nav className="auth-account-links" aria-label="계정 도움말">
-          <Link to="/forgot-password">비밀번호 찾기</Link>
-          <span aria-hidden="true">|</span>
+        <nav className="auth-account-links" aria-label="계정 이동">
+          <span>아직 계정이 없으신가요?</span>
           <Link to={selectedRole === 'ADMIN' ? '/signup' : `/signup?role=${selectedRole}`}>
             회원가입
           </Link>

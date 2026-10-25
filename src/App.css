@@ -378,17 +378,9 @@
   margin-top: 72px;
 }
 
-.auth-form--reset {
-  margin-top: 72px;
-}
-
 .auth-field-list {
   display: grid;
   gap: 52px;
-}
-
-.auth-field-list--compact {
-  gap: 36px;
 }
 
 .auth-screen .ui-field {
@@ -679,11 +671,6 @@
   font-weight: 600;
 }
 
-.auth-submit-button--wide.ui-button {
-  width: min(100%, 260px);
-  font-size: 18px;
-}
-
 .auth-account-links {
   display: flex;
   align-items: center;
@@ -703,30 +690,6 @@
 
 .auth-account-links a:hover {
   color: #3b5bdb;
-}
-
-.auth-account-links span[aria-hidden="true"] {
-  color: #a2a2a2;
-}
-
-.auth-screen--result {
-  display: grid;
-  place-items: center;
-}
-
-.auth-result {
-  display: grid;
-  justify-items: center;
-  gap: 80px;
-  text-align: center;
-}
-
-.auth-result h1 {
-  margin: 0;
-  color: #000000;
-  font-size: clamp(3rem, 7vw, 5rem);
-  font-weight: 700;
-  line-height: 1.6;
 }
 
 .topbar__button.ui-button {
@@ -1491,8 +1454,7 @@
   }
 
   .auth-form,
-  .auth-form--signup,
-  .auth-form--reset {
+  .auth-form--signup {
     margin-top: 48px;
   }
 
@@ -1520,18 +1482,10 @@
     font-size: 18px;
   }
 
-  .auth-submit-button--wide.ui-button {
-    width: 100%;
-  }
-
   .auth-account-links {
     gap: 20px;
     margin-top: 60px;
     font-size: 14px;
-  }
-
-  .auth-result {
-    gap: 48px;
   }
 }
 

@@ -11,8 +11,6 @@ export const {
   logout,
   sendEmailVerificationCode,
   verifyEmailCode,
-  sendPasswordResetVerificationCode,
-  resetPassword,
 } = api;
 
 export {
@@ -25,7 +23,6 @@ export type {
   AuthApi,
   AuthSession,
   CurrentUserResult,
-  ResetPasswordInput,
   VerificationCodeResult,
 } from './authApiContract';
 export {

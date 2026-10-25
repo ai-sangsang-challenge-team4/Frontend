@@ -4,7 +4,6 @@ import type { AuthSession } from '../../src/features/auth/api/authApiContract';
 const SESSION_KEY = 'teacher-hub.auth-session';
 const ISSUED_KEY = 'teacher-hub.auth-mock-sessions';
 const SETTINGS_KEY = 'teacher-hub.auth-mock-settings';
-const ACCOUNTS_KEY = 'teacher-hub.auth-accounts';
 
 const accounts = [
   { role: 'PARENT', email: 'parent@example.com', password: 'password123', home: '/parent/messages/new' },
@@ -77,17 +76,6 @@ async function requestVerification(page: Page, email: string) {
   await page.locator('input[name="email"]').fill(email);
   await page.getByRole('button', { name: '인증번호 받기', exact: true }).click();
   await expect(page.locator('input[name="verificationCode"]')).toBeEnabled();
-}
-
-async function completePasswordReset(page: Page, email: string, newPassword: string) {
-  await page.goto('/forgot-password');
-  await page.locator('input[name="email"]').fill(email);
-  await page.getByRole('button', { name: '인증코드 전송하기', exact: true }).click();
-  await page.locator('input[name="verificationCode"]').fill('123456');
-  await page.locator('input[name="password"]').fill(newPassword);
-  await page.locator('input[name="passwordConfirmation"]').fill(newPassword);
-  await page.getByRole('button', { name: '확인', exact: true }).click();
-  await expect(page.getByRole('heading', { name: /비밀번호 변경이/ })).toBeVisible();
 }
 
 for (const account of accounts) {
@@ -414,37 +402,4 @@ test('이메일 변경 후 이전 인증번호 요청 응답을 적용하지 않
   await expect.poll(() => page.evaluate(() => localStorage.getItem('teacher-hub.auth-signup-code'))).not.toBeNull();
   await expect(page.locator('input[name="verificationCode"]')).toBeDisabled();
   await expect(page.locator('.auth-dev-code')).toHaveCount(0);
-});
-
-test('비밀번호 재설정 후 새 비밀번호로 로그인한다', async ({ page }) => {
-  await completePasswordReset(page, accounts[0].email, 'changedpassword123');
-  await page.getByRole('button', { name: '로그인하기', exact: true }).click();
-  await fillLogin(page, accounts[0].email, accounts[0].password);
-  await page.getByRole('button', { name: '로그인', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('이메일 또는 비밀번호가 올바르지 않습니다.');
-  await page.locator('input[name="password"]').fill('changedpassword123');
-  await page.getByRole('button', { name: '로그인', exact: true }).click();
-  await expect(page).toHaveURL(/\/parent\/messages\/new$/);
-  const storedAccounts = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? '[]'), ACCOUNTS_KEY);
-  expect(storedAccounts.filter((entry: { email: string }) => entry.email === accounts[0].email)).toHaveLength(1);
-});
-
-test('현재 세션과 다른 계정의 비밀번호 재설정은 로그인 상태를 보존한다', async ({ page }) => {
-  await loginAs(page, accounts[1]);
-  await completePasswordReset(page, accounts[0].email, 'parentnewpass1');
-  expect((await readSession(page))?.user.role).toBe('TEACHER');
-  await page.goto('/teacher/messages');
-  await expect(page).toHaveURL(/\/teacher\/messages$/);
-});
-
-test('현재 세션 계정의 비밀번호 재설정은 다른 탭의 인증 상태를 초기화한다', async ({ page, context }) => {
-  await loginAs(page, accounts[0]);
-  const otherTab = await context.newPage();
-  await otherTab.goto('/parent');
-  await expect(otherTab.getByRole('heading', { name: '새 문의 작성', exact: true })).toBeVisible();
-
-  await completePasswordReset(page, accounts[0].email, 'parentnewpass2');
-
-  await expect(otherTab).toHaveURL(/\/login$/);
-  expect(await readSession(otherTab)).toBeNull();
 });

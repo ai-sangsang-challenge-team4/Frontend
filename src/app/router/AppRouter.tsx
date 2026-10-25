@@ -5,7 +5,6 @@ import { PublicLayout } from '../../layouts/PublicLayout';
 import { TeacherLayout } from '../../layouts/TeacherLayout';
 import { SharedMessageDetailPage } from '../../pages/admin/SharedMessageDetailPage';
 import { SharedMessageListPage } from '../../pages/admin/SharedMessageListPage';
-import { ForgotPasswordPage } from '../../pages/common/ForgotPasswordPage';
 import { LandingPage } from '../../pages/common/LandingPage';
 import { LoginPage } from '../../pages/common/LoginPage';
 import { NotFoundPage } from '../../pages/common/NotFoundPage';
@@ -28,7 +27,6 @@ export function AppRouter() {
       <Route element={<PublicLayout />}>
         <Route index element={<LandingPage />} />
         <Route path="login" element={<LoginPage />} />
-        <Route path="forgot-password" element={<ForgotPasswordPage />} />
         <Route path="signup" element={<SignupPage />} />
       </Route>
 

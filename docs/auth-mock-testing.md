@@ -37,7 +37,6 @@ PLAYWRIGHT_BASE_URL=http://127.0.0.1:5175 npm run test:auth
 - 사용자 조회 503 응답 시 세션 보존 및 재시도
 - 다른 탭의 로그인·로그아웃 반영, 늦은 조회 응답 무시
 - 인증번호 오류·만료·재전송 및 이메일 변경 중 요청 처리
-- 비밀번호 재설정 후 새 비밀번호 로그인
 
 실패 시 `test-results/`에 화면 캡처와 trace가 남습니다. HTML 결과는 `npx playwright show-report`로 확인할 수 있습니다.
 
@@ -49,7 +48,7 @@ PLAYWRIGHT_BASE_URL=http://127.0.0.1:5175 npm run test:auth
 | TEACHER | teacher@example.com | password123 | /teacher → /teacher/messages |
 | ADMIN | admin@teacherhub.local | admin1234 | /admin |
 
-회원가입과 비밀번호 재설정 인증번호는 `123456`입니다. ADMIN은 회원가입 선택지에 포함하지 않습니다. 가입한 계정은 같은 브라우저와 주소에서 다시 로그인할 수 있습니다.
+회원가입 인증번호는 `123456`입니다. ADMIN은 회원가입 선택지에 포함하지 않습니다. 가입한 계정은 같은 브라우저와 주소에서 다시 로그인할 수 있습니다.
 
 ## 지연·만료·실패 재현
 
@@ -93,7 +92,6 @@ for (const key of [
   'teacher-hub.auth-session',
   'teacher-hub.auth-mock-sessions',
   'teacher-hub.auth-signup-code',
-  'teacher-hub.auth-password-reset-code',
   'teacher-hub.auth-mock-settings',
 ]) {
   localStorage.removeItem(key);

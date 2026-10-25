@@ -20,7 +20,7 @@ test('모바일 홈은 햄버거 옆 로그인 버튼으로 바로 이동할 수
 });
 
 test('공개 헤더는 모바일 메뉴와 데스크톱 버튼을 화면 크기에 맞게 표시한다', async ({ page }) => {
-  for (const path of ['/login', '/signup', '/forgot-password']) {
+  for (const path of ['/login', '/signup']) {
     await page.goto(path);
     const header = page.locator('.topbar');
     const toggle = header.getByRole('button', { name: '메뉴 더보기', exact: true });
