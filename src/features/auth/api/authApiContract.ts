@@ -10,7 +10,6 @@ export type AuthSession = {
 
 export type CurrentUserResult = Pick<AuthSession, 'user' | 'expiresAt'>;
 export type VerificationCodeResult = { code: string; expiresAt: number };
-export type ResetPasswordInput = { code: string; email: string; newPassword: string };
 
 export type AuthApi = {
   login: (input: LoginInput) => Promise<AuthSession>;
@@ -19,8 +18,6 @@ export type AuthApi = {
   logout: (accessToken: string) => Promise<void>;
   sendEmailVerificationCode: (email: string) => Promise<VerificationCodeResult>;
   verifyEmailCode: (email: string, code: string) => Promise<boolean>;
-  sendPasswordResetVerificationCode: (email: string) => Promise<VerificationCodeResult>;
-  resetPassword: (input: ResetPasswordInput) => Promise<boolean>;
 };
 
 export class AuthApiError extends Error {
