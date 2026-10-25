@@ -27,6 +27,7 @@ import {
   emergencyOfficialProcedurePostId,
 } from '../safety/guidePostIds';
 import { useAuth } from '../auth';
+import { AiJudgmentNotice } from '../safety/AiJudgmentNotice';
 import { AdminShareSection } from './components/AdminShareSection';
 import { BoardConfirmDialog } from './components/BoardConfirmDialog';
 import { ConversationDateChip } from './components/ConversationDateChip';
@@ -59,6 +60,7 @@ import {
   filterOptions,
   getBufferedSummaryText,
   getPrimaryParentMessage,
+  getReplyLockNotice,
   getThreadRiskLevel,
   getVisibleRiskFactors,
   isReplyLocked,
@@ -763,7 +765,9 @@ function AiObjectionDialog({ onClose, onSubmit, open }: AiObjectionDialogProps) 
       titleId="board-ai-objection-title"
     >
       <p className="board-confirm-modal-copy" id="board-ai-objection-description">
-        남겨 주신 사유는 AI 오판 사례로 모아 판단 기준을 개선하는 데 활용됩니다.
+        남겨 주신 사유는 AI 오판 사례로 모아
+        <br />
+        판단 기준을 개선하는 데 활용됩니다.
       </p>
       <fieldset className="board-ai-objection-types">
         <legend>어떤 부분이 틀렸나요?</legend>
@@ -1088,6 +1092,8 @@ function RiskAnalysisPanel({
     thread.riskReviewRequired;
   const canShowStudentSafetyCard = analysis.studentSafetySignal !== 'NONE';
   const hasAiObjection = Boolean(analysis.aiObjections?.length);
+  const replyLocked = isReplyLocked(thread);
+  const reviewRequested = Boolean(analysis.riskReviewRequestedAt);
   const canShowEvidencePackage =
     effectiveRiskLevel === 'high' || effectiveRiskLevel === 'emergency';
   const handleGuideAction = () => {
@@ -1242,7 +1248,7 @@ function RiskAnalysisPanel({
         />
       ) : null}
 
-      {analysis.safetyLock || thread.riskReviewRequired ? (
+      {replyLocked || thread.riskReviewRequired ? (
         <section className="board-risk-lock-review">
           <div className="board-risk-lock-content">
             <div className="board-risk-lock-notice">
@@ -1260,19 +1266,20 @@ function RiskAnalysisPanel({
                     />
                   </svg>
                 </span>
-                <strong>현재 답변 작성이 제한되어 있습니다.</strong>
+                <strong>{replyLocked ? '현재 답변 작성이 제한되어 있습니다.' : '위험도 재검토가 필요합니다.'}</strong>
               </div>
-              <p>담당자가 위험도를 검토한 후 답변을 작성할 수 있습니다.</p>
+              <p>{replyLocked ? getReplyLockNotice(thread).lockDescription : '원문과 판단 근거를 확인한 후 담당자에게 재검토를 요청할 수 있습니다.'}</p>
+              {reviewRequested ? <p role="status">재검토 요청이 접수되었습니다. 담당자의 확인을 기다려 주세요.</p> : null}
             </div>
           </div>
           <div className="board-risk-lock-actions">
             <button
               className="board-outline-button board-risk-recheck-button"
-              disabled={!analysis.canReviewRisk}
+              disabled={reviewRequested}
               onClick={() => onReviewRequest(thread.id)}
               type="button"
             >
-              재검토 요청
+              {reviewRequested ? '재검토 요청 완료' : '재검토 요청'}
             </button>
           </div>
         </section>
@@ -1314,11 +1321,23 @@ function RiskAnalysisPanel({
         <section className="board-student-safety-card">
           <div className="board-student-safety-content">
             <div className="board-student-safety-copy">
-              <h2>학생 안전 관련 확인</h2>
+              <div className="board-student-safety-heading">
+                <h2>학생 안전 관련 확인</h2>
+                {analysis.studentSafetySignal === 'URGENT_REVIEW' ? (
+                  <Badge variant="danger">긴급 확인 필요</Badge>
+                ) : (
+                  <>
+                    <span className="board-thread-title-dot" aria-hidden="true" />
+                    <small className="board-thread-recheck">추가 확인 필요</small>
+                  </>
+                )}
+              </div>
               <div className="board-student-safety-row">
                 <p>
                   <span>
-                    학생 안전과 관련해 추가 확인이 필요할 수 있습니다.
+                    {analysis.studentSafetySignal === 'URGENT_REVIEW'
+                      ? '학생 안전과 관련된 긴급 확인 신호입니다. 학생의 현재 안전을 우선 확인하고 학교의 공식 대응 절차에 따라 담당자와 즉시 확인해 주세요.'
+                      : '학생 안전과 관련해 추가 확인이 필요할 수 있습니다.'}
                   </span>
                   <span>
                     자동 신고는 진행되지 않으며, 필요한 경우 내용을 직접
@@ -1432,8 +1451,7 @@ function ThreadDetail({
   const isLocked = isReplyLocked(thread);
   const effectiveRiskLevel = getThreadRiskLevel(thread);
   const hasDraft = hasReplyDraft(thread);
-  // Shown only while locked, which always means the emergency safety lock.
-  const lockedGuide = riskStageGuides.emergency;
+  const lockedGuide = getReplyLockNotice(thread);
   const bufferedSummaryText = getBufferedSummaryText(thread);
   const visibleConversationReplies = bufferedSummaryText
     ? thread.replies.filter((reply) => reply.authorRole !== 'parent')
@@ -1942,7 +1960,7 @@ function ReplyComposerPage({
     : '공식 템플릿 적용';
   const assistButtonDisabled = isLocked || !replyTemplate;
   const stageNotice = isLocked
-    ? '긴급 단계: 개별 답변 초안은 제공되지 않으며 즉시 오프라인 공식 절차에 따라 대응합니다.'
+    ? getReplyLockNotice(thread).lockDescription
     : riskLevel === 'high'
       ? replyTemplate
         ? `위험 단계: 개별 AI 초안 대신 답장 예시(${replyTemplate.title})를 사용합니다.${replyTemplate.approved ? '' : ' 예시 문구는 확정 전입니다.'}`
@@ -1953,7 +1971,7 @@ function ReplyComposerPage({
           ? '일반 단계: 원문과 RAG 기반 참고자료로 답변 초안을 생성할 수 있습니다.'
           : '주의 단계: 완충 요약과 원문을 확인한 뒤 AI 초안을 교사가 검토하고 수정하는 것을 권고합니다.';
   const draftStatusText = isLocked
-    ? '긴급 잠금 · 전송 불가'
+    ? '안전 잠금 · 전송 불가'
     : isTemplateInactive
       ? '적용한 템플릿을 더 이상 사용할 수 없습니다. 템플릿을 다시 적용해 주세요.'
       : draftErrors.length > 0
@@ -2042,6 +2060,8 @@ function ReplyComposerPage({
       </header>
 
       <MessageContextCard thread={thread} />
+
+      <AiJudgmentNotice />
 
       <div className="board-reply-composer">
         <ReplyCheckPanel
@@ -2642,7 +2662,8 @@ export function TeacherMessages({
 
   const handleReviewRequest = (threadId: string) => {
     updateThread(threadId, (thread) => {
-      if (!thread.analysis) {
+      if (!thread.analysis || thread.analysis.riskReviewRequestedAt ||
+        (!isReplyLocked(thread) && !thread.riskReviewRequired)) {
         return thread;
       }
 
@@ -2650,6 +2671,7 @@ export function TeacherMessages({
         ...thread,
         analysis: {
           ...thread.analysis,
+          riskReviewRequestedAt: new Date().toISOString(),
           activityLogs: [
             ...thread.analysis.activityLogs,
             {
@@ -2657,9 +2679,9 @@ export function TeacherMessages({
                 thread.analysis.activityLogs.length + 1
               }`,
               time: formatNow(),
-              actor: '조예인 선생님',
+              actor: user?.name ?? '선생님',
               action: '위험도 재검토 요청',
-              detail: '담당자에게 위험도 재검토를 요청했습니다.',
+              detail: '담당자에게 위험도 재검토를 요청했습니다. 지정 검토자의 확인 전까지 안전 잠금은 유지됩니다.',
             },
           ],
         },

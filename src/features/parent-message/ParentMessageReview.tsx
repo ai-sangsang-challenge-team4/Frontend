@@ -7,6 +7,8 @@ import { clearMessageDraft, mockConnectedTeachers, readMessageDraft, saveMessage
 import { ParentMessageHeader } from './ParentMessageHeader';
 import { createMockAnalysis, sendParentMessage } from './parentMessageApi';
 import { findSentSubmission, findSentSubmissionById, getDraftPath } from './conversation';
+import { checkPersonalInfo, MaskingError, PrivacyMaskingNotice } from '../pii';
+import { AiJudgmentNotice } from '../safety/AiJudgmentNotice';
 import {
   createMessageReview,
   getSelectedMessage,
@@ -93,7 +95,7 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
   const { user } = useAuth();
   const navigate = useNavigate();
   const [review, setReview] = useState<MessageReview>(() => {
-    const restored = draft.review ?? createMessageReview(createMockAnalysis(draft.body));
+    const restored = draft.review ?? createMessageReview(createMockAnalysis(maskContactInfo(draft.body).text));
     return restored.analysis.revisedText === draft.body ? { ...restored, source: 'ORIGINAL' } : restored;
   });
   const [isEditingOriginal, setIsEditingOriginal] = useState(review.originalEdit !== null);
@@ -103,11 +105,13 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const [maskingFailed, setMaskingFailed] = useState(false);
   const sendPending = useRef(false);
   const sendController = useRef<AbortController | null>(null);
   const dismissNotice = useCallback(() => setNotice(null), []);
   const selected = getSelectedMessage(draft.body, review);
   const masked = maskContactInfo(selected.text.trim());
+  const privacyPreview = maskContactInfo(`제목: ${draft.title}\n\n내용: ${selected.text.trim()}`);
   const teacher = mockConnectedTeachers.find((item) => item.value === draft.teacherId);
   const hasAiDraft = review.analysis.revisedText !== null && review.analysis.revisedText !== draft.body;
 
@@ -140,6 +144,11 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
       setNotice('연결된 선생님을 확인한 후 다시 작성해 주세요.');
       return;
     }
+    if (checkPersonalInfo(selected.text).status === 'failed') {
+      setMaskingFailed(true);
+      return;
+    }
+    setMaskingFailed(false);
     setDialog(mode);
   }
 
@@ -161,6 +170,11 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
       navigate(`/parent/messages/${sent.messageId}`, { replace: true, state: { justSent: true } });
     } catch (failure) {
       if (!controller.signal.aborted) {
+        if (failure instanceof MaskingError) {
+          setMaskingFailed(true);
+          setDialog(null);
+          return;
+        }
         setNotice(failure instanceof DOMException
           ? '문의 내용을 저장하지 못했습니다. 작성한 내용은 유지됩니다.'
           : failure instanceof Error ? failure.message : '문의를 전송하지 못했습니다. 다시 시도해 주세요.');
@@ -208,6 +222,7 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
               setReview((previous) => isOriginal
                 ? { ...previous, originalEdit: text } : { ...previous, aiText: text });
               setError(null);
+              setMaskingFailed(false);
             }}
             rows={12}
             value={value}
@@ -259,6 +274,7 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
             onValueChange={(source) => {
               setReview((previous) => ({ ...previous, source: source as MessageSource }));
               setError(null);
+              setMaskingFailed(false);
             }}
             value={review.source}
           />
@@ -272,6 +288,12 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
             <p className="parent-review-meaning-notice" role="note">{review.analysis.meaningWarning}</p>
           ) : null}
         </section>
+
+        <PrivacyMaskingNotice
+          onRetry={() => setMaskingFailed(checkPersonalInfo(selected.text).status === 'failed')}
+          result={maskingFailed ? { status: 'failed', text: null, count: null } : { status: 'ready', ...privacyPreview }}
+        />
+        <AiJudgmentNotice />
 
         {review.source === 'ORIGINAL' && review.analysis.risks.length > 0 ? (
           <section aria-labelledby="parent-review-risks-title" className="parent-review-risks">
@@ -305,8 +327,8 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
         <div className="parent-write-actions parent-review-actions">
           <Button leftIcon={<Save size={22} />} onClick={handleSave} size="lg" variant="outline">임시저장</Button>
           <div className="parent-review-send-actions">
-            <Button leftIcon={<Eye size={22} />} onClick={() => handleOpenDialog('preview')} size="lg" variant="outline">미리보기</Button>
-            <Button leftIcon={<Send size={22} />} onClick={() => handleOpenDialog('confirm')} size="lg">전송하기</Button>
+            <Button disabled={maskingFailed} leftIcon={<Eye size={22} />} onClick={() => handleOpenDialog('preview')} size="lg" variant="outline">미리보기</Button>
+            <Button disabled={maskingFailed} leftIcon={<Send size={22} />} onClick={() => handleOpenDialog('confirm')} size="lg">전송하기</Button>
           </div>
         </div>
       </main>
@@ -321,10 +343,10 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
         </> : <Button onClick={() => setDialog(null)} variant="outline">닫기</Button>}>
         <dl className="parent-review-preview-meta">
           <dt>문의 대상</dt><dd>{teacher?.label}</dd>
-          <dt>문의 제목</dt><dd>{draft.title}</dd>
+          <dt>문의 제목</dt><dd>{maskContactInfo(draft.title).text}</dd>
           <dt>선택 문장</dt><dd>{selectionLabels[selected.selectionType]}</dd>
         </dl>
-        {masked.count > 0 ? <p className="parent-review-meaning-notice">전화번호 또는 이메일 {masked.count}건을 가린 문장으로 전송합니다.</p> : null}
+        {privacyPreview.count > 0 ? <p className="parent-review-meaning-notice">전화번호 또는 이메일 {privacyPreview.count}건을 가린 문장으로 전송합니다.</p> : null}
         <p className="parent-review-preview-body">{masked.text}</p>
       </Modal>
       {notice ? <Toast message={notice} onClose={dismissNotice} /> : null}

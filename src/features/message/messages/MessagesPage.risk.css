@@ -791,14 +791,25 @@
 }
 
 .board-risk-recheck-button {
-  width: 111px;
+  min-width: 111px;
   height: 37px;
-  padding: 4px 6px;
+  padding: 4px 12px;
+  white-space: nowrap;
 }
 
 .board-student-safety-card {
   gap: 40px;
   background: var(--color-bg-canvas);
+}
+
+.board-student-safety-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.board-student-safety-heading .ui-badge {
+  flex-shrink: 0;
 }
 
 .board-student-safety-row {

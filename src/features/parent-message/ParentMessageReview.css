@@ -2,6 +2,10 @@
   margin-top: 100px;
 }
 
+.parent-review-main > .ai-judgment-notice {
+  margin-top: 24px;
+}
+
 .parent-review-editor {
   min-height: 660px;
   padding: 42px 56px 64px;
