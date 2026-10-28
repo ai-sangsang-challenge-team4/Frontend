@@ -1293,7 +1293,7 @@ function RiskAnalysisPanel({
               <h2 className="board-risk-section-title">증빙 패키지</h2>
             </div>
             <button
-              className="board-outline-button board-risk-action-button"
+              className="board-outline-button board-risk-action-button board-evidence-package-button"
               disabled={!analysis.packageAvailable || thread.evidencePackageGenerated}
               onClick={() => onEvidencePackageCreate(thread.id)}
               type="button"
@@ -2681,7 +2681,9 @@ export function TeacherMessages({
               time: formatNow(),
               actor: user?.name ?? '선생님',
               action: '위험도 재검토 요청',
-              detail: '담당자에게 위험도 재검토를 요청했습니다. 지정 검토자의 확인 전까지 안전 잠금은 유지됩니다.',
+              detail: isReplyLocked(thread)
+                ? '담당자에게 위험도 재검토를 요청했습니다. 지정 검토자의 확인 전까지 안전 잠금은 유지됩니다.'
+                : '담당자에게 위험도 재검토를 요청했습니다.',
             },
           ],
         },

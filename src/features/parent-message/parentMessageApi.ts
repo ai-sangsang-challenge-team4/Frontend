@@ -121,6 +121,7 @@ export async function sendParentMessage(
   // Check the final selection again: the user may have edited it since analysis.
   const maskedBody = requireMaskedText(selected.text.trim());
   const maskedTitle = requireMaskedText(draft.title.trim());
+  const maskedOriginalBody = requireMaskedText(draft.body);
   const settings = readMockSettings();
   await waitForMockResponse(settings.sendDelayMs, signal);
   if (settings.failSend || !navigator.onLine) throw new Error('문의를 전송하지 못했습니다. 연결 상태를 확인한 후 다시 시도해 주세요.');
@@ -134,7 +135,7 @@ export async function sendParentMessage(
       teacherId: draft.teacherId,
       teacherName: teacher.label,
       title: maskedTitle,
-      originalBody: draft.body,
+      originalBody: maskedOriginalBody,
       finalBody: maskedBody,
       selectionType: selected.selectionType,
       selectionSource: review.source,

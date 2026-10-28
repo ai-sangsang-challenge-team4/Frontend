@@ -137,6 +137,12 @@
   justify-content: center;
 }
 
+.board-evidence-package-button {
+  width: max-content;
+  min-width: 149px;
+  white-space: nowrap;
+}
+
 .board-risk-evidence-panel,
 .board-activity-panel {
   display: grid;
