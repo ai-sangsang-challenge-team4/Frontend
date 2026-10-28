@@ -1,4 +1,11 @@
-export type { AdminAction, EscalationStatus } from './escalation';
+export type {
+  EscalationScope,
+  EscalationStatus,
+  HistoryEventType,
+  RiskChangeDecision,
+  RiskReviewDirection,
+  RiskReviewStatus,
+} from './escalation';
 export type {
   ComplaintStatus,
   ComplaintType,

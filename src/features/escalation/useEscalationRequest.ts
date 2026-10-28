@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
 import { useApiRequest } from '../../shared/api';
 import { ESCALATIONS_CHANGED_EVENT } from './api';
+import { MOCK_ESCALATION_STORAGE_KEY } from './api/mockEscalationApi';
 
-// useApiRequest that refetches when a share or admin action lands, in this tab or another.
+// useApiRequest that refetches when a share or admin action lands, in this tab or (mock) another.
 // `request` must be memoized (useCallback).
 export function useEscalationRequest<T>(request: (signal: AbortSignal) => Promise<T>) {
   const state = useApiRequest(request);
@@ -10,7 +11,7 @@ export function useEscalationRequest<T>(request: (signal: AbortSignal) => Promis
 
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
-      if (event.key === null || event.key === 'teacher-hub.escalations') retry();
+      if (event.key === null || event.key === MOCK_ESCALATION_STORAGE_KEY) retry();
     };
     window.addEventListener(ESCALATIONS_CHANGED_EVENT, retry);
     window.addEventListener('storage', handleStorage);

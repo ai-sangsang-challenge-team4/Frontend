@@ -1,46 +1,64 @@
 import { ApiError } from '../../../shared/api';
-import type { EscalationStatus, UserRole } from '../../../shared/types';
-import { readAuthSession } from '../../auth/api/authStorage';
-import { ADMIN_MEMO_MAX_LENGTH, adminActionTransition, SHARE_REASON_MAX_LENGTH } from '../escalationRules';
 import type {
-  AdminComplaintDetail,
-  AdminComplaintListItem,
-  AdminRecipient,
-  ComplaintEscalation,
+  EscalationScope,
+  EscalationStatus,
+  HistoryEventType,
+  RiskLevel,
+  RiskReviewDirection,
+  RiskReviewStatus,
+  UserRole,
+} from '../../../shared/types';
+import { readAuthSession } from '../../auth/api/authStorage';
+import {
+  ADMIN_MESSAGE_MAX_LENGTH,
+  RISK_REVIEW_REASON_MAX_LENGTH,
+  SHARE_REASON_MAX_LENGTH,
+  SHAREABLE_RISK_LEVEL,
+} from '../escalationRules';
+import type {
+  AdminEscalationSummaryResponse,
+  ComplaintId,
   EscalationComplaintSnapshot,
-  EscalationHistoryItem,
+  EscalationStateResponse,
+  HistoryEvent,
 } from '../escalationTypes';
-import { ESCALATIONS_CHANGED_EVENT, type EscalationApi } from './escalationApiContract';
+import { notifyEscalationsChanged, toServerComplaintId, type EscalationApi } from './escalationApiContract';
 
-const STORAGE_KEY = 'teacher-hub.escalations';
+// v2: the shape changed to the backend spec, so v1 entries are ignored.
+export const MOCK_ESCALATION_STORAGE_KEY = 'teacher-hub.escalations.v2';
 const MOCK_DELAY_MS = 300;
 
-// Matches the ADMIN account in mockAuthApi.
-const ADMIN_RECIPIENTS: AdminRecipient[] = [
-  { userId: 301, name: '관리자 사용자', role: '학교 관리자' },
-];
+// The server assigns the first admin when adminId is null. Matches the ADMIN account in mockAuthApi.
+const DEFAULT_ADMIN_ID = 301;
+
+type PendingRiskChange = {
+  previousLevel: RiskLevel;
+  previousScore: number;
+  riskLevel: RiskLevel;
+  riskScore: number;
+};
 
 type StoredEscalation = {
-  adminMemo: string | null;
   assignedAdminId: number;
-  assignedAdminName: string;
   complaintId: string;
+  currentRiskLevel: RiskLevel;
+  currentRiskScore: number;
   escalationId: number;
-  evidencePackageAttached: boolean;
-  history: EscalationHistoryItem[];
-  processedAt: string | null;
+  escalationStatus: EscalationStatus;
+  events: HistoryEvent[];
+  pendingRiskChange: PendingRiskChange | null;
   reason: string;
-  shareMaskedContent: boolean;
-  shareOriginalContent: boolean;
+  riskReviewStatus: RiskReviewStatus | null;
+  scopes: EscalationScope[];
   sharedAt: string;
   sharedBy: number;
+  sharedByName: string;
   snapshot: EscalationComplaintSnapshot;
-  status: EscalationStatus;
 };
 
 function readStore(): StoredEscalation[] {
   try {
-    const value = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]');
+    const value = JSON.parse(localStorage.getItem(MOCK_ESCALATION_STORAGE_KEY) ?? '[]');
     return Array.isArray(value) ? value : [];
   } catch {
     return [];
@@ -49,11 +67,15 @@ function readStore(): StoredEscalation[] {
 
 function writeStore(items: StoredEscalation[]) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    localStorage.setItem(MOCK_ESCALATION_STORAGE_KEY, JSON.stringify(items));
   } catch {
     throw new ApiError({ status: 503, message: '공유 정보를 저장하지 못했어요. 잠시 후 다시 시도해 주세요.' });
   }
-  window.dispatchEvent(new Event(ESCALATIONS_CHANGED_EVENT));
+  notifyEscalationsChanged();
+}
+
+function replaceStored(store: StoredEscalation[], next: StoredEscalation) {
+  writeStore(store.map((entry) => entry.escalationId === next.escalationId ? next : entry));
 }
 
 function wait(signal?: AbortSignal) {
@@ -78,139 +100,224 @@ function wait(signal?: AbortSignal) {
 function requireUser(role: UserRole) {
   const user = readAuthSession()?.user;
   if (!user) throw new ApiError({ status: 401 });
-  if (user.role !== role) {
-    throw new ApiError({
-      status: 403,
-      code: role === 'ADMIN' ? 'ADMIN_ACCESS_DENIED' : 'ESCALATION_FORBIDDEN',
-    });
-  }
+  if (user.role !== role) throw new ApiError({ status: 403 });
   return user;
 }
 
-function toTeacherView(item: StoredEscalation): ComplaintEscalation {
+// Mock stand-in for the server's score → level rule. The UI never uses this for saved state.
+function mockScoreToLevel(score: number): RiskLevel {
+  if (score <= 2) return 'LOW';
+  if (score <= 4) return 'MEDIUM';
+  if (score <= 6) return 'HIGH';
+  return 'EMERGENCY';
+}
+
+// Mock inbox thread IDs are strings; the spec's complaintId is numeric.
+function mockComplaintNumber(complaintId: string) {
+  return toServerComplaintId(complaintId) ?? (Number(complaintId.replace(/\D/g, '')) || 0);
+}
+
+function createEvent(
+  item: Pick<StoredEscalation, 'escalationId' | 'events'>,
+  type: HistoryEventType,
+  actorName: string,
+  fields: Partial<HistoryEvent> = {},
+): HistoryEvent {
   return {
-    adminMemo: item.adminMemo,
-    assignedAdminName: item.assignedAdminName,
-    complaintId: item.complaintId,
+    actorName,
+    eventId: `${item.escalationId}-${item.events.length + 1}`,
+    newStatus: null,
+    occurredAt: new Date().toISOString(),
+    previousRiskLevel: null,
+    previousRiskScore: null,
+    previousStatus: null,
+    reason: null,
+    riskLevel: null,
+    riskScore: null,
+    type,
+    ...fields,
+  };
+}
+
+function toState(item: StoredEscalation): EscalationStateResponse {
+  return {
+    currentRiskLevel: item.currentRiskLevel,
+    currentRiskScore: item.currentRiskScore,
     escalationId: item.escalationId,
-    processedAt: item.processedAt,
+    escalationStatus: item.escalationStatus,
+    riskReviewStatus: item.riskReviewStatus,
+  };
+}
+
+function toSummary(item: StoredEscalation): AdminEscalationSummaryResponse {
+  return {
+    complaintId: mockComplaintNumber(item.complaintId),
+    currentRiskLevel: item.currentRiskLevel,
+    escalationId: item.escalationId,
+    escalationStatus: item.escalationStatus,
     reason: item.reason,
     sharedAt: item.sharedAt,
-    status: item.status,
-    title: item.snapshot.title,
+    sharedBy: item.sharedByName,
   };
 }
 
-function toListItem(item: StoredEscalation): AdminComplaintListItem {
-  return {
-    complaintId: item.complaintId,
-    escalationStatus: item.status,
-    reason: item.reason,
-    riskLevel: item.snapshot.riskLevel,
-    sharedAt: item.sharedAt,
-    studentName: item.snapshot.studentName,
-    teacherName: item.snapshot.teacherName,
-    title: item.snapshot.title,
-  };
+function findByComplaint(store: StoredEscalation[], complaintId: ComplaintId) {
+  return store.filter((item) => item.complaintId === String(complaintId)).at(-1);
 }
 
-// Only the content the teacher opted to share leaves the server.
-function toAdminDetail(item: StoredEscalation): AdminComplaintDetail {
-  const { snapshot } = item;
-  const isHighRisk = snapshot.riskLevel === 'HIGH' || snapshot.riskLevel === 'EMERGENCY';
-  return {
-    ...toListItem(item),
-    adminMemo: item.adminMemo,
-    bufferedSummary: snapshot.bufferedSummary,
-    className: snapshot.className,
-    escalationId: item.escalationId,
-    evidencePackageAttached: item.evidencePackageAttached,
-    history: item.history,
-    maskedContent: item.shareMaskedContent ? snapshot.maskedContent : null,
-    originalContent: item.shareOriginalContent ? snapshot.originalContent : null,
-    parentName: snapshot.parentName,
-    processedAt: item.processedAt,
-    recommendedActions: isHighRisk
-      ? ['원문과 판정 근거 확인', '증빙 자료 보존', '담당 교사와 대응 방향 협의']
-      : ['판정 근거 확인', '담당 교사와 대응 방향 협의'],
-    riskFactors: snapshot.riskFactors,
-    shareMaskedContent: item.shareMaskedContent,
-    shareOriginalContent: item.shareOriginalContent,
-  };
+function requireAssigned(store: StoredEscalation[], escalationId: number, adminId: number) {
+  const item = store.find((entry) => entry.escalationId === escalationId);
+  if (!item) throw new ApiError({ status: 404, message: '공유된 문의를 찾을 수 없어요.' });
+  if (item.assignedAdminId !== adminId) throw new ApiError({ status: 403 });
+  return item;
 }
 
-function findAssigned(complaintId: string | number, adminId: number) {
-  return readStore().find((item) => item.complaintId === String(complaintId) && item.assignedAdminId === adminId);
+function readMessage(message: string, { required }: { required: boolean }) {
+  const value = message.trim();
+  if (required && !value) throw new ApiError({ status: 400, message: '사유를 입력해 주세요.' });
+  if (value.length > ADMIN_MESSAGE_MAX_LENGTH) {
+    throw new ApiError({ status: 400, message: `${ADMIN_MESSAGE_MAX_LENGTH}자 이내로 입력해 주세요.` });
+  }
+  return value;
 }
 
 export const mockEscalationApi: EscalationApi = {
-  async getAdminRecipients(signal) {
-    await wait(signal);
+  async getEscalationState(complaintId, options) {
+    await wait(options?.signal);
     requireUser('TEACHER');
-    return ADMIN_RECIPIENTS;
+    const item = findByComplaint(readStore(), complaintId);
+    if (item) return toState(item);
+    if (!options?.snapshot) throw new ApiError({ status: 404, message: '문의 내역을 찾을 수 없어요.' });
+    return {
+      currentRiskLevel: options.snapshot.riskLevel,
+      currentRiskScore: options.snapshot.riskScore,
+      escalationId: null,
+      escalationStatus: 'NOT_SHARED',
+      riskReviewStatus: null,
+    };
   },
 
-  async createEscalation(complaintId, request, options) {
+  async shareEscalation(complaintId, request, options) {
     await wait(options?.signal);
     const teacher = requireUser('TEACHER');
     const reason = request.reason.trim();
     if (!reason || reason.length > SHARE_REASON_MAX_LENGTH) {
-      throw new ApiError({ status: 400, code: 'INVALID_ESCALATION_REASON' });
+      throw new ApiError({ status: 400, message: `공유 사유를 ${SHARE_REASON_MAX_LENGTH}자 이내로 입력해 주세요.` });
     }
-    if (!request.shareMaskedContent && !request.shareOriginalContent) {
-      throw new ApiError({ status: 400, code: 'ESCALATION_CONTENT_REQUIRED' });
+    const { snapshot } = options ?? {};
+    if (!snapshot) throw new ApiError({ status: 404, message: '문의 내역을 찾을 수 없어요.' });
+    if (snapshot.riskLevel !== SHAREABLE_RISK_LEVEL) {
+      throw new ApiError({ status: 409, message: '긴급(EMERGENCY) 단계 문의만 관리자에게 공유할 수 있어요.' });
     }
-    const admin = ADMIN_RECIPIENTS.find((item) => item.userId === request.assignedAdminId);
-    if (!admin) throw new ApiError({ status: 404, code: 'ADMIN_NOT_FOUND' });
-    if (!options?.snapshot) throw new ApiError({ status: 404, code: 'COMPLAINT_NOT_FOUND' });
 
     const store = readStore();
-    if (store.some((item) => item.complaintId === String(complaintId) && item.status !== 'RETURNED_TO_TEACHER')) {
-      throw new ApiError({ status: 409, code: 'ALREADY_ESCALATED' });
+    if (findByComplaint(store, complaintId)) {
+      throw new ApiError({ status: 409, message: '이미 관리자에게 공유된 문의예요.' });
     }
 
-    const sharedAt = new Date().toISOString();
-    const created: StoredEscalation = {
-      adminMemo: null,
-      assignedAdminId: admin.userId,
-      assignedAdminName: admin.name,
-      complaintId: String(complaintId),
+    const base = {
       escalationId: Math.max(1100, ...store.map((item) => item.escalationId)) + 1,
-      evidencePackageAttached: Boolean(request.evidencePackageId),
-      history: [{
-        changedAt: sharedAt,
-        changedBy: teacher.name,
-        newStatus: 'SHARED',
-        previousStatus: 'NOT_SHARED',
-      }],
-      processedAt: null,
+      events: [],
+    };
+    const created: StoredEscalation = {
+      ...base,
+      assignedAdminId: request.adminId ?? DEFAULT_ADMIN_ID,
+      complaintId: String(complaintId),
+      currentRiskLevel: snapshot.riskLevel,
+      currentRiskScore: snapshot.riskScore,
+      escalationStatus: 'SHARED',
+      events: [createEvent(base, 'ESCALATION_SHARED', teacher.name, { reason })],
+      pendingRiskChange: null,
       reason,
-      shareMaskedContent: request.shareMaskedContent,
-      shareOriginalContent: request.shareOriginalContent,
-      sharedAt,
+      riskReviewStatus: null,
+      scopes: Array.from(new Set<EscalationScope>(['MASKING_MESSAGES', ...request.scopes])),
+      sharedAt: new Date().toISOString(),
       sharedBy: teacher.userId,
-      snapshot: { ...options.snapshot, teacherName: teacher.name },
-      status: 'SHARED',
+      sharedByName: teacher.name,
+      snapshot,
     };
     writeStore([...store, created]);
-
-    return {
-      assignedAdminId: admin.userId,
-      complaintId,
-      escalationId: created.escalationId,
-      sharedAt,
-      sharedBy: teacher.userId,
-      status: created.status,
-    };
   },
 
-  async getComplaintEscalation(complaintId, signal) {
-    await wait(signal);
+  async submitRiskReview(complaintId, request, options) {
+    await wait(options?.signal);
     const teacher = requireUser('TEACHER');
-    const item = readStore()
-      .filter((entry) => entry.complaintId === String(complaintId) && entry.sharedBy === teacher.userId)
-      .at(-1);
-    return item ? toTeacherView(item) : null;
+    const { riskScore } = request;
+    const reason = request.reason?.trim() ?? '';
+    if (!Number.isInteger(riskScore) || riskScore < 1 || riskScore > 7) {
+      throw new ApiError({ status: 400, message: '위험도 점수는 1~7점이어야 해요.' });
+    }
+    if (reason.length > RISK_REVIEW_REASON_MAX_LENGTH) {
+      throw new ApiError({ status: 400, message: `검토 사유를 ${RISK_REVIEW_REASON_MAX_LENGTH}자 이내로 입력해 주세요.` });
+    }
+
+    const store = readStore();
+    const item = findByComplaint(store, complaintId);
+    const previous = item
+      ? { level: item.currentRiskLevel, score: item.currentRiskScore }
+      : options?.snapshot && { level: options.snapshot.riskLevel, score: options.snapshot.riskScore };
+    if (!previous) throw new ApiError({ status: 404, message: '문의 내역을 찾을 수 없어요.' });
+
+    const direction: RiskReviewDirection =
+      riskScore < previous.score ? 'LOWERED' : riskScore > previous.score ? 'RAISED' : 'UNCHANGED';
+    if (direction === 'LOWERED' && !reason) {
+      throw new ApiError({ status: 400, message: '하향 조정 시 검토 사유를 입력해 주세요.' });
+    }
+
+    const riskLevel = mockScoreToLevel(riskScore);
+    const leavesEmergency = previous.level === 'EMERGENCY' && riskLevel !== 'EMERGENCY';
+    const activeShare = item && item.escalationStatus !== 'COMPLETED' ? item : undefined;
+    let status: RiskReviewStatus = 'APPLIED';
+
+    if (leavesEmergency) {
+      if (!activeShare) {
+        throw new ApiError({ status: 409, message: '긴급 단계 변경은 관리자 승인이 필요해요. 관리자 공유 후 다시 요청해 주세요.' });
+      }
+      if (activeShare.riskReviewStatus === 'PENDING_ADMIN_APPROVAL') {
+        throw new ApiError({ status: 409, message: '이미 관리자 승인을 기다리는 위험도 변경 요청이 있어요.' });
+      }
+      status = 'PENDING_ADMIN_APPROVAL';
+      replaceStored(store, {
+        ...activeShare,
+        events: [...activeShare.events, createEvent(activeShare, 'ESCALATION_RISK_CHANGE_REQUESTED', teacher.name, {
+          previousRiskLevel: previous.level,
+          previousRiskScore: previous.score,
+          reason,
+          riskLevel,
+          riskScore,
+        })],
+        pendingRiskChange: { previousLevel: previous.level, previousScore: previous.score, riskLevel, riskScore },
+        riskReviewStatus: status,
+      });
+    } else if (item) {
+      replaceStored(store, {
+        ...item,
+        currentRiskLevel: riskLevel,
+        currentRiskScore: riskScore,
+        events: [...item.events, createEvent(item, 'RISK_REVIEWED', teacher.name, {
+          previousRiskLevel: previous.level,
+          previousRiskScore: previous.score,
+          reason: reason || null,
+          riskLevel,
+          riskScore,
+        })],
+      });
+    }
+
+    return {
+      complaintId: mockComplaintNumber(String(complaintId)),
+      direction,
+      previousLevel: previous.level,
+      previousScore: previous.score,
+      reason,
+      reviewedAt: new Date().toISOString(),
+      reviewedBy: teacher.name,
+      riskAnalysisId: 1,
+      riskLevel,
+      riskReviewId: Date.now(),
+      riskScore,
+      status,
+    };
   },
 
   async listMyEscalations(signal) {
@@ -219,66 +326,140 @@ export const mockEscalationApi: EscalationApi = {
     return readStore()
       .filter((item) => item.sharedBy === teacher.userId)
       .sort((left, right) => right.sharedAt.localeCompare(left.sharedAt))
-      .map(toTeacherView);
+      .map((item) => ({
+        complaintId: item.complaintId,
+        escalationId: item.escalationId,
+        escalationStatus: item.escalationStatus,
+        sharedAt: item.sharedAt,
+        title: item.snapshot.title,
+      }));
   },
 
-  async listAdminComplaints(query = {}, signal) {
+  async listAdminEscalations(query = {}, signal) {
     await wait(signal);
     const admin = requireUser('ADMIN');
-    const { escalationStatus, page = 0, riskLevel, size = 20 } = query;
-    const items = readStore()
+    return readStore()
       .filter((item) => item.assignedAdminId === admin.userId)
-      .filter((item) => !escalationStatus || item.status === escalationStatus)
-      .filter((item) => !riskLevel || item.snapshot.riskLevel === riskLevel)
+      .filter((item) => !query.status || item.escalationStatus === query.status)
+      .filter((item) => !query.riskLevel || item.currentRiskLevel === query.riskLevel)
       .sort((left, right) => right.sharedAt.localeCompare(left.sharedAt))
-      .map(toListItem);
-    return { items: items.slice(page * size, (page + 1) * size), page, size, totalElements: items.length };
+      .map(toSummary);
   },
 
-  async getAdminComplaint(complaintId, signal) {
+  async getAdminEscalation(escalationId, signal) {
     await wait(signal);
     const admin = requireUser('ADMIN');
-    const item = findAssigned(complaintId, admin.userId);
-    // An unshared complaint, or one shared with another admin, is never readable here.
-    if (!item) throw new ApiError({ status: 403, code: 'COMPLAINT_NOT_SHARED' });
-    return toAdminDetail(item);
+    return toSummary(requireAssigned(readStore(), escalationId, admin.userId));
   },
 
-  async processAdminComplaint(complaintId, request, signal) {
+  // Only the scopes the teacher chose leave the server.
+  async getAdminEscalationMessages(escalationId, signal) {
+    await wait(signal);
+    const admin = requireUser('ADMIN');
+    const item = requireAssigned(readStore(), escalationId, admin.userId);
+    return {
+      maskedMessages: item.snapshot.maskedMessages,
+      mediationPackageIncluded: item.scopes.includes('MEDIATION_PACKAGE'),
+      originalMessages: item.scopes.includes('ORIGINAL_MESSAGES') ? item.snapshot.originalMessages : [],
+      reason: item.reason,
+    };
+  },
+
+  async getAdminEscalationRisk(escalationId, signal) {
+    await wait(signal);
+    const admin = requireUser('ADMIN');
+    const item = requireAssigned(readStore(), escalationId, admin.userId);
+    const isReviewed = item.currentRiskScore !== item.snapshot.riskScore;
+    return {
+      analyzedAt: item.sharedAt,
+      complaintId: mockComplaintNumber(item.complaintId),
+      detectedFactors: item.snapshot.detectedFactors,
+      latestReview: null,
+      reviewLevel: isReviewed ? item.currentRiskLevel : null,
+      reviewScore: isReviewed ? item.currentRiskScore : null,
+      riskAnalysisId: 1,
+      riskLevel: item.snapshot.riskLevel,
+      riskScore: item.snapshot.riskScore,
+    };
+  },
+
+  async getAdminEscalationHistory(escalationId, signal) {
+    await wait(signal);
+    const admin = requireUser('ADMIN');
+    const item = requireAssigned(readStore(), escalationId, admin.userId);
+    return { complaintId: mockComplaintNumber(item.complaintId), events: item.events };
+  },
+
+  async startEscalationReview(escalationId, request, signal) {
     await wait(signal);
     const admin = requireUser('ADMIN');
     const store = readStore();
-    const item = store.find((entry) => entry.complaintId === String(complaintId) && entry.assignedAdminId === admin.userId);
-    if (!item) throw new ApiError({ status: 404, code: 'ESCALATION_NOT_FOUND' });
-
-    const transition = adminActionTransition[request.action];
-    if (!transition) throw new ApiError({ status: 400, code: 'INVALID_ADMIN_ACTION' });
-    if (item.status !== transition.from) throw new ApiError({ status: 409, code: 'INVALID_ESCALATION_TRANSITION' });
-    const memo = request.memo?.trim() ?? '';
-    if (memo.length > ADMIN_MEMO_MAX_LENGTH) throw new ApiError({ status: 400, code: 'INVALID_ADMIN_ACTION' });
-
-    const processedAt = new Date().toISOString();
+    const item = requireAssigned(store, escalationId, admin.userId);
+    const message = readMessage(request.message, { required: false });
+    if (item.escalationStatus !== 'SHARED') {
+      throw new ApiError({ status: 409, message: '확인 대기 상태에서만 검토를 시작할 수 있어요.' });
+    }
     const next: StoredEscalation = {
       ...item,
-      adminMemo: memo || item.adminMemo,
-      history: [...item.history, {
-        changedAt: processedAt,
-        changedBy: admin.name,
-        memo: memo || undefined,
-        newStatus: transition.to,
-        previousStatus: item.status,
-      }],
-      processedAt,
-      status: transition.to,
+      escalationStatus: 'UNDER_REVIEW',
+      events: [...item.events, createEvent(item, 'ESCALATION_REVIEW_STARTED', admin.name, { reason: message || null })],
     };
-    writeStore(store.map((entry) => entry === item ? next : entry));
+    replaceStored(store, next);
+    return toState(next);
+  },
 
-    return {
-      adminAction: request.action,
-      complaintId,
-      escalationStatus: next.status,
-      processedAt,
-      processedBy: admin.userId,
+  async completeEscalation(escalationId, request, signal) {
+    await wait(signal);
+    const admin = requireUser('ADMIN');
+    const store = readStore();
+    const item = requireAssigned(store, escalationId, admin.userId);
+    const message = readMessage(request.message, { required: false });
+    if (item.riskReviewStatus === 'PENDING_ADMIN_APPROVAL') {
+      throw new ApiError({ status: 409, message: '위험도 변경 승인 대기 중에는 검토를 완료할 수 없어요.' });
+    }
+    if (item.escalationStatus !== 'UNDER_REVIEW') {
+      throw new ApiError({ status: 409, message: '검토 중인 공유 건만 완료할 수 있어요.' });
+    }
+    const next: StoredEscalation = {
+      ...item,
+      escalationStatus: 'COMPLETED',
+      events: [...item.events, createEvent(item, 'ESCALATION_COMPLETED', admin.name, { reason: message || null })],
     };
+    replaceStored(store, next);
+    return toState(next);
+  },
+
+  async decideRiskChange(escalationId, request, signal) {
+    await wait(signal);
+    const admin = requireUser('ADMIN');
+    const store = readStore();
+    const item = requireAssigned(store, escalationId, admin.userId);
+    const message = readMessage(request.message, { required: true });
+    const pending = item.pendingRiskChange;
+    if (item.riskReviewStatus !== 'PENDING_ADMIN_APPROVAL' || !pending) {
+      throw new ApiError({ status: 409, message: '승인 대기 중인 위험도 변경 요청이 없어요.' });
+    }
+    const isApplied = request.status === 'APPLIED';
+    const next: StoredEscalation = {
+      ...item,
+      currentRiskLevel: isApplied ? pending.riskLevel : item.currentRiskLevel,
+      currentRiskScore: isApplied ? pending.riskScore : item.currentRiskScore,
+      events: [...item.events, createEvent(
+        item,
+        isApplied ? 'ESCALATION_RISK_CHANGE_APPROVED' : 'ESCALATION_RISK_CHANGE_REJECTED',
+        admin.name,
+        {
+          previousRiskLevel: pending.previousLevel,
+          previousRiskScore: pending.previousScore,
+          reason: message,
+          riskLevel: pending.riskLevel,
+          riskScore: pending.riskScore,
+        },
+      )],
+      pendingRiskChange: null,
+      riskReviewStatus: request.status,
+    };
+    replaceStored(store, next);
+    return toState(next);
   },
 };
