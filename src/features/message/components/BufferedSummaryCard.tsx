@@ -6,6 +6,7 @@ type BufferedSummaryCardProps = {
   onOpenOriginal: () => void;
   onOpenRiskEvidence: () => void;
   summaryText: string;
+  unavailable?: boolean;
   thread: BoardThread;
 };
 
@@ -31,10 +32,11 @@ export function BufferedSummaryCard({
   onOpenOriginal,
   onOpenRiskEvidence,
   summaryText,
+  unavailable = false,
   thread,
 }: BufferedSummaryCardProps) {
   return (
-    <article className="board-moderation-message">
+    <article className="board-moderation-message" role={unavailable ? 'status' : undefined}>
       <div className="board-reply-author">
         <ProfileAvatar className="board-mini-avatar" />
         <strong>{thread.parentName}</strong>
@@ -44,7 +46,7 @@ export function BufferedSummaryCard({
           <div>
             <strong className="board-moderation-title">
               <BufferedSummaryIcon />
-              <span>위험 메시지 완충 요약</span>
+              <span>{unavailable ? '완충 요약을 확인할 수 없습니다' : '위험 메시지 완충 요약'}</span>
             </strong>
             <p>{summaryText}</p>
           </div>

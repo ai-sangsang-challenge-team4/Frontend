@@ -6,6 +6,7 @@ import {
   teacherEscalationStatusLabel,
 } from '../escalationRules';
 import type { ComplaintEscalation } from '../escalationTypes';
+import './AdminShareList.css';
 
 type AdminShareListProps = {
   escalations: ComplaintEscalation[];
@@ -13,7 +14,7 @@ type AdminShareListProps = {
 
 export function AdminShareList({ escalations }: AdminShareListProps) {
   return (
-    <div className="status-list">
+    <div className="status-list teacher-admin-share-list">
       {escalations.map((escalation) => (
         <article className="status-row" key={escalation.escalationId}>
           <div>

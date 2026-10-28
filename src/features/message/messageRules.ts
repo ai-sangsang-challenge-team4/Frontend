@@ -14,6 +14,7 @@ import type {
   SystemRiskLevel,
   ThreadStatus,
 } from './types';
+import { getRiskClassifications } from '../risk-analysis';
 
 export const riskLabel: Record<RiskLevel, string> = {
   normal: '일반',
@@ -209,17 +210,45 @@ export const riskStageGuides: Record<
 };
 
 export function getThreadRiskLevel(thread: BoardThread): SystemRiskLevel {
-  return (
-    thread.analysis?.teacherReviewedRiskLevel ??
-    thread.analysis?.systemRiskLevel ??
-    threadRiskToSystemRisk[thread.risk]
-  );
+  const reviewed = thread.analysis?.teacherReviewedRiskLevel;
+  const system = thread.analysis?.systemRiskLevel;
+  if (reviewed && systemRiskReviewLevels.includes(reviewed)) return reviewed;
+  if (system && systemRiskReviewLevels.includes(system)) return system;
+  return threadRiskToSystemRisk[thread.risk];
+}
+
+export function getAnalysisStatus(thread: BoardThread) {
+  const analysis = thread.analysis;
+  if (!analysis) return 'unavailable';
+  if (analysis.status === 'loading' || analysis.status === 'failed') return analysis.status;
+  if ((analysis.status !== undefined && analysis.status !== 'ready') ||
+    !systemRiskReviewLevels.includes(analysis.systemRiskLevel) ||
+    (analysis.teacherReviewedRiskLevel !== undefined && !systemRiskReviewLevels.includes(analysis.teacherReviewedRiskLevel)) ||
+    !['NONE', 'POSSIBLE', 'URGENT_REVIEW'].includes(analysis.studentSafetySignal) ||
+    !Array.isArray(analysis.riskFactors)) return 'failed';
+  return 'ready';
 }
 
 // safetyLock is set by the analysis and only a designated reviewer can lift it,
 // so it blocks replies even after a teacher lowers the risk level.
 export function isReplyLocked(thread: BoardThread) {
-  return getThreadRiskLevel(thread) === 'emergency' || Boolean(thread.analysis?.safetyLock);
+  const analysisStatus = getAnalysisStatus(thread);
+  return getThreadRiskLevel(thread) === 'emergency' || Boolean(thread.analysis?.safetyLock) ||
+    analysisStatus === 'loading' || analysisStatus === 'failed';
+}
+
+export function getReplyLockNotice(thread: BoardThread) {
+  if (getThreadRiskLevel(thread) === 'emergency') return riskStageGuides.emergency;
+  if (getAnalysisStatus(thread) === 'loading' || getAnalysisStatus(thread) === 'failed') {
+    return {
+      lockTitle: 'AI 분석 결과 확인이 필요합니다.',
+      lockDescription: '분석 결과를 확인할 때까지 답변 생성과 전송이 제한됩니다. 필요한 경우 원문을 직접 확인해 주세요.',
+    };
+  }
+  return {
+    lockTitle: '안전 확인을 위해 답변 작성이 제한됩니다.',
+    lockDescription: '위험도 수정이나 재검토 요청으로 안전 잠금이 해제되지 않습니다. 지정 검토자가 잠금을 해제하기 전까지 답변 생성과 전송이 차단됩니다.',
+  };
 }
 
 export function canGenerateReplyDraft(thread: BoardThread) {
@@ -233,24 +262,30 @@ export function canUseOfficialReplyTemplate(thread: BoardThread) {
 }
 
 export function getVisibleRiskFactors(thread: BoardThread) {
-  return (
-    thread.analysis?.riskFactors.filter(
-      (factor) => factor.status !== 'unknown',
-    ) ?? []
-  );
+  if (getAnalysisStatus(thread) !== 'ready') return [];
+  const factors = thread.analysis?.riskFactors.filter((factor) => factor.status !== 'unknown') ?? [];
+  const classifications = getRiskClassifications(thread.analysis?.riskClassifications)
+    .filter((result) => result.status === 'PRESENT' || result.status === 'BOUNDARY')
+    .map((result) => ({
+      id: result.code, name: result.label, description: result.label,
+      evidence: result.evidenceSpan ?? '', rationale: result.rationale ?? '판단 이유가 제공되지 않았습니다.',
+      status: result.status === 'PRESENT' ? 'detected' as const : 'boundary' as const,
+    }));
+  return [...factors, ...classifications.filter((result) =>
+    !factors.some((factor) => factor.evidence && factor.evidence === result.evidence))];
 }
 
 export function getBufferedSummaryText(thread: BoardThread) {
-  if (!shouldShowBufferedSummary[thread.risk]) {
+  if (getThreadRiskLevel(thread) === 'low' ||
+    (thread.analysis && getAnalysisStatus(thread) !== 'ready')) {
     return undefined;
   }
 
-  const analysisSummary =
-    thread.analysis?.summary.status === 'ready'
-      ? thread.analysis.summary.text
-      : undefined;
-
-  return thread.moderatedSummary ?? analysisSummary;
+  if (thread.analysis) {
+    return thread.analysis.summary?.status === 'ready'
+      ? thread.analysis.summary.text?.trim() || undefined : undefined;
+  }
+  return thread.moderatedSummary?.trim() || undefined;
 }
 
 export function getPrimaryParentMessage(thread: BoardThread) {

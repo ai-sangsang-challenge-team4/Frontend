@@ -305,6 +305,95 @@
   margin: 0;
 }
 
+.board-risk-classifications {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.board-risk-classifications h3,
+.board-analysis-state h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.6;
+}
+
+.board-risk-classifications > p,
+.board-analysis-state p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.board-classification-accordion {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 12px;
+  border: 0;
+}
+
+.board-classification-accordion .ui-accordion-item {
+  min-width: 0;
+  border: 1px solid var(--color-border-default);
+  border-radius: 12px;
+  background: var(--color-bg-surface);
+}
+
+.board-classification-accordion .ui-accordion-trigger {
+  padding: 16px;
+  gap: 12px;
+}
+
+.board-classification-accordion .ui-accordion-trigger > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.board-classification-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  text-align: left;
+}
+
+.board-classification-title strong {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.board-classification-accordion .ui-accordion-panel {
+  padding: 0 16px 16px;
+}
+
+.board-factor-evidence {
+  margin: 0;
+  padding: 12px 16px;
+  border-left: 3px solid var(--color-pink-3);
+  background: var(--color-bg-canvas);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.board-factor-evidence strong {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.board-analysis-state > button {
+  justify-self: start;
+}
+
+@media (max-width: 640px) {
+  .board-classification-accordion {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .board-risk-review-panel,
 .board-student-safety-card {
   display: flex;

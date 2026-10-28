@@ -3,7 +3,7 @@ import { TeacherAppLayout } from '../../shared/components';
 
 export function AdminSharePage() {
   return (
-    <TeacherAppLayout activeItem="share" title="관리자 공유">
+    <TeacherAppLayout activeItem="share" showHeaderLogout={false} title="관리자 공유">
       <AdminSharePanel />
     </TeacherAppLayout>
   );
