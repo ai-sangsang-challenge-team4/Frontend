@@ -251,14 +251,6 @@ export function getReplyLockNotice(thread: BoardThread) {
   };
 }
 
-export function getReplyLockNotice(thread: BoardThread) {
-  if (getThreadRiskLevel(thread) === 'emergency') return riskStageGuides.emergency;
-  return {
-    lockTitle: '안전 확인을 위해 답변 작성이 제한됩니다.',
-    lockDescription: '위험도 수정이나 재검토 요청으로 안전 잠금이 해제되지 않습니다. 지정 검토자가 잠금을 해제하기 전까지 답변 생성과 전송이 차단됩니다.',
-  };
-}
-
 export function canGenerateReplyDraft(thread: BoardThread) {
   const riskLevel = getThreadRiskLevel(thread);
 

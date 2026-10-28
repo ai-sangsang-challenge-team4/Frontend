@@ -1,12 +1,15 @@
-import type { MessageStatus } from '../../shared/types';
 import type { MessageReview, SentParentMessage } from './parentMessageTypes';
+
+// Local composer step, not the server MessageStatus: PARENT_REVIEW means the parent is
+// comparing the AI revision before sending.
+export type MessageDraftStep = 'DRAFT' | 'PARENT_REVIEW';
 
 export type MessageDraft = {
   messageId: string;
   teacherId: string;
   title: string;
   body: string;
-  status: Extract<MessageStatus, 'DRAFT' | 'PARENT_REVIEW'>;
+  status: MessageDraftStep;
   review?: MessageReview;
   threadId?: string;
   savedAt?: string;
