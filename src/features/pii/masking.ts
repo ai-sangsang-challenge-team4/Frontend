@@ -13,7 +13,7 @@ export class MaskingError extends Error {
 export function maskContactInfo(text: string) {
   let count = 0;
   const masked = text
-    .replace(/\b01[016789][-.\s]?\d{3,4}[-.\s]?\d{4}\b/g, () => {
+    .replace(/(?:\b0|\+82[-.\s]?)1[016789][-.\s]?\d{3,4}[-.\s]?\d{4}\b/g, () => {
       count += 1;
       return '[전화번호]';
     })
