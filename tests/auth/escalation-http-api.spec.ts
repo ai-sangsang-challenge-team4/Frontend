@@ -79,7 +79,7 @@ test('관리자 목록·상세·검토·완료·위험도 결정은 escalationId
   await httpEscalationApi.getAdminEscalationMessages(3);
   await httpEscalationApi.getAdminEscalationRisk(3);
   await httpEscalationApi.getAdminEscalationHistory(3);
-  await httpEscalationApi.startEscalationReview(3, { message: '' });
+  await httpEscalationApi.startEscalationReview(3, { message: '검토 시작' });
   await httpEscalationApi.completeEscalation(3, { message: '완료' });
   await expect(httpEscalationApi.decideRiskChange(3, { message: '승인', status: 'APPLIED' })).resolves.toEqual(state);
 
@@ -99,7 +99,7 @@ test('관리자 목록·상세·검토·완료·위험도 결정은 escalationId
 test('409 ErrorResponse의 message를 그대로 노출한다', async () => {
   mockFetch(() => json(409, { code: 'ESCALATION_CONFLICT', message: '승인 대기 중에는 완료할 수 없습니다.', path: '/admin/escalations/3/complete' }));
 
-  const error = await httpEscalationApi.completeEscalation(3, { message: '' }).catch((caught: unknown) => caught);
+  const error = await httpEscalationApi.completeEscalation(3, { message: '완료' }).catch((caught: unknown) => caught);
   expect(error).toMatchObject({ kind: 'CONFLICT', status: 409 });
   expect(getApiErrorMessage(error)).toBe('승인 대기 중에는 완료할 수 없습니다.');
 });

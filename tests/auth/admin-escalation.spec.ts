@@ -81,7 +81,11 @@ test('관리자는 공유받은 메시지를 확인하고 검토 중 → 처리 
   await page.getByRole('navigation', { name: '공유 메시지 상세 탭' }).getByRole('button', { name: '위험 분석', exact: true }).click();
   await expect(page.getByText('확인된 위험 요소와 판단 근거')).toBeVisible();
 
-  await processPanel.getByRole('button', { name: '검토 시작', exact: true }).click();
+  // The backend rejects a blank admin message, so the memo is required.
+  const startReview = processPanel.getByRole('button', { name: '검토 시작', exact: true });
+  await expect(startReview).toBeDisabled();
+  await processPanel.getByLabel('처리 메모').fill('담당 교사와 통화 후 대응 방향 협의 예정');
+  await startReview.click();
   await expect(processPanel.locator('[aria-current="step"]')).toHaveText(/검토 중/);
 
   await processPanel.getByLabel('처리 메모').fill('담당 교사와 대응 방향 협의 완료');
@@ -99,6 +103,12 @@ test('관리자는 공유받은 메시지를 확인하고 검토 중 → 처리 
   await openDetailTab(page, EMERGENCY_THREAD, '위험 요소');
   const section = page.getByRole('region', { name: '관리자 공유' });
   await expect(section.getByText('관리자 처리 완료', { exact: true })).toBeVisible();
+
+  // A completed share cannot take a risk change, and it cannot be shared again.
+  await page.getByRole('button', { name: '5점 위험', exact: true }).click();
+  await page.getByPlaceholder('하향 수정 사유를 입력해주세요.').fill('공격적 표현이 일부 오탐입니다.');
+  await page.getByRole('button', { name: '확인 요청', exact: true }).click();
+  await expect(page.getByRole('alert').filter({ hasText: '처리 완료된 공유 건에는 위험도 변경을 요청할 수 없습니다.' })).toBeVisible();
 });
 
 test('긴급 위험도 하향은 관리자 승인 대기가 되고, 관리자가 승인하면 반영된다', async ({ page }) => {
@@ -112,6 +122,7 @@ test('긴급 위험도 하향은 관리자 승인 대기가 되고, 관리자가
   const processPanel = await openSharedAsAdmin(page);
   // The summary has no riskReviewStatus, so the decision buttons appear only after an action response.
   await expect(processPanel.getByRole('button', { name: '위험도 변경 승인' })).toHaveCount(0);
+  await processPanel.getByLabel('처리 메모').fill('교사 하향 요청 사유 확인');
   await processPanel.getByRole('button', { name: '검토 시작', exact: true }).click();
 
   const approve = processPanel.getByRole('button', { name: '위험도 변경 승인' });
@@ -133,7 +144,7 @@ test('공유하지 않은 긴급 메시지의 위험도 하향은 409 사유를 
   await page.getByRole('button', { name: '5점 위험', exact: true }).click();
   await page.getByPlaceholder('하향 수정 사유를 입력해주세요.').fill('오탐입니다.');
   await page.getByRole('button', { name: '확인 요청', exact: true }).click();
-  await expect(page.getByRole('alert').filter({ hasText: '관리자 공유 후 다시 요청해 주세요.' })).toBeVisible();
+  await expect(page.getByRole('alert').filter({ hasText: '먼저 관리자에게 공유해야 합니다.' })).toBeVisible();
 });
 
 test('관리자는 공유되지 않은 메시지에 접근할 수 없고 교사는 관리자 화면에 들어갈 수 없다', async ({ page }) => {

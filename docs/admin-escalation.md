@@ -27,7 +27,7 @@
 | 역할 | 경로 | 내용 |
 | --- | --- | --- |
 | TEACHER | `/teacher/messages/:id` → 위험 요소 탭 | 위험·긴급 메시지에 `관리자 공유` 섹션. 공유 버튼은 서버 `currentRiskLevel`이 EMERGENCY일 때만 활성. 공유 후 상태 칩, 현재 위험도, 위험도 변경 요청 상태 표시 |
-| TEACHER | 같은 탭 → 위험도 검토 | 1~7점 검토를 `risk-reviews`로 저장. 저장 결과·처리 기록은 응답의 `riskLevel`·`status` 사용. 긴급 하향은 승인 대기 또는 409(관리자 공유 필요) |
+| TEACHER | 같은 탭 → 위험도 검토 | 1~7점 검토를 `risk-reviews`로 저장. 저장 결과·처리 기록은 응답의 `riskLevel`·`status` 사용. 긴급 단계 변경은 공유 건이 있으면 승인 대기, 없으면 409(관리자 공유 필요), 처리 완료된 공유 건이면 409(변경 불가) |
 | TEACHER | `/teacher/admin-share` | 내가 공유한 목록. **mock 전용** (대응 API 없음, http 모드에서는 안내 문구) |
 | ADMIN | `/admin/messages` | 공유받은 목록. 상태 탭(전체·확인 대기·검토 중·처리 완료), 위험도 필터 |
 | ADMIN | `/admin/messages/:escalationId` | 처리 상태(검토 시작·처리 완료·위험도 변경 승인/거부), 공유 내용, 위험 분석, 처리 기록 |
@@ -37,6 +37,8 @@
 - 검토 시작: `escalationStatus === 'SHARED'`
 - 처리 완료: `escalationStatus === 'UNDER_REVIEW' && riskReviewStatus !== 'PENDING_ADMIN_APPROVAL'`
 - 위험도 변경 승인/거부: `riskReviewStatus === 'PENDING_ADMIN_APPROVAL'`
+
+처리 메모(검토 시작·처리 완료)와 위험도 변경 결정 사유는 필수입니다. 스펙에는 `minLength 0`으로 나오지만 백엔드 DTO가 `@NotBlank`로 빈 값을 400 처리합니다.
 
 ## API
 
@@ -57,8 +59,8 @@
 
 - `AdminEscalationSummaryResponse`에 `riskReviewStatus`가 없어 관리자 화면 진입 시 승인 대기 여부를 알 수 없습니다. 지금은 관리자 액션 응답(`EscalationStateResponse`)을 받은 뒤에만 승인/거부 버튼이 보입니다. **필드 추가 필요.**
 - 교사의 "내가 공유한 목록" API가 없습니다(`/teacher/admin-share`는 mock 전용). **엔드포인트 추가 필요.**
-- `riskReviewStatus`, 미공유 시 `escalationId`의 nullable 여부가 스펙에 없습니다. 프론트는 `null`을 허용하도록 방어했습니다(`TODO(backend)`).
-- `SHARED → COMPLETED` 직접 완료 허용 여부가 스펙에 없습니다. 처리 완료 버튼은 `UNDER_REVIEW`에서만 노출합니다.
+- 미공유 상태 응답은 `escalationId`·`riskReviewStatus`·`currentRiskScore`·`currentRiskLevel`이 모두 `null`이고, `riskReviewStatus`는 변경 요청이 없으면 `null`입니다(백엔드 dev 코드로 확인). 미공유 상태의 `currentRiskLevel` 처리는 아직 반영하지 않았습니다.
+- `SHARED → COMPLETED` 직접 완료는 불가합니다(백엔드 코드로 확인). 완료와 위험도 변경 결정은 `UNDER_REVIEW`에서만 가능합니다.
 - 관리자 목록·상세 응답에 민원 제목·학생·학급 정보가 없어 `민원 #{complaintId}`와 공유 교사(`sharedBy`)만 표시합니다.
 - 관리자 처리 메모·결정 사유는 응답에 없고 `/history`의 `reason`으로만 확인됩니다.
 - 교사 위험도 점수(1~7) → 등급 매핑 기준은 서버에 있습니다. 프론트 슬라이더의 단계 미리보기만 로컬 매핑을 쓰고, mock 서버가 같은 매핑을 흉내 냅니다.
