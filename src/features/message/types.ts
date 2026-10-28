@@ -65,6 +65,7 @@ export type ThreadAnalysis = {
   originalMessageAvailable: boolean;
   packageAvailable: boolean;
   riskFactors: RiskFactor[];
+  riskReviewRequestedAt?: string;
   safetyLock: boolean;
   studentSafetySignal: StudentSafetySignal;
   summary: BufferedSummary;

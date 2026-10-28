@@ -8,6 +8,7 @@ import { ParentMessageHeader } from './ParentMessageHeader';
 import { analyzeParentMessage } from './parentMessageApi';
 import { createMessageReview, MESSAGE_MAX_LENGTH } from './parentMessageTypes';
 import { getDraftPath } from './conversation';
+import { checkPersonalInfo, maskContactInfo, MaskingError, PrivacyMaskingNotice } from '../pii';
 import './ParentMessageComposer.css';
 
 type FieldName = 'teacherId' | 'title' | 'body';
@@ -35,6 +36,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
   });
   const [errors, setErrors] = useState<FieldErrors>({});
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [maskingFailed, setMaskingFailed] = useState(false);
   const [notice, setNotice] = useState<string | null>(location.state?.draftSaved ? '문의가 임시저장되었습니다.' : null);
   const analysisPending = useRef(false);
   const loadingTitle = useRef<HTMLParagraphElement>(null);
@@ -50,8 +52,14 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
       let review;
       try {
         review = createMessageReview(await analyzeParentMessage(draft, controller.signal));
-      } catch {
+      } catch (failure) {
         if (controller.signal.aborted) return;
+        if (failure instanceof MaskingError) {
+          analysisPending.current = false;
+          setMaskingFailed(true);
+          setIsAnalyzing(false);
+          return;
+        }
         review = createMessageReview({ status: 'failed', revisedText: null, risks: [], meaningWarning: null });
       }
       if (controller.signal.aborted) return;
@@ -72,6 +80,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
   function updateField(field: FieldName, value: string) {
     setDraft((previous) => ({ ...previous, [field]: value, status: 'DRAFT', review: undefined }));
     setErrors((previous) => ({ ...previous, [field]: undefined }));
+    setMaskingFailed(false);
   }
 
   function handleSaveDraft() {
@@ -88,8 +97,8 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
     }
   }
 
-  function handleAnalyze(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function handleAnalyze(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
     if (analysisPending.current) return;
     const nextErrors: FieldErrors = {};
     if (!mockConnectedTeachers.some((teacher) => teacher.value === draft.teacherId)) {
@@ -102,6 +111,10 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
     const firstInvalid = (['teacherId', 'title', 'body'] as const).find((field) => nextErrors[field]);
     if (firstInvalid) {
       document.getElementById(`parent-message-${firstInvalid}`)?.focus();
+      return;
+    }
+    if (checkPersonalInfo(draft.body).status === 'failed') {
+      setMaskingFailed(true);
       return;
     }
     if (draft.review) {
@@ -123,6 +136,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
       };
       saveMessageDraft(userId, nextDraft);
       analysisPending.current = true;
+      setMaskingFailed(false);
       setNotice(null);
       setDraft(nextDraft);
       setIsAnalyzing(true);
@@ -164,7 +178,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
             </div>
             <div className="parent-analysis-privacy">
               <LockKeyhole aria-hidden="true" size={24} />
-              <p>작성하신 내용은 안전하게 보호되며, 선생님에게 전송되기 전까지 외부로 공유되지 않습니다.</p>
+              <p>전화번호·이메일을 가린 문장으로 AI 분석을 진행하고 있습니다. 분석이 끝나면 전송할 내용을 직접 확인할 수 있습니다.</p>
             </div>
           </section>
         ) : (
@@ -195,9 +209,16 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
                 id="parent-message-body" label="문의 내용" maxLength={MESSAGE_MAX_LENGTH} name="body"
                 onChange={(event) => updateField('body', event.target.value)}
                 placeholder={threadId ? '추가로 문의할 내용을 작성해 주세요.' : '선생님께 전달할 문의 내용을 작성해 주세요.'} required rows={10} value={draft.body} />
+              {maskingFailed || draft.body.trim() || draft.title.trim() ? (
+                <PrivacyMaskingNotice
+                  onRetry={() => handleAnalyze()}
+                  result={maskingFailed ? { status: 'failed', text: null, count: null }
+                    : { status: 'ready', ...maskContactInfo(`제목: ${draft.title}\n\n내용: ${draft.body}`) }}
+                />
+              ) : null}
               <div className="parent-write-actions">
                 <Button className="parent-write-save" leftIcon={<Save size={22} />} onClick={handleSaveDraft} size="lg" variant="outline">임시저장</Button>
-                <Button className="parent-write-analyze" disabled={mockConnectedTeachers.length === 0}
+                <Button className="parent-write-analyze" disabled={mockConnectedTeachers.length === 0 || maskingFailed}
                   leftIcon={<Send size={22} />} size="lg" type="submit">AI 분석 시작</Button>
               </div>
             </form>

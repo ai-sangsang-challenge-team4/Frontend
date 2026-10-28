@@ -98,16 +98,4 @@ export function validateFinalMessage(text: string) {
   return null;
 }
 
-export function maskContactInfo(text: string) {
-  let count = 0;
-  const masked = text
-    .replace(/\b01[016789][-.\s]?\d{3,4}[-.\s]?\d{4}\b/g, () => {
-      count += 1;
-      return '[전화번호]';
-    })
-    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, () => {
-      count += 1;
-      return '[이메일]';
-    });
-  return { text: masked, count };
-}
+export { maskContactInfo } from '../pii/masking';

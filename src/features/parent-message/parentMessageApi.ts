@@ -1,8 +1,8 @@
 import { findSentMessage, mockConnectedTeachers, storeSentMessage, type MessageDraft } from './messageDraft';
 import { appendFollowUp, findSentSubmission } from './conversation';
+import { requireMaskedText } from '../pii/masking';
 import {
   getSelectedMessage,
-  maskContactInfo,
   validateFinalMessage,
   type MessageReview,
   type ParentMessageAnalysis,
@@ -90,10 +90,12 @@ export function createMockAnalysis(original: string): ParentMessageAnalysis {
 }
 
 export async function analyzeParentMessage(draft: MessageDraft, signal: AbortSignal) {
+  // Stop before analysis if the privacy check fails, including when there is no detected PII.
+  const maskedBody = requireMaskedText(draft.body);
   const settings = readMockSettings();
   await waitForMockResponse(settings.analysisDelayMs, signal);
   if (settings.failAnalysis || !navigator.onLine) throw new Error('AI 분석을 완료하지 못했습니다.');
-  return createMockAnalysis(draft.body);
+  return createMockAnalysis(maskedBody);
 }
 
 export async function sendParentMessage(
@@ -116,6 +118,10 @@ export async function sendParentMessage(
   if (error) throw new Error(error);
   const teacher = mockConnectedTeachers.find((item) => item.value === draft.teacherId);
   if (!teacher || !draft.title.trim()) throw new Error('문의 대상과 제목을 다시 확인해 주세요.');
+  // Check the final selection again: the user may have edited it since analysis.
+  const maskedBody = requireMaskedText(selected.text.trim());
+  const maskedTitle = requireMaskedText(draft.title.trim());
+  const maskedOriginalBody = requireMaskedText(draft.body);
   const settings = readMockSettings();
   await waitForMockResponse(settings.sendDelayMs, signal);
   if (settings.failSend || !navigator.onLine) throw new Error('문의를 전송하지 못했습니다. 연결 상태를 확인한 후 다시 시도해 주세요.');
@@ -128,9 +134,9 @@ export async function sendParentMessage(
       messageId: draft.messageId,
       teacherId: draft.teacherId,
       teacherName: teacher.label,
-      title: draft.title.trim(),
-      originalBody: draft.body,
-      finalBody: maskContactInfo(selected.text.trim()).text,
+      title: maskedTitle,
+      originalBody: maskedOriginalBody,
+      finalBody: maskedBody,
       selectionType: selected.selectionType,
       selectionSource: review.source,
       status: 'SENT',

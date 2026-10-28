@@ -1,6 +1,6 @@
 import type { EscalationComplaintSnapshot } from '../escalation/escalationTypes';
 import type { RiskLevel } from '../../shared/types';
-import { maskContactInfo } from '../parent-message/parentMessageTypes';
+import { maskContactInfo } from '../pii/masking';
 import { getBufferedSummaryText, getThreadRiskLevel, getVisibleRiskFactors } from './messageRules';
 import type { BoardThread, SystemRiskLevel } from './types';
 
