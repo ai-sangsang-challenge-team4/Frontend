@@ -70,6 +70,7 @@ import {
   getVisibleRiskFactors,
   isReplyLocked,
   matchesStatusFilter,
+  needsTeacherReviewBeforeRequest,
   riskFilterOptions,
   riskScoreGuides,
   riskScores,
@@ -1104,6 +1105,7 @@ function RiskAnalysisPanel({
   const hasAiObjection = Boolean(analysis.aiObjections?.length);
   const replyLocked = isReplyLocked(thread);
   const reviewRequested = Boolean(analysis.riskReviewRequestedAt);
+  const needsOwnReview = needsTeacherReviewBeforeRequest(thread);
   const canShowEvidencePackage =
     effectiveRiskLevel === 'high' || effectiveRiskLevel === 'emergency';
   const handleGuideAction = () => {
@@ -1302,12 +1304,13 @@ function RiskAnalysisPanel({
               </div>
               <p>{replyLocked ? getReplyLockNotice(thread).lockDescription : '원문과 판단 근거를 확인한 후 담당자에게 재검토를 요청할 수 있습니다.'}</p>
               {reviewRequested ? <p role="status">재검토 요청이 접수되었습니다. 담당자의 확인을 기다려 주세요.</p> : null}
+              {!reviewRequested && needsOwnReview ? <p>위험도 검토를 먼저 완료해야 재검토를 요청할 수 있습니다.</p> : null}
             </div>
           </div>
           <div className="board-risk-lock-actions">
             <button
               className="board-outline-button board-risk-recheck-button"
-              disabled={reviewRequested}
+              disabled={reviewRequested || needsOwnReview}
               onClick={() => onReviewRequest(thread.id)}
               type="button"
             >
@@ -2704,7 +2707,7 @@ export function TeacherMessages({
 
   const handleReviewRequest = (threadId: string) => {
     updateThread(threadId, (thread) => {
-      if (!thread.analysis || thread.analysis.riskReviewRequestedAt ||
+      if (!thread.analysis || thread.analysis.riskReviewRequestedAt || needsTeacherReviewBeforeRequest(thread) ||
         (!isReplyLocked(thread) && !thread.riskReviewRequired)) {
         return thread;
       }
