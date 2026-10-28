@@ -82,7 +82,7 @@ export function AppRouter() {
       >
         <Route index element={<Navigate to="/admin/messages" replace />} />
         <Route path="messages" element={<SharedMessageListPage />} />
-        <Route path="messages/:messageId" element={<SharedMessageDetailPage />} />
+        <Route path="messages/:escalationId" element={<SharedMessageDetailPage />} />
         <Route path="*" element={<Navigate to="/admin/messages" replace />} />
       </Route>
 

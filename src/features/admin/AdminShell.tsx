@@ -2,20 +2,19 @@ import { useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { Sidebar } from '../../shared/components/teacher-shell/TeacherSidebar';
 import { useAuth } from '../auth';
-import { listAdminComplaints } from '../escalation/api';
+import { listAdminEscalations } from '../escalation/api';
 import { useEscalationRequest } from '../escalation/useEscalationRequest';
 import '../message/TeacherMessages.css';
 import './AdminPages.css';
 
-const loadPendingCount = (signal: AbortSignal) =>
-  listAdminComplaints({ escalationStatus: 'SHARED', size: 1 }, signal);
+const loadPendingEscalations = (signal: AbortSignal) => listAdminEscalations({ status: 'SHARED' }, signal);
 
 // Same shell as the teacher inbox: board layout with the shared sidebar.
 export function AdminShell() {
   const { logout, user } = useAuth();
   const navigate = useNavigate();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const { data } = useEscalationRequest(loadPendingCount);
+  const { data } = useEscalationRequest(loadPendingEscalations);
 
   const handleLogout = () => {
     logout();
@@ -27,7 +26,7 @@ export function AdminShell() {
       <Sidebar
         activeItem="adminMessages"
         defaultCollapsed={isSidebarCollapsed}
-        messageCount={data?.totalElements ?? 0}
+        messageCount={data?.length ?? 0}
         onCollapsedChange={setIsSidebarCollapsed}
         onLogout={handleLogout}
         profileMeta={user?.email}

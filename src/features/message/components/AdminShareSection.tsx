@@ -1,35 +1,43 @@
-import { useCallback, useEffect, useId, useState } from 'react';
-import { getApiErrorMessage, isAbortError } from '../../../shared/api';
+import { useCallback, useId, useState } from 'react';
+import { getApiErrorMessage } from '../../../shared/api';
 import { StatusChip } from '../../../shared/components/ui';
-import { useAuth } from '../../auth';
+import type { EscalationScope } from '../../../shared/types';
+import { canSendEscalationRequest, getEscalationState, shareEscalation } from '../../escalation/api';
 import {
-  createEscalation,
-  getAdminRecipients,
-  getComplaintEscalation,
-} from '../../escalation/api';
-import {
+  apiRiskTone,
   escalationStatusChip,
-  formatEscalationTime,
+  riskReviewStatusLabel,
   SHARE_REASON_MAX_LENGTH,
+  SHAREABLE_RISK_LEVEL,
   teacherEscalationStatusLabel,
 } from '../../escalation/escalationRules';
-import type { AdminRecipient, ComplaintEscalation } from '../../escalation/escalationTypes';
+import type { EscalationStateResponse } from '../../escalation/escalationTypes';
 import { useEscalationRequest } from '../../escalation/useEscalationRequest';
 import { createEscalationSnapshot } from '../escalationSnapshot';
+import { riskLabel } from '../messageRules';
 import type { BoardThread } from '../types';
 import { BoardConfirmDialog } from './BoardConfirmDialog';
 import { ExternalLinkIcon } from './MessageIcons';
 
 type AdminShareSectionProps = {
-  onShared: (threadId: string, escalation: { adminName: string; reason: string }) => void;
+  onShared: (threadId: string, escalation: { reason: string }) => void;
   thread: BoardThread;
 };
 
 export function AdminShareSection({ onShared, thread }: AdminShareSectionProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const request = useCallback((signal: AbortSignal) => getComplaintEscalation(thread.id, signal), [thread.id]);
-  const { data: escalation, error, isInitialLoading, retry } = useEscalationRequest(request);
-  const isShared = Boolean(escalation && escalation.status !== 'RETURNED_TO_TEACHER');
+  // Over HTTP a mock thread has no numeric complaintId, so nothing is requested.
+  const isLinked = canSendEscalationRequest(thread.id);
+  // Depends on the whole thread so a saved risk review refetches the server's current level.
+  const request = useCallback(
+    (signal: AbortSignal) => isLinked
+      ? getEscalationState(thread.id, { signal, snapshot: createEscalationSnapshot(thread) })
+      : Promise.resolve(null),
+    [isLinked, thread],
+  );
+  const { data: state, error, isInitialLoading, retry } = useEscalationRequest(request);
+  const isShared = Boolean(state && state.escalationStatus !== 'NOT_SHARED');
+  const isShareable = state?.currentRiskLevel === SHAREABLE_RISK_LEVEL;
 
   return (
     <section className="board-risk-workflow-panel board-admin-share-panel" aria-label="관리자 공유">
@@ -37,17 +45,17 @@ export function AdminShareSection({ onShared, thread }: AdminShareSectionProps) 
         <div>
           <AdminShareIcon />
           <h2 className="board-risk-section-title">관리자 공유</h2>
-          {escalation ? (
+          {state && isShared ? (
             <StatusChip
-              label={teacherEscalationStatusLabel[escalation.status]}
+              label={teacherEscalationStatusLabel[state.escalationStatus]}
               size="sm"
-              status={escalationStatusChip[escalation.status]}
+              status={escalationStatusChip[state.escalationStatus]}
             />
           ) : null}
         </div>
         <button
           className="board-outline-button board-risk-action-button board-admin-share-button"
-          disabled={isInitialLoading || Boolean(error) || isShared}
+          disabled={isInitialLoading || Boolean(error) || !isShareable || isShared}
           onClick={() => setIsDialogOpen(true)}
           type="button"
         >
@@ -56,13 +64,17 @@ export function AdminShareSection({ onShared, thread }: AdminShareSectionProps) 
         </button>
       </div>
 
-      {error ? (
+      {!isLinked ? (
+        <p>서버에 등록된 민원이 아니어서 관리자 공유 상태를 확인하거나 공유할 수 없습니다.</p>
+      ) : error ? (
         <p className="board-admin-share-error" role="alert">
-          공유 상태를 확인하지 못했습니다.{' '}
+          {getApiErrorMessage(error, '공유 상태를 확인하지 못했습니다.')}{' '}
           <button className="board-admin-share-retry" onClick={retry} type="button">다시 시도</button>
         </p>
-      ) : escalation && isShared ? (
-        <SharedSummary escalation={escalation} />
+      ) : state && isShared ? (
+        <SharedSummary state={state} />
+      ) : state && !isShareable ? (
+        <p>현재 긴급 단계 메시지만 관리자에게 공유할 수 있습니다.</p>
       ) : (
         <p>
           공동 검토가 필요하다고 판단되면 관리자에게 직접 공유할 수 있습니다. 관리자는 공유된
@@ -83,25 +95,17 @@ export function AdminShareSection({ onShared, thread }: AdminShareSectionProps) 
   );
 }
 
-function SharedSummary({ escalation }: { escalation: ComplaintEscalation }) {
+function SharedSummary({ state }: { state: EscalationStateResponse }) {
   return (
     <dl className="board-admin-share-summary">
       <div>
-        <dt>공유 대상</dt>
-        <dd>{escalation.assignedAdminName}</dd>
+        <dt>현재 위험도</dt>
+        <dd>{riskLabel[apiRiskTone[state.currentRiskLevel]]} ({state.currentRiskScore}점)</dd>
       </div>
-      <div>
-        <dt>공유 시각</dt>
-        <dd><time dateTime={escalation.sharedAt}>{formatEscalationTime(escalation.sharedAt)}</time></dd>
-      </div>
-      <div>
-        <dt>공유 사유</dt>
-        <dd>{escalation.reason}</dd>
-      </div>
-      {escalation.adminMemo ? (
+      {state.riskReviewStatus ? (
         <div>
-          <dt>관리자 메모</dt>
-          <dd>{escalation.adminMemo}</dd>
+          <dt>위험도 변경 요청</dt>
+          <dd>{riskReviewStatusLabel[state.riskReviewStatus]}</dd>
         </div>
       ) : null}
     </dl>
@@ -110,56 +114,50 @@ function SharedSummary({ escalation }: { escalation: ComplaintEscalation }) {
 
 type AdminShareDialogProps = {
   onClose: () => void;
-  onShared: (result: { adminName: string; reason: string }) => void;
+  onShared: (result: { reason: string }) => void;
   open: boolean;
   thread: BoardThread;
 };
 
 function AdminShareDialog({ onClose, onShared, open, thread }: AdminShareDialogProps) {
-  const { user } = useAuth();
   const reasonId = useId();
   const descriptionId = useId();
-  const [recipients, setRecipients] = useState<AdminRecipient[]>([]);
   const [reason, setReason] = useState('');
   const [shareOriginal, setShareOriginal] = useState(false);
   const [attachEvidence, setAttachEvidence] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const trimmedReason = reason.trim();
-  const recipient = recipients[0];
   const hasOriginal = Boolean(thread.originalMessage?.trim());
 
-  useEffect(() => {
-    if (!open) {
+  const close = () => {
+    setReason('');
+    setShareOriginal(false);
+    setAttachEvidence(false);
+    setErrorMessage(null);
+    onClose();
+  };
+
+  const handleSubmit = async () => {
+    if (!trimmedReason || isSubmitting) return;
+    setIsSubmitting(true);
+    setErrorMessage(null);
+    const scopes: EscalationScope[] = [
+      'MASKING_MESSAGES',
+      ...(shareOriginal ? ['ORIGINAL_MESSAGES' as const] : []),
+      ...(attachEvidence ? ['MEDIATION_PACKAGE' as const] : []),
+    ];
+    try {
+      // adminId null: the server assigns the admin.
+      await shareEscalation(
+        thread.id,
+        { adminId: null, reason: trimmedReason, scopes },
+        { snapshot: createEscalationSnapshot(thread) },
+      );
       setReason('');
       setShareOriginal(false);
       setAttachEvidence(false);
-      setErrorMessage(null);
-      return;
-    }
-    const controller = new AbortController();
-    getAdminRecipients(controller.signal)
-      .then(setRecipients)
-      .catch((error: unknown) => {
-        if (!isAbortError(error)) setErrorMessage(getApiErrorMessage(error, '공유할 관리자를 불러오지 못했습니다.'));
-      });
-    return () => controller.abort();
-  }, [open]);
-
-  const handleSubmit = async () => {
-    if (!recipient || !trimmedReason || isSubmitting) return;
-    setIsSubmitting(true);
-    setErrorMessage(null);
-    try {
-      await createEscalation(thread.id, {
-        assignedAdminId: recipient.userId,
-        // The mock inbox has no package IDs yet; the server resolves the latest package.
-        evidencePackageId: attachEvidence ? 1 : null,
-        reason: trimmedReason,
-        shareMaskedContent: true,
-        shareOriginalContent: shareOriginal,
-      }, { snapshot: createEscalationSnapshot(thread, user?.name ?? '담당 교사') });
-      onShared({ adminName: recipient.name, reason: trimmedReason });
+      onShared({ reason: trimmedReason });
     } catch (error) {
       setErrorMessage(getApiErrorMessage(error, '관리자에게 공유하지 못했습니다. 다시 시도해 주세요.'));
     } finally {
@@ -170,24 +168,24 @@ function AdminShareDialog({ onClose, onShared, open, thread }: AdminShareDialogP
   return (
     <BoardConfirmDialog
       actions={[
-        { label: '취소', onClick: onClose },
+        { label: '취소', onClick: close },
         {
-          disabled: !recipient || !trimmedReason || isSubmitting,
+          disabled: !trimmedReason || isSubmitting,
           label: isSubmitting ? '공유 중…' : '공유하기',
           onClick: handleSubmit,
           tone: 'primary',
         },
       ]}
       descriptionId={descriptionId}
-      onClose={isSubmitting ? () => undefined : onClose}
+      onClose={isSubmitting ? () => undefined : close}
       open={open}
       title="관리자에게 공유할까요?"
       titleId="board-admin-share-title"
     >
       <div className="board-admin-share-form">
         <p className="board-confirm-modal-copy" id={descriptionId}>
-          {recipient ? `${recipient.name}(${recipient.role})` : '관리자'}에게 위험 분석 결과와 공유 사유가
-          전달됩니다. 개인정보가 가려진 메시지가 기본으로 공유됩니다.
+          담당 관리자에게 위험 분석 결과와 공유 사유가 전달됩니다. 개인정보가 가려진 메시지가 기본으로
+          공유됩니다.
         </p>
         <label className="board-ai-objection-reason-label" htmlFor={reasonId}>
           공유 사유 <strong aria-hidden="true">*</strong>

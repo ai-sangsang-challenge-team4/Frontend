@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { AsyncContent } from '../../shared/components';
 import { Dropdown, EmptyState, StatusChip, Tabs } from '../../shared/components/ui';
 import type { EscalationStatus, RiskLevel } from '../../shared/types';
-import { listAdminComplaints } from '../escalation/api';
+import { listAdminEscalations } from '../escalation/api';
 import {
   apiRiskTone,
   escalationStatusChip,
@@ -11,7 +11,7 @@ import {
   formatEscalationTime,
   riskLevelOrder,
 } from '../escalation/escalationRules';
-import type { AdminComplaintListItem } from '../escalation/escalationTypes';
+import type { AdminEscalationSummaryResponse } from '../escalation/escalationTypes';
 import { useEscalationRequest } from '../escalation/useEscalationRequest';
 import { ProfileAvatar } from '../message/components/ProfileAvatar';
 import { RiskBadge } from '../message/components/RiskBadge';
@@ -35,7 +35,7 @@ const emptyCopy: Record<StatusTab, { description: string; title: string }> = {
 };
 
 // The list is small enough to load once; tabs and the risk filter work client-side.
-const loadSharedComplaints = (signal: AbortSignal) => listAdminComplaints({ size: 100 }, signal);
+const loadSharedComplaints = (signal: AbortSignal) => listAdminEscalations({}, signal);
 
 export function AdminSharedMessageList() {
   const [activeTab, setActiveTab] = useState<StatusTab>('all');
@@ -43,7 +43,7 @@ export function AdminSharedMessageList() {
   const { data, error, isInitialLoading, retry } = useEscalationRequest(loadSharedComplaints);
 
   const riskFiltered = useMemo(
-    () => (data?.items ?? []).filter((item) => riskFilter === 'all' || item.riskLevel === riskFilter),
+    () => (data ?? []).filter((item) => riskFilter === 'all' || item.currentRiskLevel === riskFilter),
     [data, riskFilter],
   );
 
@@ -108,7 +108,7 @@ function TabLabel({ count, label }: { count: number; label: string }) {
 
 type SharedComplaintListProps = {
   emptyCopy: { description: string; title: string };
-  items: AdminComplaintListItem[];
+  items: AdminEscalationSummaryResponse[];
 };
 
 function SharedComplaintList({ emptyCopy: copy, items }: SharedComplaintListProps) {
@@ -119,24 +119,24 @@ function SharedComplaintList({ emptyCopy: copy, items }: SharedComplaintListProp
   return (
     <section className="board-thread-list" aria-label="공유받은 메시지 목록">
       {items.map((item) => (
-        <article className="board-thread-row admin-thread-row" key={item.complaintId}>
+        <article className="board-thread-row admin-thread-row" key={item.escalationId}>
           <Link
-            aria-label={`${item.title} 공유 메시지 상세 보기`}
+            aria-label={`민원 #${item.complaintId} 공유 메시지 상세 보기`}
             className="board-thread-button admin-thread-button"
-            to={`/admin/messages/${item.complaintId}`}
+            to={`/admin/messages/${item.escalationId}`}
           >
             <div className="board-thread-parent">
               <ProfileAvatar />
               <span className="board-parent-copy">
-                <strong>{item.teacherName}</strong>
-                <span>{item.studentName} 학생</span>
+                <strong>{item.sharedBy}</strong>
+                <span>공유 교사</span>
               </span>
             </div>
 
             <div className="board-thread-copy">
               <span className="board-thread-title-row">
-                <strong>{item.title}</strong>
-                <RiskBadge level={apiRiskTone[item.riskLevel]} />
+                <strong>민원 #{item.complaintId}</strong>
+                <RiskBadge level={apiRiskTone[item.currentRiskLevel]} />
               </span>
               <span className="admin-thread-reason">공유 사유: {item.reason}</span>
             </div>

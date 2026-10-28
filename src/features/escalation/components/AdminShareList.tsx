@@ -5,11 +5,11 @@ import {
   formatEscalationTime,
   teacherEscalationStatusLabel,
 } from '../escalationRules';
-import type { ComplaintEscalation } from '../escalationTypes';
+import type { MockTeacherEscalation } from '../escalationTypes';
 import './AdminShareList.css';
 
 type AdminShareListProps = {
-  escalations: ComplaintEscalation[];
+  escalations: MockTeacherEscalation[];
 };
 
 export function AdminShareList({ escalations }: AdminShareListProps) {
@@ -23,14 +23,11 @@ export function AdminShareList({ escalations }: AdminShareListProps) {
                 {escalation.title}
               </Link>
             </h2>
-            <p>
-              {escalation.assignedAdminName} · {formatEscalationTime(escalation.sharedAt)} 공유
-            </p>
-            {escalation.adminMemo ? <p>관리자 메모: {escalation.adminMemo}</p> : null}
+            <p>{formatEscalationTime(escalation.sharedAt)} 공유</p>
           </div>
           <StatusChip
-            label={teacherEscalationStatusLabel[escalation.status]}
-            status={escalationStatusChip[escalation.status]}
+            label={teacherEscalationStatusLabel[escalation.escalationStatus]}
+            status={escalationStatusChip[escalation.escalationStatus]}
           />
         </article>
       ))}

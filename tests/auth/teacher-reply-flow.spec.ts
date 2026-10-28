@@ -85,6 +85,8 @@ test('High에서 맞는 예시가 없으면 AI 생성 없이 직접 작성한다
   await page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name: '위험 요소', exact: true }).click();
   await page.getByRole('button', { name: '6점 높은 위험', exact: true }).click();
   await page.getByRole('button', { name: '상향 반영', exact: true }).click();
+  // The review is saved through the API, so wait until 6 becomes the saved reference.
+  await expect(page.getByRole('button', { name: '검토 완료', exact: true })).toBeVisible();
   await page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name: '대화', exact: true }).click();
   await page.getByRole('button', { name: /답변 (작성하러 가기|이어서 작성하기)/ }).click();
   await expect(page.locator('.board-reply-ai-note')).toContainText('맞는 공식 템플릿이 없습니다');

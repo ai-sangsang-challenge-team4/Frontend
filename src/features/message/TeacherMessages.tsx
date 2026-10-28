@@ -26,7 +26,9 @@ import {
 import {
   emergencyOfficialProcedurePostId,
 } from '../safety/guidePostIds';
+import { getApiErrorMessage } from '../../shared/api';
 import { useAuth } from '../auth';
+import { canSendEscalationRequest, submitRiskReview } from '../escalation/api';
 import { AiJudgmentNotice } from '../safety/AiJudgmentNotice';
 import { AdminShareSection } from './components/AdminShareSection';
 import { BoardConfirmDialog } from './components/BoardConfirmDialog';
@@ -111,7 +113,7 @@ import type {
 } from './types';
 import './TeacherMessages.css';
 import { compareMessageTimes, formatMessageDate } from '../parent-message/conversation';
-import { canShareWithAdmin } from './escalationSnapshot';
+import { canShareWithAdmin, createEscalationSnapshot, systemRiskLevelFromApi } from './escalationSnapshot';
 import { initialTeacherThreads } from './mockThreads';
 import { persistTeacherParentThread, readTeacherParentThreads } from './teacherParentMessages';
 
@@ -806,6 +808,10 @@ function AiObjectionDialog({ onClose, onSubmit, open }: AiObjectionDialogProps) 
 
 type RiskReviewPanelProps = {
   canReview: boolean;
+  errorMessage: string | null;
+  isSubmitting: boolean;
+  // Shown instead of the info text when the review cannot reach the server.
+  notice: string | null;
   onReasonChange: (reason: string) => void;
   onScoreChange: (score: RiskScore) => void;
   onSubmit: () => void;
@@ -817,6 +823,9 @@ type RiskReviewPanelProps = {
 
 function RiskReviewPanel({
   canReview,
+  errorMessage,
+  isSubmitting,
+  notice,
   onReasonChange,
   onScoreChange,
   onSubmit,
@@ -838,14 +847,14 @@ function RiskReviewPanel({
   const isReasonRequired = isDownwardReview;
   const isSubmitDisabledByReason =
     isReasonRequired && trimmedReason.length === 0;
-  const reviewInfoText = isEmergencyDowngrade
-    ? '긴급 단계 하향은 관리자 또는 별도 책임자의 확인 후 반영됩니다.'
+  const reviewInfoText = notice ?? (isEmergencyDowngrade
+    ? '긴급 단계 하향은 관리자에게 공유한 뒤 관리자 승인 후 반영됩니다.'
     : isDownwardReview
       ? '하향 수정 사유는 오탐 원인 분석과 임계값 재조정에 활용됩니다.'
       : isUpwardReview
         ? '상향 수정은 즉시 반영되며 수정 전후 기록이 저장됩니다.'
-        : '수정 전·후 위험도, 수정자, 수정 시각은 처리 기록에 저장됩니다.';
-  const submitLabel = isEmergencyDowngrade
+        : '수정 전·후 위험도, 수정자, 수정 시각은 처리 기록에 저장됩니다.');
+  const submitLabel = isSubmitting ? '저장 중…' : isEmergencyDowngrade
     ? '확인 요청'
     : isDownwardReview
       ? '하향 반영'
@@ -998,12 +1007,13 @@ function RiskReviewPanel({
           </svg>
           <span>{reviewInfoText}</span>
         </div>
+        {errorMessage ? <p className="board-admin-share-error" role="alert">{errorMessage}</p> : null}
         <button
           aria-describedby={
             isSubmitDisabledByReason ? reasonRequirementId : undefined
           }
           className="board-primary-button board-risk-review-submit"
-          disabled={!canReview || isSubmitDisabledByReason}
+          disabled={!canReview || isSubmitDisabledByReason || isSubmitting || Boolean(notice)}
           onClick={onSubmit}
           type="button"
         >
@@ -1015,10 +1025,11 @@ function RiskReviewPanel({
 }
 
 type RiskAnalysisPanelProps = {
-  onAdminShared: (threadId: string, escalation: { adminName: string; reason: string }) => void;
+  onAdminShared: (threadId: string, escalation: { reason: string }) => void;
   onAiObjection: (threadId: string, objection: Pick<AiObjection, 'reason' | 'type'>) => void;
   onEvidencePackageCreate: (threadId: string) => void;
-  onReviewComplete: (threadId: string, review: RiskReviewSubmission) => void;
+  // Rejects with the API error so the panel can show it.
+  onReviewComplete: (threadId: string, review: RiskReviewSubmission) => Promise<void>;
   onOriginalOpen: (evidence?: string) => void;
   onReviewRequest: (threadId: string) => void;
   thread: BoardThread;
@@ -1043,10 +1054,16 @@ function RiskAnalysisPanel({
   const [reviewReason, setReviewReason] = useState(
     analysis?.teacherReviewReason ?? '',
   );
+  const [isReviewSubmitting, setIsReviewSubmitting] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const reviewNotice = canSendEscalationRequest(thread.id)
+    ? null
+    : '서버에 등록된 민원이 아니어서 위험도 검토를 저장할 수 없습니다.';
 
   useEffect(() => {
     setReviewScore(initialReviewScore);
     setReviewReason(analysis?.teacherReviewReason ?? '');
+    setReviewError(null);
   }, [analysis?.teacherReviewReason, initialReviewScore, thread.id]);
 
   if (!analysis || getAnalysisStatus(thread) !== 'ready') {
@@ -1108,17 +1125,30 @@ function RiskAnalysisPanel({
       onOriginalOpen();
     }
   };
-  const handleReviewSubmit = () => {
+  const handleReviewSubmit = async () => {
     const reason = reviewReason.trim();
 
-    if (!analysis.canReviewRisk || (reviewScore < initialReviewScore && !reason)) {
+    if (
+      isReviewSubmitting ||
+      reviewNotice ||
+      !analysis.canReviewRisk ||
+      (reviewScore < initialReviewScore && !reason)
+    ) {
       return;
     }
 
-    onReviewComplete(thread.id, {
-      reason,
-      score: reviewScore,
-    });
+    setIsReviewSubmitting(true);
+    setReviewError(null);
+    try {
+      await onReviewComplete(thread.id, {
+        reason,
+        score: reviewScore,
+      });
+    } catch (error) {
+      setReviewError(getApiErrorMessage(error, '위험도 검토를 저장하지 못했습니다. 다시 시도해 주세요.'));
+    } finally {
+      setIsReviewSubmitting(false);
+    }
   };
 
   return (
@@ -1237,6 +1267,9 @@ function RiskAnalysisPanel({
       {canShowReviewPanel ? (
         <RiskReviewPanel
           canReview={analysis.canReviewRisk}
+          errorMessage={reviewError}
+          isSubmitting={isReviewSubmitting}
+          notice={reviewNotice}
           onReasonChange={setReviewReason}
           onScoreChange={setReviewScore}
           onSubmit={handleReviewSubmit}
@@ -1419,7 +1452,8 @@ type DetailProps = {
   onOpenReplyComposer: (threadId: string) => void;
   onOriginalViewed: (threadId: string, evidence?: string) => void;
   onReturnToReplyComposer: (threadId: string) => void;
-  onReviewComplete: (threadId: string, review: RiskReviewSubmission) => void;
+  // Rejects with the API error so the panel can show it.
+  onReviewComplete: (threadId: string, review: RiskReviewSubmission) => Promise<void>;
   onReviewRequest: (threadId: string) => void;
   onAdminShared: RiskAnalysisPanelProps['onAdminShared'];
   onAiObjection: RiskAnalysisPanelProps['onAiObjection'];
@@ -2505,13 +2539,13 @@ export function TeacherMessages({
     });
   };
 
-  const handleAdminShared = (threadId: string, escalation: { adminName: string; reason: string }) => {
+  const handleAdminShared = (threadId: string, escalation: { reason: string }) => {
     updateThread(threadId, (thread) =>
       appendActivityLogs(thread, [
         {
           actor: user?.name ?? '선생님',
           action: '관리자 공유',
-          detail: `${escalation.adminName}에게 공동 검토를 요청했습니다. 공유 사유: "${escalation.reason}"`,
+          detail: `관리자에게 공동 검토를 요청했습니다. 공유 사유: "${escalation.reason}"`,
         },
       ]),
     );
@@ -2547,34 +2581,41 @@ export function TeacherMessages({
     pushTeacherMessageRoute(threadId, 'reply');
   };
 
-  const handleReviewComplete = (
+  const handleReviewComplete = async (
     threadId: string,
     review: RiskReviewSubmission,
   ) => {
+    const target = threads.find((thread) => thread.id === threadId);
+
+    if (!target?.analysis) {
+      return;
+    }
+
+    const reviewReason = review.reason.trim();
+    // The server decides the resulting level and whether admin approval is needed;
+    // the saved state below only uses its response.
+    const result = await submitRiskReview(
+      threadId,
+      { reason: reviewReason || null, riskScore: review.score },
+      { snapshot: createEscalationSnapshot(target) },
+    );
+    const modifiedAt = formatNow();
+    const beforeLevel = systemRiskLevelFromApi[result.previousLevel];
+    const afterLevel = systemRiskLevelFromApi[result.riskLevel];
+    const beforeLabel = `${systemRiskLabel[beforeLevel]}(${result.previousScore}점)`;
+    const afterLabel = `${systemRiskLabel[afterLevel]}(${result.riskScore}점)`;
+    const reviewer = result.reviewedBy;
+    const reasonDetail = result.reason
+      ? `수정 사유: "${result.reason}"`
+      : '수정 사유: 해당 없음';
+
     updateThread(threadId, (thread) => {
       if (!thread.analysis) {
         return thread;
       }
 
-      const modifiedAt = formatNow();
-      const beforeLevel =
-        thread.analysis.teacherReviewedRiskLevel ??
-        thread.analysis.systemRiskLevel;
-      const beforeScore = thread.analysis.teacherRiskScore ?? defaultRiskScore[beforeLevel];
-      const afterLevel = riskScoreToLevel(review.score);
-      const isDownwardReview = review.score < beforeScore;
-      const isUpwardReview = review.score > beforeScore;
-      const isEmergencyDowngrade =
-        beforeLevel === 'emergency' && afterLevel !== 'emergency';
-      const beforeLabel = `${systemRiskLabel[beforeLevel]}(${beforeScore}점)`;
-      const afterLabel = `${systemRiskLabel[afterLevel]}(${review.score}점)`;
-      const reviewReason = review.reason.trim();
-
-      if (isDownwardReview && !reviewReason) {
-        return thread;
-      }
-
-      if (isEmergencyDowngrade) {
+      if (result.status !== 'APPLIED') {
+        const isPending = result.status === 'PENDING_ADMIN_APPROVAL';
         return {
           ...thread,
           analysis: {
@@ -2582,28 +2623,25 @@ export function TeacherMessages({
             activityLogs: [
               ...thread.analysis.activityLogs,
               {
-                id: `${thread.id}-emergency-downgrade-${
-                  thread.analysis.activityLogs.length + 1
-                }`,
+                id: `${thread.id}-risk-review-${result.riskReviewId}`,
                 time: modifiedAt,
-                actor: '조예인 선생님',
-                action: '긴급 위험도 하향 확인 요청',
-                detail: `수정 전 위험도: ${beforeLabel}, 요청 위험도: ${afterLabel}, 수정 사유: "${reviewReason}", 수정자: 조예인 선생님, 수정 시각: ${modifiedAt}. 관리자 또는 별도 책임자의 확인 후 반영됩니다.`,
+                actor: reviewer,
+                action: isPending ? '긴급 위험도 하향 승인 요청' : '위험도 변경 반려',
+                detail: `현재 위험도: ${beforeLabel}, 요청 위험도: ${afterLabel}, ${reasonDetail}, 요청자: ${reviewer}, 요청 시각: ${modifiedAt}. ${
+                  isPending ? '관리자 승인 후 반영됩니다.' : '위험도는 변경되지 않았습니다.'
+                }`,
               },
             ],
-            teacherReviewReason: reviewReason,
+            teacherReviewReason: result.reason || undefined,
           },
         };
       }
 
-      const action = isDownwardReview
+      const action = result.direction === 'LOWERED'
         ? '위험도 하향 수정'
-        : isUpwardReview
+        : result.direction === 'RAISED'
           ? '위험도 상향 수정'
           : '위험도 검토 완료';
-      const reasonDetail = reviewReason
-        ? `수정 사유: "${reviewReason}"`
-        : '수정 사유: 해당 없음';
 
       return {
         ...thread,
@@ -2612,19 +2650,19 @@ export function TeacherMessages({
           activityLogs: [
             ...thread.analysis.activityLogs,
             {
-              id: `${thread.id}-review-${thread.analysis.activityLogs.length + 1}`,
+              id: `${thread.id}-risk-review-${result.riskReviewId}`,
               time: modifiedAt,
-              actor: '조예인 선생님',
+              actor: reviewer,
               action,
-              detail: `수정 전 위험도: ${beforeLabel}, 수정 후 위험도: ${afterLabel}, ${reasonDetail}, 수정자: 조예인 선생님, 수정 시각: ${modifiedAt}.`,
+              detail: `수정 전 위험도: ${beforeLabel}, 수정 후 위험도: ${afterLabel}, ${reasonDetail}, 수정자: ${reviewer}, 수정 시각: ${modifiedAt}.`,
             },
           ],
           // Only a designated reviewer can lift the lock; raising to emergency sets it.
           safetyLock:
             thread.analysis.safetyLock || afterLevel === 'emergency',
-          teacherReviewReason: reviewReason || undefined,
+          teacherReviewReason: result.reason || undefined,
           teacherReviewedRiskLevel: afterLevel,
-          teacherRiskScore: review.score,
+          teacherRiskScore: result.riskScore as RiskScore,
         },
         risk: systemRiskTone[afterLevel],
         riskReviewRequired: false,
