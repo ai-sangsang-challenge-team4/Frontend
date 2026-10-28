@@ -1,56 +1,84 @@
 # 관리자 공유 및 처리 (#10)
 
-교사가 위험·긴급 메시지를 관리자에게 직접 공유하고, 관리자가 처리 상태를 `SHARED → UNDER_REVIEW → COMPLETED`로 변경하는 흐름입니다. 현재는 Mock API(`teacher-hub.escalations` localStorage)로 동작하며, 같은 브라우저에서 교사·관리자 계정을 바꿔 로그인하면 공유 내역이 이어집니다.
+교사가 긴급(EMERGENCY) 메시지를 관리자에게 공유하고, 관리자가 처리 상태를 `SHARED → UNDER_REVIEW → COMPLETED`로 변경하는 흐름입니다. 교사의 긴급 단계 하향 요청은 별도 축(`riskReviewStatus`)으로 관리자 승인·거부를 거칩니다.
+
+상태값과 API는 백엔드 Swagger(`/v3/api-docs`) 기준입니다. 프론트에서 다른 값으로 변환하지 않습니다.
+
+## 상태값
+
+| 축 | 타입 | 값 |
+| --- | --- | --- |
+| 관리자 공유 | `EscalationStatus` | `NOT_SHARED · SHARED · UNDER_REVIEW · COMPLETED` |
+| 위험도 변경 승인 | `RiskReviewStatus` | `PENDING_ADMIN_APPROVAL · APPLIED · REJECTED` |
+| 민원 | `ComplaintStatus` | `DRAFT · OPEN · CLOSED` |
+| 메시지 | `MessageStatus` | `DRAFT · SENT · READ` |
+
+학부모 작성 화면의 `PARENT_REVIEW`는 서버 상태가 아닌 로컬 작성 단계(`MessageDraftStep`)입니다.
+
+## Mock / HTTP 전환
+
+`VITE_ESCALATION_API=http`이면 백엔드를 호출하고, 그 외(기본)는 localStorage mock(`teacher-hub.escalations.v2`)을 씁니다.
+
+- 로그인이 아직 mock 토큰이라 http로 바꾸면 401이 납니다. 인증 연동 후 전환하세요.
+- 교사 메시지함은 mock 데이터(`thread-001` 같은 문자열 ID)라, http 모드에서는 숫자 complaintId가 없는 메시지에 요청을 보내지 않고 안내 문구만 표시합니다.
 
 ## 화면
 
 | 역할 | 경로 | 내용 |
 | --- | --- | --- |
-| TEACHER | `/teacher/messages/:id` → 위험 요소 탭 | 위험(High)·긴급(Emergency) 메시지에 `관리자 공유` 섹션 표시. 공유 사유(필수, 500자) 입력 모달, 원문·증빙 패키지 첨부 선택, 공유 후 상태 칩과 사유·관리자 메모 표시, 처리 기록에 `관리자 공유` 로그 추가 |
-| TEACHER | `/teacher/admin-share` | 내가 공유한 메시지 목록과 관리자 처리 상태 |
-| ADMIN | `/admin/messages` | 공유받은 메시지 목록. 처리 상태 탭(전체·확인 대기·검토 중·처리 완료), 위험도 필터 |
-| ADMIN | `/admin/messages/:id` | 처리 상태 변경(검토 시작·처리 완료, 메모 선택 입력), 공유 내용(교사 사유·공유된 메시지), 위험 분석(완충 요약·위험 요소·권장 처리), 처리 기록 |
+| TEACHER | `/teacher/messages/:id` → 위험 요소 탭 | 위험·긴급 메시지에 `관리자 공유` 섹션. 공유 버튼은 서버 `currentRiskLevel`이 EMERGENCY일 때만 활성. 공유 후 상태 칩, 현재 위험도, 위험도 변경 요청 상태 표시 |
+| TEACHER | 같은 탭 → 위험도 검토 | 1~7점 검토를 `risk-reviews`로 저장. 저장 결과·처리 기록은 응답의 `riskLevel`·`status` 사용. 긴급 하향은 승인 대기 또는 409(관리자 공유 필요) |
+| TEACHER | `/teacher/admin-share` | 내가 공유한 목록. **mock 전용** (대응 API 없음, http 모드에서는 안내 문구) |
+| ADMIN | `/admin/messages` | 공유받은 목록. 상태 탭(전체·확인 대기·검토 중·처리 완료), 위험도 필터 |
+| ADMIN | `/admin/messages/:escalationId` | 처리 상태(검토 시작·처리 완료·위험도 변경 승인/거부), 공유 내용, 위험 분석, 처리 기록 |
 
-## 권한
+관리자 버튼 노출 조건(최종 판단은 백엔드 409):
 
-- 관리자 목록·상세는 교사가 공유한 메시지 중 본인에게 배정된 건만 조회됩니다.
-- 공유되지 않은 메시지 상세(`/admin/messages/{id}`)는 403 `COMPLAINT_NOT_SHARED`로 막고 오류 화면을 표시합니다.
-- 원문은 교사가 `원문 메시지`를 선택한 경우에만 관리자에게 전달됩니다. 기본은 개인정보가 가려진 메시지입니다.
-- TEACHER가 `/admin/*`에 접근하면 `RoleRoute`가 교사 홈으로 보냅니다.
+- 검토 시작: `escalationStatus === 'SHARED'`
+- 처리 완료: `escalationStatus === 'UNDER_REVIEW' && riskReviewStatus !== 'PENDING_ADMIN_APPROVAL'`
+- 위험도 변경 승인/거부: `riskReviewStatus === 'PENDING_ADMIN_APPROVAL'`
 
 ## API
 
-`src/features/escalation/api/escalationApi.ts`의 `api`를 `httpEscalationApi`로 바꾸면 실제 서버를 호출합니다.
+| 기능 | Method | Endpoint |
+| --- | --- | --- |
+| 공유 상태 조회(교사) | GET | `/teacher/complaints/{complaintId}/escalation` |
+| 공유 요청(교사) | POST | `/teacher/complaints/{complaintId}/escalation` (201, 본문 string → 상태 재조회) |
+| 위험도 검토(교사) | POST | `/teacher/complaints/{complaintId}/risk-reviews` |
+| 공유 목록(관리자) | GET | `/admin/escalations?status=&riskLevel=` |
+| 공유 상세(관리자) | GET | `/admin/escalations/{escalationId}` |
+| 공유 메시지·위험·이력 | GET | `/admin/escalations/{escalationId}/messages`, `/risk`, `/history` |
+| 검토 시작 / 완료 | POST | `/admin/escalations/{escalationId}/review`, `/complete` |
+| 위험도 변경 결정 | POST | `/admin/escalations/{escalationId}/risk-change-decision` |
 
-| 기능 | Method | Endpoint | 명세 |
-| --- | --- | --- | --- |
-| 관리자 공유 | POST | `/complaints/{complaintId}/escalations` | 명세 있음 |
-| 관리자 처리함 | GET | `/admin/complaints` | 명세 있음 (`reason`, `title` 응답 필드 추가 필요) |
-| 관리자 검토·처리 | PATCH | `/admin/complaints/{complaintId}` | 명세 있음 (`START_REVIEW` action 추가 필요) |
-| 공유 대상 관리자 목록 | GET | `/admins` | **가정** |
-| 민원별 공유 상태(교사) | GET | `/complaints/{complaintId}/escalations` | **가정**, 미공유 시 404 |
-| 내가 공유한 목록(교사) | GET | `/escalations?scope=mine` | **가정** |
-| 공유 메시지 상세(관리자) | GET | `/admin/complaints/{complaintId}` | **가정**, 미공유·타 관리자 배정 시 403 |
+409는 백엔드 `ErrorResponse.message`를 그대로 보여 줍니다.
 
-## 백엔드 확인 필요
+## 백엔드 확인·추가 요청
 
-- `PATCH /admin/complaints/{id}`의 action 값: 명세에는 `REVIEW_COMPLETE`만 있어 검토 시작은 `START_REVIEW`로 가정했습니다. 반려·교사 반환(`RETURNED_TO_TEACHER`) action은 이번 범위에서 제외했습니다.
-- 위의 **가정** 엔드포인트 4개의 경로와 응답 형식
-- 오류 코드: `ALREADY_ESCALATED`(409), `COMPLAINT_NOT_SHARED`(403), `ESCALATION_NOT_FOUND`(404), `INVALID_ESCALATION_TRANSITION`(409) 등은 프론트 Mock 기준 이름입니다(`src/shared/api/apiError.ts`).
-- 공유 가능 위험도: 위험·긴급만 공유 버튼을 노출합니다. 주의(Medium) 포함 여부는 정책 확정이 필요합니다.
-- `evidencePackageId`: Mock 메시지함에 패키지 ID가 없어 첨부 여부만 전달합니다.
+- `AdminEscalationSummaryResponse`에 `riskReviewStatus`가 없어 관리자 화면 진입 시 승인 대기 여부를 알 수 없습니다. 지금은 관리자 액션 응답(`EscalationStateResponse`)을 받은 뒤에만 승인/거부 버튼이 보입니다. **필드 추가 필요.**
+- 교사의 "내가 공유한 목록" API가 없습니다(`/teacher/admin-share`는 mock 전용). **엔드포인트 추가 필요.**
+- `riskReviewStatus`, 미공유 시 `escalationId`의 nullable 여부가 스펙에 없습니다. 프론트는 `null`을 허용하도록 방어했습니다(`TODO(backend)`).
+- `SHARED → COMPLETED` 직접 완료 허용 여부가 스펙에 없습니다. 처리 완료 버튼은 `UNDER_REVIEW`에서만 노출합니다.
+- 관리자 목록·상세 응답에 민원 제목·학생·학급 정보가 없어 `민원 #{complaintId}`와 공유 교사(`sharedBy`)만 표시합니다.
+- 관리자 처리 메모·결정 사유는 응답에 없고 `/history`의 `reason`으로만 확인됩니다.
+- 교사 위험도 점수(1~7) → 등급 매핑 기준은 서버에 있습니다. 프론트 슬라이더의 단계 미리보기만 로컬 매핑을 쓰고, mock 서버가 같은 매핑을 흉내 냅니다.
+
+## 미결정 정책
+
+- HIGH 단계도 관리자 공유를 허용할지: 현재는 백엔드 정책대로 EMERGENCY만 허용합니다(`SHAREABLE_RISK_LEVEL`).
 
 ## 테스트
 
 ```bash
-npx playwright test admin-escalation
+npx playwright test admin-escalation escalation-http-api
 ```
 
-교사 공유 → 관리자 검토 시작·처리 완료 → 교사 화면 상태 반영, 일반 위험도 메시지의 버튼 미노출, 미공유 메시지 403, 교사의 관리자 화면 접근 차단을 확인합니다.
+- `admin-escalation`: mock 어댑터로 교사 공유 → 관리자 검토 시작·처리 완료, 긴급 하향 승인 대기 → 관리자 승인, 미공유 하향 409, HIGH 공유 버튼 비활성, 권한 차단을 확인합니다.
+- `escalation-http-api`: fetch를 대체해 HTTP 어댑터의 경로·본문·409 메시지 노출을 확인합니다. **실제 서버 호출은 아닙니다.**
 
 Mock 공유 내역 초기화:
 
 ```js
-localStorage.removeItem('teacher-hub.escalations');
+localStorage.removeItem('teacher-hub.escalations.v2');
 location.reload();
 ```
