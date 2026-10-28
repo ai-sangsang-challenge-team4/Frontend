@@ -24,8 +24,12 @@
   margin-top: 24px;
 }
 
+.auth-teacher-information {
+  --auth-school-label-width: 74px;
+}
+
 .auth-screen .auth-child-row {
-  grid-template-columns: 60px minmax(0, 1fr);
+  grid-template-columns: var(--auth-school-label-width, 60px) minmax(0, 1fr);
   align-items: center;
   gap: 12px 14px;
 }
@@ -58,7 +62,7 @@
   z-index: 10;
   top: calc(100% + 6px);
   right: 0;
-  left: 74px;
+  left: calc(var(--auth-school-label-width, 60px) + 14px);
   overflow: auto;
   max-height: 240px;
   border: 1px solid #a2a2a2;

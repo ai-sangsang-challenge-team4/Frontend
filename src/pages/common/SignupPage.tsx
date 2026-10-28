@@ -9,17 +9,21 @@ import {
 } from '../../features/auth';
 import { PasswordField } from '../../features/auth/components';
 import { ChildInformationFields } from '../../features/auth/components/ChildInformationFields';
+import { SchoolSearchField } from '../../features/auth/components/SchoolSearchField';
 import {
   createEmptyChildSignupInfo,
   validateChildSignupInfo,
   type ChildSignupErrors,
 } from '../../features/auth/childSignup';
 import { useEmailVerification } from '../../features/auth/hooks/useEmailVerification';
+import { validateTeacherSignupInfo } from '../../features/auth/teacherSignup';
 import { Button, TextField } from '../../shared/components/ui';
 
 type SignupFormErrors = Partial<
   Record<
     | 'name'
+    | 'schoolId'
+    | 'employeeNo'
     | 'password'
     | 'passwordConfirmation'
     | 'role'
@@ -53,6 +57,8 @@ export function SignupPage() {
     getInitialSignupRole(searchParams.get('role')),
   );
   const [name, setName] = useState('');
+  const [schoolId, setSchoolId] = useState('');
+  const [employeeNo, setEmployeeNo] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const [child, setChild] = useState(createEmptyChildSignupInfo);
@@ -67,6 +73,9 @@ export function SignupPage() {
 
     if (role === 'TEACHER' && !name.trim()) {
       nextErrors.name = '이름을 입력해 주세요.';
+    }
+    if (role === 'TEACHER') {
+      Object.assign(nextErrors, validateTeacherSignupInfo({ schoolId, employeeNo }));
     }
 
     if (!role) {
@@ -102,7 +111,7 @@ export function SignupPage() {
         password,
         ...(role === 'PARENT'
           ? { role, child: { ...child, name: child.name.trim() } }
-          : { role, name: name.trim() }),
+          : { role, name: name.trim(), schoolId, employeeNo: employeeNo.trim() }),
       });
       navigate(`/login?role=${role}`, {
         replace: true,
@@ -156,7 +165,9 @@ export function SignupPage() {
                       name="role"
                       onChange={() => {
                         setRole(option);
-                        setFormErrors((errors) => ({ ...errors, name: '', role: '', child: undefined, submit: '' }));
+                        setFormErrors((errors) => ({
+                          ...errors, name: '', schoolId: '', employeeNo: '', role: '', child: undefined, submit: '',
+                        }));
                       }}
                       type="radio"
                       value={option}
@@ -196,19 +207,65 @@ export function SignupPage() {
             ) : null}
 
             {role === 'TEACHER' ? (
-              <TextField
-                autoComplete="name"
-                error={formErrors.name}
-                fieldSize="lg"
-                label={<RequiredLabel>이름</RequiredLabel>}
-                name="name"
-                onChange={(event) => {
-                  setName(event.target.value);
-                  setFormErrors((errors) => ({ ...errors, name: '', submit: '' }));
-                }}
-                placeholder="이름을 입력해주세요."
-                value={name}
-              />
+              <>
+                <fieldset
+                  className="auth-fieldset auth-child-information auth-teacher-information"
+                  disabled={isLoading}
+                >
+                  <legend className="auth-child-information__heading">
+                    <span className="auth-child-information__title">
+                      소속 정보 <span className="auth-required">*</span>
+                    </span>
+                    <span className="auth-child-information__notice">
+                      학교 목록은 예시 데이터입니다.
+                    </span>
+                  </legend>
+                  <div className="auth-child-information__fields">
+                    <SchoolSearchField
+                      disabled={isLoading}
+                      error={formErrors.schoolId}
+                      label="소속학교"
+                      name="teacherSchool"
+                      onSelect={(nextSchoolId) => {
+                        setSchoolId(nextSchoolId);
+                        setFormErrors((errors) => ({ ...errors, schoolId: '', submit: '' }));
+                      }}
+                      placeholder="소속학교를 검색해 주세요."
+                      schoolId={schoolId}
+                    />
+                    <TextField
+                      aria-required="true"
+                      autoComplete="off"
+                      containerClassName="auth-child-row"
+                      disabled={isLoading}
+                      error={formErrors.employeeNo}
+                      fieldSize="lg"
+                      label="교번"
+                      name="employeeNo"
+                      onChange={(event) => {
+                        setEmployeeNo(event.target.value);
+                        setFormErrors((errors) => ({ ...errors, employeeNo: '', submit: '' }));
+                      }}
+                      placeholder="교번을 입력해 주세요."
+                      value={employeeNo}
+                    />
+                  </div>
+                </fieldset>
+                <TextField
+                  autoComplete="name"
+                  disabled={isLoading}
+                  error={formErrors.name}
+                  fieldSize="lg"
+                  label={<RequiredLabel>이름</RequiredLabel>}
+                  name="name"
+                  onChange={(event) => {
+                    setName(event.target.value);
+                    setFormErrors((errors) => ({ ...errors, name: '', submit: '' }));
+                  }}
+                  placeholder="이름을 입력해주세요."
+                  value={name}
+                />
+              </>
             ) : null}
 
             <div className="auth-stacked-field">
