@@ -167,7 +167,7 @@ function findByComplaint(store: StoredEscalation[], complaintId: ComplaintId) {
 
 function requireAssigned(store: StoredEscalation[], escalationId: number, adminId: number) {
   const item = store.find((entry) => entry.escalationId === escalationId);
-  if (!item) throw new ApiError({ status: 404, message: '공유된 문의를 찾을 수 없어요.' });
+  if (!item) throw new ApiError({ status: 404, message: '공유 건을 찾을 수 없습니다.' });
   if (item.assignedAdminId !== adminId) throw new ApiError({ status: 403 });
   return item;
 }
@@ -204,7 +204,7 @@ export const mockEscalationApi: EscalationApi = {
     requireUser('TEACHER');
     const item = findByComplaint(readStore(), complaintId);
     if (item) return toState(item);
-    if (!options?.snapshot) throw new ApiError({ status: 404, message: '문의 내역을 찾을 수 없어요.' });
+    if (!options?.snapshot) throw new ApiError({ status: 404, message: '민원을 찾을 수 없습니다.' });
     return {
       currentRiskLevel: options.snapshot.riskLevel,
       currentRiskScore: options.snapshot.riskScore,
@@ -218,11 +218,12 @@ export const mockEscalationApi: EscalationApi = {
     await wait(options?.signal);
     const teacher = requireUser('TEACHER');
     const reason = request.reason.trim();
-    if (!reason || reason.length > SHARE_REASON_MAX_LENGTH) {
-      throw new ApiError({ status: 400, message: `공유 사유를 ${SHARE_REASON_MAX_LENGTH}자 이내로 입력해 주세요.` });
+    if (!reason) throw new ApiError({ status: 400, message: '공유 사유를 입력해주세요.' });
+    if (reason.length > SHARE_REASON_MAX_LENGTH) {
+      throw new ApiError({ status: 400, message: `공유 사유는 ${SHARE_REASON_MAX_LENGTH}자 이하로 입력해주세요.` });
     }
     const { snapshot } = options ?? {};
-    if (!snapshot) throw new ApiError({ status: 404, message: '문의 내역을 찾을 수 없어요.' });
+    if (!snapshot) throw new ApiError({ status: 404, message: '민원을 찾을 수 없습니다.' });
     if (snapshot.riskLevel !== SHAREABLE_RISK_LEVEL) {
       throw new ApiError({ status: 409, message: 'EMERGENCY 위험도의 민원만 관리자에게 공유할 수 있습니다.' });
     }
@@ -266,11 +267,12 @@ export const mockEscalationApi: EscalationApi = {
     const teacher = requireUser('TEACHER');
     const { riskScore } = request;
     const reason = request.reason?.trim() ?? '';
-    if (!Number.isInteger(riskScore) || riskScore < 1 || riskScore > 7) {
-      throw new ApiError({ status: 400, message: '위험도 점수는 1~7점이어야 해요.' });
+    if (!Number.isInteger(riskScore) || riskScore < 1) {
+      throw new ApiError({ status: 400, message: '위험 점수는 1점 이상이어야 합니다.' });
     }
+    if (riskScore > 7) throw new ApiError({ status: 400, message: '위험 점수는 7점 이하여야 합니다.' });
     if (reason.length > RISK_REVIEW_REASON_MAX_LENGTH) {
-      throw new ApiError({ status: 400, message: `검토 사유를 ${RISK_REVIEW_REASON_MAX_LENGTH}자 이내로 입력해 주세요.` });
+      throw new ApiError({ status: 400, message: `검토 사유는 ${RISK_REVIEW_REASON_MAX_LENGTH}자 이하로 입력해주세요.` });
     }
 
     const store = readStore();
@@ -278,12 +280,12 @@ export const mockEscalationApi: EscalationApi = {
     const previous = item
       ? { level: item.currentRiskLevel, score: item.currentRiskScore }
       : options?.snapshot && { level: options.snapshot.riskLevel, score: options.snapshot.riskScore };
-    if (!previous) throw new ApiError({ status: 404, message: '문의 내역을 찾을 수 없어요.' });
+    if (!previous) throw new ApiError({ status: 404, message: '민원을 찾을 수 없습니다.' });
 
     const direction: RiskReviewDirection =
       riskScore < previous.score ? 'LOWERED' : riskScore > previous.score ? 'RAISED' : 'UNCHANGED';
     if (direction === 'LOWERED' && !reason) {
-      throw new ApiError({ status: 400, message: '하향 조정 시 검토 사유를 입력해 주세요.' });
+      throw new ApiError({ status: 400, message: '위험도를 하향 조정할 때는 검토 사유가 필요합니다.' });
     }
 
     const riskLevel = mockScoreToLevel(riskScore);
