@@ -172,13 +172,30 @@ function requireAssigned(store: StoredEscalation[], escalationId: number, adminI
   return item;
 }
 
-function readMessage(message: string, { required }: { required: boolean }) {
+// The backend rejects a blank message (@NotBlank) even though the spec shows minLength 0.
+function readMessage(message: string) {
   const value = message.trim();
-  if (required && !value) throw new ApiError({ status: 400, message: '사유를 입력해 주세요.' });
+  if (!value) throw new ApiError({ status: 400, message: '관리자 메시지를 입력해주세요.' });
   if (value.length > ADMIN_MESSAGE_MAX_LENGTH) {
-    throw new ApiError({ status: 400, message: `${ADMIN_MESSAGE_MAX_LENGTH}자 이내로 입력해 주세요.` });
+    throw new ApiError({ status: 400, message: `관리자 메시지는 ${ADMIN_MESSAGE_MAX_LENGTH}자 이하로 입력해주세요.` });
   }
   return value;
+}
+
+function requireStatus(item: StoredEscalation, expected: EscalationStatus) {
+  if (item.escalationStatus !== expected) {
+    throw new ApiError({
+      status: 409,
+      message: `공유 건 상태를 ${expected}에서만 변경할 수 있습니다. 현재 상태: ${item.escalationStatus}`,
+    });
+  }
+}
+
+function hasSameShare(item: StoredEscalation, adminId: number, scopes: EscalationScope[], reason: string) {
+  return item.assignedAdminId === adminId &&
+    item.scopes.length === scopes.length &&
+    scopes.every((scope) => item.scopes.includes(scope)) &&
+    item.reason === reason;
 }
 
 export const mockEscalationApi: EscalationApi = {
@@ -207,12 +224,17 @@ export const mockEscalationApi: EscalationApi = {
     const { snapshot } = options ?? {};
     if (!snapshot) throw new ApiError({ status: 404, message: '문의 내역을 찾을 수 없어요.' });
     if (snapshot.riskLevel !== SHAREABLE_RISK_LEVEL) {
-      throw new ApiError({ status: 409, message: '긴급(EMERGENCY) 단계 문의만 관리자에게 공유할 수 있어요.' });
+      throw new ApiError({ status: 409, message: 'EMERGENCY 위험도의 민원만 관리자에게 공유할 수 있습니다.' });
     }
 
+    // One share per complaint: the same request is a no-op, a different one is rejected.
     const store = readStore();
-    if (findByComplaint(store, complaintId)) {
-      throw new ApiError({ status: 409, message: '이미 관리자에게 공유된 문의예요.' });
+    const adminId = request.adminId ?? DEFAULT_ADMIN_ID;
+    const scopes = Array.from(new Set<EscalationScope>(['MASKING_MESSAGES', ...request.scopes]));
+    const existing = findByComplaint(store, complaintId);
+    if (existing) {
+      if (hasSameShare(existing, adminId, scopes, reason)) return;
+      throw new ApiError({ status: 409, message: '이미 다른 내용으로 공유된 민원입니다.' });
     }
 
     const base = {
@@ -221,7 +243,7 @@ export const mockEscalationApi: EscalationApi = {
     };
     const created: StoredEscalation = {
       ...base,
-      assignedAdminId: request.adminId ?? DEFAULT_ADMIN_ID,
+      assignedAdminId: adminId,
       complaintId: String(complaintId),
       currentRiskLevel: snapshot.riskLevel,
       currentRiskScore: snapshot.riskScore,
@@ -230,7 +252,7 @@ export const mockEscalationApi: EscalationApi = {
       pendingRiskChange: null,
       reason,
       riskReviewStatus: null,
-      scopes: Array.from(new Set<EscalationScope>(['MASKING_MESSAGES', ...request.scopes])),
+      scopes,
       sharedAt: new Date().toISOString(),
       sharedBy: teacher.userId,
       sharedByName: teacher.name,
@@ -265,21 +287,22 @@ export const mockEscalationApi: EscalationApi = {
     }
 
     const riskLevel = mockScoreToLevel(riskScore);
-    const leavesEmergency = previous.level === 'EMERGENCY' && riskLevel !== 'EMERGENCY';
-    const activeShare = item && item.escalationStatus !== 'COMPLETED' ? item : undefined;
+    // Like the backend, any change to an EMERGENCY score needs admin approval through the share.
+    const changesEmergency = previous.level === 'EMERGENCY' && riskScore !== previous.score;
     let status: RiskReviewStatus = 'APPLIED';
 
-    if (leavesEmergency) {
-      if (!activeShare) {
-        throw new ApiError({ status: 409, message: '긴급 단계 변경은 관리자 승인이 필요해요. 관리자 공유 후 다시 요청해 주세요.' });
+    if (changesEmergency) {
+      if (!item) {
+        throw new ApiError({ status: 409, message: 'EMERGENCY 위험도 변경을 요청하려면 먼저 관리자에게 공유해야 합니다.' });
       }
-      if (activeShare.riskReviewStatus === 'PENDING_ADMIN_APPROVAL') {
-        throw new ApiError({ status: 409, message: '이미 관리자 승인을 기다리는 위험도 변경 요청이 있어요.' });
+      if (item.escalationStatus === 'COMPLETED') {
+        throw new ApiError({ status: 409, message: '처리 완료된 공유 건에는 위험도 변경을 요청할 수 없습니다.' });
       }
+      // A new request replaces a pending one, as the backend does.
       status = 'PENDING_ADMIN_APPROVAL';
       replaceStored(store, {
-        ...activeShare,
-        events: [...activeShare.events, createEvent(activeShare, 'ESCALATION_RISK_CHANGE_REQUESTED', teacher.name, {
+        ...item,
+        events: [...item.events, createEvent(item, 'ESCALATION_RISK_CHANGE_REQUESTED', teacher.name, {
           previousRiskLevel: previous.level,
           previousRiskScore: previous.score,
           reason,
@@ -395,14 +418,12 @@ export const mockEscalationApi: EscalationApi = {
     const admin = requireUser('ADMIN');
     const store = readStore();
     const item = requireAssigned(store, escalationId, admin.userId);
-    const message = readMessage(request.message, { required: false });
-    if (item.escalationStatus !== 'SHARED') {
-      throw new ApiError({ status: 409, message: '확인 대기 상태에서만 검토를 시작할 수 있어요.' });
-    }
+    const message = readMessage(request.message);
+    requireStatus(item, 'SHARED');
     const next: StoredEscalation = {
       ...item,
       escalationStatus: 'UNDER_REVIEW',
-      events: [...item.events, createEvent(item, 'ESCALATION_REVIEW_STARTED', admin.name, { reason: message || null })],
+      events: [...item.events, createEvent(item, 'ESCALATION_REVIEW_STARTED', admin.name, { reason: message })],
     };
     replaceStored(store, next);
     return toState(next);
@@ -413,17 +434,15 @@ export const mockEscalationApi: EscalationApi = {
     const admin = requireUser('ADMIN');
     const store = readStore();
     const item = requireAssigned(store, escalationId, admin.userId);
-    const message = readMessage(request.message, { required: false });
+    const message = readMessage(request.message);
+    requireStatus(item, 'UNDER_REVIEW');
     if (item.riskReviewStatus === 'PENDING_ADMIN_APPROVAL') {
-      throw new ApiError({ status: 409, message: '위험도 변경 승인 대기 중에는 검토를 완료할 수 없어요.' });
-    }
-    if (item.escalationStatus !== 'UNDER_REVIEW') {
-      throw new ApiError({ status: 409, message: '검토 중인 공유 건만 완료할 수 있어요.' });
+      throw new ApiError({ status: 409, message: '위험도 변경 요청을 승인하거나 거부한 뒤 처리 완료할 수 있습니다.' });
     }
     const next: StoredEscalation = {
       ...item,
       escalationStatus: 'COMPLETED',
-      events: [...item.events, createEvent(item, 'ESCALATION_COMPLETED', admin.name, { reason: message || null })],
+      events: [...item.events, createEvent(item, 'ESCALATION_COMPLETED', admin.name, { reason: message })],
     };
     replaceStored(store, next);
     return toState(next);
@@ -434,10 +453,13 @@ export const mockEscalationApi: EscalationApi = {
     const admin = requireUser('ADMIN');
     const store = readStore();
     const item = requireAssigned(store, escalationId, admin.userId);
-    const message = readMessage(request.message, { required: true });
+    const message = readMessage(request.message);
+    // Repeating the decision already made is a no-op on the backend.
+    if (item.riskReviewStatus === request.status) return toState(item);
+    requireStatus(item, 'UNDER_REVIEW');
     const pending = item.pendingRiskChange;
     if (item.riskReviewStatus !== 'PENDING_ADMIN_APPROVAL' || !pending) {
-      throw new ApiError({ status: 409, message: '승인 대기 중인 위험도 변경 요청이 없어요.' });
+      throw new ApiError({ status: 409, message: '교사가 요청한 위험도 변경 건이 없습니다.' });
     }
     const isApplied = request.status === 'APPLIED';
     const next: StoredEscalation = {
