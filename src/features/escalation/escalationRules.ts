@@ -1,12 +1,11 @@
 import type { StatusChipStatus } from '../../shared/components/ui';
-import type { AdminAction, EscalationStatus, RiskLevel } from '../../shared/types';
+import type { EscalationStatus, HistoryEventType, RiskLevel, RiskReviewStatus } from '../../shared/types';
 
 export const escalationStatusLabel: Record<EscalationStatus, string> = {
   NOT_SHARED: '공유 전',
   SHARED: '확인 대기',
   UNDER_REVIEW: '검토 중',
   COMPLETED: '처리 완료',
-  RETURNED_TO_TEACHER: '교사 반환',
 };
 
 export const escalationStatusChip: Record<EscalationStatus, StatusChipStatus> = {
@@ -14,7 +13,6 @@ export const escalationStatusChip: Record<EscalationStatus, StatusChipStatus> = 
   SHARED: 'pending',
   UNDER_REVIEW: 'progress',
   COMPLETED: 'complete',
-  RETURNED_TO_TEACHER: 'review',
 };
 
 // Teacher-facing wording: the teacher waits on the admin rather than acting.
@@ -23,7 +21,33 @@ export const teacherEscalationStatusLabel: Record<EscalationStatus, string> = {
   SHARED: '관리자 확인 대기',
   UNDER_REVIEW: '관리자 검토 중',
   COMPLETED: '관리자 처리 완료',
-  RETURNED_TO_TEACHER: '교사에게 반환됨',
+};
+
+export const riskReviewStatusLabel: Record<RiskReviewStatus, string> = {
+  PENDING_ADMIN_APPROVAL: '관리자 승인 대기',
+  APPLIED: '반영됨',
+  REJECTED: '반려됨',
+};
+
+export const riskReviewStatusChip: Record<RiskReviewStatus, StatusChipStatus> = {
+  PENDING_ADMIN_APPROVAL: 'pending',
+  APPLIED: 'complete',
+  REJECTED: 'review',
+};
+
+export const historyEventLabel: Record<HistoryEventType, string> = {
+  STATUS_CHANGED: '민원 상태 변경',
+  RISK_ANALYZED: '위험 분석',
+  RISK_REVIEWED: '교사 위험도 검토',
+  ORIGINAL_VIEWED: '원문 열람',
+  AI_DRAFT_GENERATED: 'AI 답변 초안 생성',
+  MESSAGE_SENT: '메시지 전송',
+  ESCALATION_SHARED: '관리자 공유',
+  ESCALATION_REVIEW_STARTED: '관리자 검토 시작',
+  ESCALATION_RISK_CHANGE_REQUESTED: '위험도 변경 승인 요청',
+  ESCALATION_RISK_CHANGE_APPROVED: '위험도 변경 승인',
+  ESCALATION_RISK_CHANGE_REJECTED: '위험도 변경 거부',
+  ESCALATION_COMPLETED: '관리자 검토 완료',
 };
 
 // Matches the teacher inbox tone (low → 일반, emergency → 긴급).
@@ -36,20 +60,27 @@ export const apiRiskTone = {
 
 export const riskLevelOrder: RiskLevel[] = ['LOW', 'MEDIUM', 'HIGH', 'EMERGENCY'];
 
-// Each admin action moves one step; anything else is rejected with 409.
-export const adminActionTransition: Record<AdminAction, { from: EscalationStatus; to: EscalationStatus }> = {
-  START_REVIEW: { from: 'SHARED', to: 'UNDER_REVIEW' },
-  REVIEW_COMPLETE: { from: 'UNDER_REVIEW', to: 'COMPLETED' },
-};
+// Only EMERGENCY can be shared (other levels get 409).
+// TODO(policy): whether HIGH should also be shareable is undecided.
+export const SHAREABLE_RISK_LEVEL: RiskLevel = 'EMERGENCY';
 
-export function getNextAdminAction(status: EscalationStatus): AdminAction | null {
-  const entry = (Object.entries(adminActionTransition) as [AdminAction, { from: EscalationStatus }][])
-    .find(([, transition]) => transition.from === status);
-  return entry?.[0] ?? null;
+// Button visibility only pre-empts obvious 409s; the backend makes the final call.
+export function canStartEscalationReview(status: EscalationStatus) {
+  return status === 'SHARED';
+}
+
+// TODO(backend): spec does not say whether SHARED → COMPLETED is allowed, so completion waits for UNDER_REVIEW.
+export function canCompleteEscalation(status: EscalationStatus, riskReviewStatus: RiskReviewStatus | null) {
+  return status === 'UNDER_REVIEW' && riskReviewStatus !== 'PENDING_ADMIN_APPROVAL';
+}
+
+export function canDecideRiskChange(riskReviewStatus: RiskReviewStatus | null) {
+  return riskReviewStatus === 'PENDING_ADMIN_APPROVAL';
 }
 
 export const SHARE_REASON_MAX_LENGTH = 500;
-export const ADMIN_MEMO_MAX_LENGTH = 500;
+export const ADMIN_MESSAGE_MAX_LENGTH = 500;
+export const RISK_REVIEW_REASON_MAX_LENGTH = 300;
 
 export function formatEscalationTime(value: string | null | undefined) {
   if (!value) return '-';

@@ -1,10 +1,31 @@
-export type EscalationStatus =
-  | 'NOT_SHARED'
-  | 'SHARED'
-  | 'UNDER_REVIEW'
-  | 'COMPLETED'
-  | 'RETURNED_TO_TEACHER';
+// Enums below mirror the backend OpenAPI spec (/v3/api-docs). Use them as-is; do not map to other values.
 
-// PATCH /admin/complaints/{complaintId} action. The spec defines only REVIEW_COMPLETE;
-// START_REVIEW is the frontend's assumption for SHARED → UNDER_REVIEW until the backend confirms it.
-export type AdminAction = 'START_REVIEW' | 'REVIEW_COMPLETE';
+// Admin sharing state (EscalationStateResponse.escalationStatus).
+export type EscalationStatus = 'NOT_SHARED' | 'SHARED' | 'UNDER_REVIEW' | 'COMPLETED';
+
+// Teacher risk change approval state, independent of EscalationStatus
+// (EscalationStateResponse.riskReviewStatus, TeacherRiskReviewResponse.status).
+export type RiskReviewStatus = 'PENDING_ADMIN_APPROVAL' | 'APPLIED' | 'REJECTED';
+
+// RiskChangeDecisionRequest.status
+export type RiskChangeDecision = Extract<RiskReviewStatus, 'APPLIED' | 'REJECTED'>;
+
+export type RiskReviewDirection = 'LOWERED' | 'UNCHANGED' | 'RAISED';
+
+// ShareEscalationRequest.scopes. MASKING_MESSAGES is always included.
+export type EscalationScope = 'MASKING_MESSAGES' | 'ORIGINAL_MESSAGES' | 'MEDIATION_PACKAGE';
+
+// HistoryEvent.type
+export type HistoryEventType =
+  | 'STATUS_CHANGED'
+  | 'RISK_ANALYZED'
+  | 'RISK_REVIEWED'
+  | 'ORIGINAL_VIEWED'
+  | 'AI_DRAFT_GENERATED'
+  | 'MESSAGE_SENT'
+  | 'ESCALATION_SHARED'
+  | 'ESCALATION_REVIEW_STARTED'
+  | 'ESCALATION_RISK_CHANGE_REQUESTED'
+  | 'ESCALATION_RISK_CHANGE_APPROVED'
+  | 'ESCALATION_RISK_CHANGE_REJECTED'
+  | 'ESCALATION_COMPLETED';

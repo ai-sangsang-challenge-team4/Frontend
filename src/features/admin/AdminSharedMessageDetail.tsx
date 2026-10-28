@@ -1,20 +1,28 @@
 import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ApiError } from '../../shared/api';
 import { AsyncContent } from '../../shared/components';
-import { Accordion, EmptyState, StatusChip } from '../../shared/components/ui';
-import { getAdminComplaint } from '../escalation/api';
+import { Accordion, EmptyState } from '../../shared/components/ui';
+import type { RiskLevel } from '../../shared/types';
 import {
-  apiRiskTone,
-  escalationStatusChip,
-  escalationStatusLabel,
-  formatEscalationTime,
-} from '../escalation/escalationRules';
-import type { AdminComplaintDetail, SharedRiskFactor } from '../escalation/escalationTypes';
+  getAdminEscalation,
+  getAdminEscalationHistory,
+  getAdminEscalationMessages,
+  getAdminEscalationRisk,
+} from '../escalation/api';
+import { apiRiskTone, formatEscalationTime, historyEventLabel } from '../escalation/escalationRules';
+import type {
+  AdminEscalationSummaryResponse,
+  ConversationMessage,
+  DetectedFactor,
+  HistoryEvent,
+} from '../escalation/escalationTypes';
 import { useEscalationRequest } from '../escalation/useEscalationRequest';
 import { BreadcrumbSeparator, FileSearchIcon, RiskSectionIcon } from '../message/components/MessageIcons';
 import { ProfileAvatar } from '../message/components/ProfileAvatar';
 import { RiskBadge } from '../message/components/RiskBadge';
 import { RiskFactorDetail, RiskFactorTitle } from '../message/components/RiskFactorDisplay';
+import { riskLabel } from '../message/messageRules';
 import type { RiskFactor } from '../message/types';
 import { AdminProcessPanel } from './components/AdminProcessPanel';
 
@@ -29,13 +37,23 @@ const detailTabLabel: Record<DetailTab, string> = {
 const detailTabs: DetailTab[] = ['shared', 'risk', 'history'];
 
 type AdminSharedMessageDetailProps = {
-  complaintId: string;
+  escalationId: number;
 };
 
-export function AdminSharedMessageDetail({ complaintId }: AdminSharedMessageDetailProps) {
+function riskText(level: RiskLevel, score: number | null) {
+  return score === null ? riskLabel[apiRiskTone[level]] : `${riskLabel[apiRiskTone[level]]}(${score}점)`;
+}
+
+export function AdminSharedMessageDetail({ escalationId }: AdminSharedMessageDetailProps) {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<DetailTab>('shared');
-  const request = useCallback((signal: AbortSignal) => getAdminComplaint(complaintId, signal), [complaintId]);
+  // A non-numeric route segment is a local not-found; nothing is requested.
+  const request = useCallback(
+    (signal: AbortSignal) => Number.isSafeInteger(escalationId) && escalationId > 0
+      ? getAdminEscalation(escalationId, signal)
+      : Promise.reject(new ApiError({ status: 404 })),
+    [escalationId],
+  );
   const { data, error, isInitialLoading, retry } = useEscalationRequest(request);
   const goToList = () => navigate('/admin/messages');
 
@@ -72,8 +90,8 @@ export function AdminSharedMessageDetail({ complaintId }: AdminSharedMessageDeta
         >
           {data ? (
             <>
-              <AdminContextCard detail={data} />
-              <AdminProcessPanel detail={data} onConflict={retry} />
+              <AdminContextCard summary={data} />
+              <AdminProcessPanel onConflict={retry} summary={data} />
 
               <nav aria-label="공유 메시지 상세 탭" className="board-detail-tabs">
                 {detailTabs.map((tab) => (
@@ -89,9 +107,9 @@ export function AdminSharedMessageDetail({ complaintId }: AdminSharedMessageDeta
                 ))}
               </nav>
 
-              {activeTab === 'shared' ? <SharedContentPanel detail={data} /> : null}
-              {activeTab === 'risk' ? <RiskAnalysisPanel detail={data} /> : null}
-              {activeTab === 'history' ? <HistoryPanel detail={data} /> : null}
+              {activeTab === 'shared' ? <SharedContentPanel escalationId={data.escalationId} /> : null}
+              {activeTab === 'risk' ? <RiskAnalysisPanel escalationId={data.escalationId} /> : null}
+              {activeTab === 'history' ? <HistoryPanel escalationId={data.escalationId} /> : null}
             </>
           ) : null}
         </AsyncContent>
@@ -100,68 +118,88 @@ export function AdminSharedMessageDetail({ complaintId }: AdminSharedMessageDeta
   );
 }
 
-function AdminContextCard({ detail }: { detail: AdminComplaintDetail }) {
+function AdminContextCard({ summary }: { summary: AdminEscalationSummaryResponse }) {
   return (
     <div className="board-parent-card">
       <div className="board-card-profile">
         <ProfileAvatar />
         <span>
-          <strong>{detail.teacherName}</strong>
-          <small>{detail.className}</small>
+          <strong>{summary.sharedBy}</strong>
+          <small>공유 교사</small>
         </span>
       </div>
       <div className="board-card-topic">
-        <strong>{detail.title}</strong>
-        <span>{detail.parentName} · {detail.studentName} 학생</span>
+        <strong>민원 #{summary.complaintId}</strong>
       </div>
       <div className="board-card-meta-group">
         <div className="board-card-meta">
           <span>위험도</span>
-          <RiskBadge level={apiRiskTone[detail.riskLevel]} />
+          <RiskBadge level={apiRiskTone[summary.currentRiskLevel]} />
         </div>
         <div className="board-card-meta">
           <span>공유 시각</span>
-          <time dateTime={detail.sharedAt}>{formatEscalationTime(detail.sharedAt)}</time>
+          <time dateTime={summary.sharedAt}>{formatEscalationTime(summary.sharedAt)}</time>
         </div>
       </div>
     </div>
   );
 }
 
-function SharedContentPanel({ detail }: { detail: AdminComplaintDetail }) {
-  const attachments = [
-    detail.shareMaskedContent && '개인정보가 가려진 메시지',
-    detail.shareOriginalContent && '원문 메시지',
-    detail.evidencePackageAttached && '증빙 패키지',
-  ].filter(Boolean);
+function SharedContentPanel({ escalationId }: { escalationId: number }) {
+  const request = useCallback(
+    (signal: AbortSignal) => getAdminEscalationMessages(escalationId, signal),
+    [escalationId],
+  );
+  const { data, error, isInitialLoading, retry } = useEscalationRequest(request);
 
   return (
-    <div className="board-risk-tab">
-      <section className="board-risk-workflow-panel admin-reason-panel">
-        <div className="board-risk-section-header">
-          <div>
-            <h2 className="board-risk-section-title">교사 공유 사유</h2>
-          </div>
-        </div>
-        <p className="admin-reason-text">{detail.reason}</p>
-        <p className="admin-attachments">공유 자료: {attachments.join(', ')}</p>
-      </section>
+    <AsyncContent
+      error={data ? null : error}
+      isLoading={isInitialLoading}
+      loadingMessage="공유된 내용을 불러오고 있어요."
+      onRetry={retry}
+    >
+      {data ? (
+        <div className="board-risk-tab">
+          <section className="board-risk-workflow-panel admin-reason-panel">
+            <div className="board-risk-section-header">
+              <div>
+                <h2 className="board-risk-section-title">교사 공유 사유</h2>
+              </div>
+            </div>
+            <p className="admin-reason-text">{data.reason}</p>
+            <p className="admin-attachments">
+              공유 자료: {[
+                data.maskedMessages.length > 0 && '개인정보가 가려진 메시지',
+                data.originalMessages.length > 0 && '원문 메시지',
+                data.mediationPackageIncluded && '증빙 패키지',
+              ].filter(Boolean).join(', ') || '없음'}
+            </p>
+          </section>
 
-      {detail.maskedContent ? (
-        <SharedMessage label="개인정보가 가려진 메시지" text={detail.maskedContent} />
+          {data.maskedMessages.length > 0 ? (
+            <SharedMessages label="개인정보가 가려진 메시지" messages={data.maskedMessages} />
+          ) : null}
+          {data.originalMessages.length > 0 ? (
+            <SharedMessages
+              label="원문 메시지"
+              messages={data.originalMessages}
+              notice="원문에는 정서적으로 부담이 될 수 있는 표현이 포함되어 있을 수 있습니다."
+            />
+          ) : null}
+        </div>
       ) : null}
-      {detail.originalContent ? (
-        <SharedMessage
-          label="원문 메시지"
-          notice="원문에는 정서적으로 부담이 될 수 있는 표현이 포함되어 있을 수 있습니다."
-          text={detail.originalContent}
-        />
-      ) : null}
-    </div>
+    </AsyncContent>
   );
 }
 
-function SharedMessage({ label, notice, text }: { label: string; notice?: string; text: string }) {
+type SharedMessagesProps = {
+  label: string;
+  messages: ConversationMessage[];
+  notice?: string;
+};
+
+function SharedMessages({ label, messages, notice }: SharedMessagesProps) {
   return (
     <section className="board-risk-evidence-panel admin-message-panel" aria-label={label}>
       <div className="board-risk-section-header">
@@ -170,105 +208,150 @@ function SharedMessage({ label, notice, text }: { label: string; notice?: string
         </div>
       </div>
       {notice ? <p className="admin-message-notice">{notice}</p> : null}
-      <p className="admin-message-text">{text}</p>
+      {messages.map((message) => (
+        <div key={message.messageId}>
+          <p className="admin-message-notice">
+            {message.senderName} · <time dateTime={message.sentAt}>{formatEscalationTime(message.sentAt)}</time>
+          </p>
+          <p className="admin-message-text">{message.content}</p>
+        </div>
+      ))}
     </section>
   );
 }
 
-function toRiskFactor(factor: SharedRiskFactor): RiskFactor {
+function toRiskFactor(factor: DetectedFactor, index: number): RiskFactor {
   return {
-    description: factor.description,
-    evidence: factor.evidenceSpan ?? '',
-    id: factor.id,
+    description: factor.name,
+    evidence: factor.evidence,
+    id: `${factor.code}-${index}`,
     name: factor.name,
-    rationale: factor.rationale,
-    status: factor.status,
+    rationale: factor.reason,
+    status: 'detected',
   };
 }
 
-function RiskAnalysisPanel({ detail }: { detail: AdminComplaintDetail }) {
-  const items = detail.riskFactors.map(toRiskFactor).map((factor) => ({
+function RiskAnalysisPanel({ escalationId }: { escalationId: number }) {
+  const request = useCallback(
+    (signal: AbortSignal) => getAdminEscalationRisk(escalationId, signal),
+    [escalationId],
+  );
+  const { data, error, isInitialLoading, retry } = useEscalationRequest(request);
+  const items = (data?.detectedFactors ?? []).map(toRiskFactor).map((factor) => ({
     id: factor.id,
     title: <RiskFactorTitle factor={factor} />,
     content: <RiskFactorDetail factor={factor} />,
   }));
 
   return (
-    <div className="board-risk-tab">
-      {detail.bufferedSummary ? (
-        <section className="board-risk-workflow-panel">
-          <div className="board-risk-section-header">
-            <div>
-              <h2 className="board-risk-section-title">완충 요약</h2>
+    <AsyncContent
+      error={data ? null : error}
+      isLoading={isInitialLoading}
+      loadingMessage="위험 분석 결과를 불러오고 있어요."
+      onRetry={retry}
+    >
+      {data ? (
+        <div className="board-risk-tab">
+          <section className="board-risk-workflow-panel">
+            <div className="board-risk-section-header">
+              <div>
+                <h2 className="board-risk-section-title">위험도</h2>
+              </div>
             </div>
-          </div>
-          <p>{detail.bufferedSummary}</p>
-        </section>
-      ) : null}
+            <dl className="board-admin-share-summary">
+              <div>
+                <dt>시스템 분석</dt>
+                <dd>{riskText(data.riskLevel, data.riskScore)}</dd>
+              </div>
+              {data.reviewLevel ? (
+                <div>
+                  <dt>교사 검토</dt>
+                  <dd>{riskText(data.reviewLevel, data.reviewScore)}</dd>
+                </div>
+              ) : null}
+              {data.latestReview ? (
+                <div>
+                  <dt>최근 검토</dt>
+                  <dd>
+                    {data.latestReview.reviewedBy} · {formatEscalationTime(data.latestReview.reviewedAt)}
+                    {data.latestReview.reason ? ` · ${data.latestReview.reason}` : ''}
+                  </dd>
+                </div>
+              ) : null}
+            </dl>
+          </section>
 
-      <section className="board-risk-evidence-panel">
-        <div className="board-risk-section-header">
-          <div>
-            <RiskSectionIcon />
-            <h2 className="board-risk-section-title">확인된 위험 요소와 판단 근거</h2>
-          </div>
+          <section className="board-risk-evidence-panel">
+            <div className="board-risk-section-header">
+              <div>
+                <RiskSectionIcon />
+                <h2 className="board-risk-section-title">확인된 위험 요소와 판단 근거</h2>
+              </div>
+            </div>
+            {items.length > 0 ? (
+              <Accordion allowMultiple className="board-risk-factor-accordion" items={items} />
+            ) : (
+              <EmptyState
+                className="board-risk-empty board-risk-factor-empty"
+                description="이 메시지에서는 별도 위험 요소가 감지되지 않았습니다."
+                title="없음"
+              />
+            )}
+          </section>
         </div>
-        {items.length > 0 ? (
-          <Accordion allowMultiple className="board-risk-factor-accordion" items={items} />
-        ) : (
-          <EmptyState
-            className="board-risk-empty board-risk-factor-empty"
-            description="이 메시지에서는 별도 위험 요소가 감지되지 않았습니다."
-            title="없음"
-          />
-        )}
-      </section>
-
-      {detail.recommendedActions.length > 0 ? (
-        <section className="board-risk-workflow-panel">
-          <div className="board-risk-section-header">
-            <div>
-              <h2 className="board-risk-section-title">권장 처리</h2>
-            </div>
-          </div>
-          <ol className="admin-recommended-actions">
-            {detail.recommendedActions.map((action) => <li key={action}>{action}</li>)}
-          </ol>
-        </section>
       ) : null}
-    </div>
+    </AsyncContent>
   );
 }
 
-function HistoryPanel({ detail }: { detail: AdminComplaintDetail }) {
+function riskChangeText(event: HistoryEvent) {
+  if (!event.riskLevel) return null;
+  const after = riskText(event.riskLevel, event.riskScore);
+  return event.previousRiskLevel ? `${riskText(event.previousRiskLevel, event.previousRiskScore)} → ${after}` : after;
+}
+
+function HistoryPanel({ escalationId }: { escalationId: number }) {
+  const request = useCallback(
+    (signal: AbortSignal) => getAdminEscalationHistory(escalationId, signal),
+    [escalationId],
+  );
+  const { data, error, isInitialLoading, retry } = useEscalationRequest(request);
+
   return (
-    <section className="board-activity-panel" aria-label="처리 기록">
-      <div className="board-risk-section-header">
-        <div>
-          <FileSearchIcon aria-hidden="true" />
-          <h2 className="board-risk-section-title">처리 기록</h2>
+    <AsyncContent
+      error={data ? null : error}
+      isLoading={isInitialLoading}
+      loadingMessage="처리 기록을 불러오고 있어요."
+      onRetry={retry}
+    >
+      <section className="board-activity-panel" aria-label="처리 기록">
+        <div className="board-risk-section-header">
+          <div>
+            <FileSearchIcon aria-hidden="true" />
+            <h2 className="board-risk-section-title">처리 기록</h2>
+          </div>
         </div>
-      </div>
-      <ol className="board-activity-list">
-        {[...detail.history].reverse().map((entry) => (
-          <li key={`${entry.changedAt}-${entry.newStatus}`}>
-            <time dateTime={entry.changedAt}>{formatEscalationTime(entry.changedAt)}</time>
-            <div>
-              <strong>
-                {entry.previousStatus === 'NOT_SHARED' ? '관리자 공유' : `${escalationStatusLabel[entry.newStatus]}로 변경`}
-              </strong>
-              <span>{entry.changedBy}</span>
-              {entry.memo ? <p>{entry.memo}</p> : null}
-            </div>
-            <StatusChip
-              className="admin-history-chip"
-              label={escalationStatusLabel[entry.newStatus]}
-              size="sm"
-              status={escalationStatusChip[entry.newStatus]}
-            />
-          </li>
-        ))}
-      </ol>
-    </section>
+        {data && data.events.length > 0 ? (
+          <ol className="board-activity-list">
+            {[...data.events].reverse().map((event) => {
+              const riskChange = riskChangeText(event);
+              return (
+                <li key={event.eventId}>
+                  <time dateTime={event.occurredAt}>{formatEscalationTime(event.occurredAt)}</time>
+                  <div>
+                    <strong>{historyEventLabel[event.type]}</strong>
+                    <span>{event.actorName}</span>
+                    {riskChange ? <p>{riskChange}</p> : null}
+                    {event.reason ? <p>{event.reason}</p> : null}
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        ) : (
+          <EmptyState className="board-risk-empty" description="아직 남겨진 처리 기록이 없습니다." title="기록 없음" />
+        )}
+      </section>
+    </AsyncContent>
   );
 }
