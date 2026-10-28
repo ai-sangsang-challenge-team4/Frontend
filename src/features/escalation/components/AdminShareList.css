@@ -1,0 +1,29 @@
+.teacher-admin-share-list .status-row {
+  display: grid;
+  min-height: 112px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 20px;
+  padding: 20px 16px;
+}
+
+.teacher-admin-share-list .status-row > div {
+  gap: 12px;
+}
+
+.teacher-admin-share-list .status-row h2,
+.teacher-admin-share-list .status-row p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .teacher-admin-share-list .status-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    padding: 16px;
+  }
+
+  .teacher-admin-share-list .status-row > .ui-status-chip {
+    justify-self: start;
+  }
+}

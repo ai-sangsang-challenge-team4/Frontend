@@ -32,6 +32,8 @@ import { AdminShareSection } from './components/AdminShareSection';
 import { BoardConfirmDialog } from './components/BoardConfirmDialog';
 import { ConversationDateChip } from './components/ConversationDateChip';
 import { BufferedSummaryCard } from './components/BufferedSummaryCard';
+import { AnalysisStateNotice } from './components/AnalysisStateNotice';
+import { RiskClassificationPanel } from '../risk-analysis/RiskClassificationPanel';
 import {
   BreadcrumbSeparator,
   CheckCircleIcon,
@@ -58,6 +60,7 @@ import {
   compareThreads,
   defaultRiskScore,
   filterOptions,
+  getAnalysisStatus,
   getBufferedSummaryText,
   getPrimaryParentMessage,
   getReplyLockNotice,
@@ -1035,7 +1038,7 @@ function RiskAnalysisPanel({
   const analysis = thread.analysis;
   const initialReviewScore =
     analysis?.teacherRiskScore ??
-    defaultRiskScore[analysis?.teacherReviewedRiskLevel ?? analysis?.systemRiskLevel ?? 'low'];
+    defaultRiskScore[getThreadRiskLevel(thread)];
   const [reviewScore, setReviewScore] = useState<RiskScore>(initialReviewScore);
   const [reviewReason, setReviewReason] = useState(
     analysis?.teacherReviewReason ?? '',
@@ -1046,14 +1049,8 @@ function RiskAnalysisPanel({
     setReviewReason(analysis?.teacherReviewReason ?? '');
   }, [analysis?.teacherReviewReason, initialReviewScore, thread.id]);
 
-  if (!analysis) {
-    return (
-      <EmptyState
-        className="board-risk-empty"
-        description="AI 분석 결과가 연결되면 위험 요소와 판단 근거를 확인할 수 있습니다."
-        title="표시할 위험 요소가 없습니다"
-      />
-    );
+  if (!analysis || getAnalysisStatus(thread) !== 'ready') {
+    return <AnalysisStateNotice thread={thread} onOriginalOpen={() => onOriginalOpen()} />;
   }
 
   const canInspectOriginal = Boolean(
@@ -1061,30 +1058,26 @@ function RiskAnalysisPanel({
       analysis.originalMessageAvailable &&
       thread.originalMessage,
   );
-  const effectiveRiskLevel =
-    analysis.teacherReviewedRiskLevel ?? analysis.systemRiskLevel;
+  const effectiveRiskLevel = getThreadRiskLevel(thread);
   const currentTone = systemRiskTone[effectiveRiskLevel];
   const currentGuide = riskStageGuides[effectiveRiskLevel];
-  const visibleRiskFactors = analysis.riskFactors.filter(
-    (factor) => factor.status !== 'unknown',
-  );
+  const visibleRiskFactors = getVisibleRiskFactors(thread);
   const studentSafetyFactor = visibleRiskFactors.find((factor) =>
     /안전|정서|학생/.test(
       `${factor.id} ${factor.name} ${factor.description}`,
     ),
   );
-  const riskFactorItems = visibleRiskFactors.map((factor) => ({
+  const riskFactorItems = analysis.riskFactors.filter((factor) => factor.status !== 'unknown').map((factor) => ({
     id: factor.id,
     title: <RiskFactorTitle factor={factor} />,
-    content: <RiskFactorDetail factor={factor} />,
+    content: <RiskFactorDetail factor={factor} canInspectOriginal={canInspectOriginal} onOriginalOpen={onOriginalOpen} />,
   }));
   const hasGuideAction = Boolean(currentGuide.action && currentGuide.actionLabel);
   const isProcedureGuide = currentGuide.action === 'procedure';
   const isEmergencyGuide = effectiveRiskLevel === 'emergency';
   const canUseGuideAction =
     hasGuideAction && (isProcedureGuide || canInspectOriginal);
-  const canShowEvidenceOriginalButton =
-    effectiveRiskLevel !== 'low' && canInspectOriginal;
+  const canShowEvidenceOriginalButton = canInspectOriginal;
   const canShowReviewPanel =
     analysis.canReviewRisk ||
     Boolean(analysis.teacherReviewedRiskLevel) ||
@@ -1211,6 +1204,12 @@ function RiskAnalysisPanel({
           </div>
         </div>
 
+        <RiskClassificationPanel
+          canInspectOriginal={canInspectOriginal}
+          onOriginalOpen={onOriginalOpen}
+          results={analysis.riskClassifications}
+        />
+
         {riskFactorItems.length > 0 ? (
           <Accordion
             allowMultiple
@@ -1220,8 +1219,8 @@ function RiskAnalysisPanel({
         ) : (
           <EmptyState
             className="board-risk-empty board-risk-factor-empty"
-            description="이 메시지에서는 별도 위험 요소가 감지되지 않았습니다."
-            title="없음"
+            description="분류 결과의 미탐지와 미확인 상태를 구분해 확인해 주세요."
+            title="추가로 표시할 판단 근거가 없습니다"
           />
         )}
       </section>
@@ -1453,14 +1452,16 @@ function ThreadDetail({
   const hasDraft = hasReplyDraft(thread);
   const lockedGuide = getReplyLockNotice(thread);
   const bufferedSummaryText = getBufferedSummaryText(thread);
-  const visibleConversationReplies = bufferedSummaryText
+  const needsBufferedSummary = effectiveRiskLevel !== 'low' ||
+    Boolean(thread.analysis && getAnalysisStatus(thread) !== 'ready');
+  const visibleConversationReplies = needsBufferedSummary
     ? thread.replies.filter((reply) => reply.authorRole !== 'parent')
     : thread.replies;
   const initialConversationDate = thread.messageDateLabel ?? formatConversationDate(
     thread.replies[0]?.sentAt ?? thread.latestAt,
   );
   const showBufferedSummaryOnly =
-    Boolean(bufferedSummaryText) && visibleConversationReplies.length === 0;
+    needsBufferedSummary && visibleConversationReplies.length === 0;
   const canInspectOriginal = Boolean(
     thread.analysis?.canViewOriginal &&
       thread.analysis.originalMessageAvailable &&
@@ -1610,6 +1611,7 @@ function ThreadDetail({
 
       {!originalViewer && activeDetailTab === 'conversation' ? (
         <>
+          {thread.analysis ? <AnalysisStateNotice thread={thread} onOriginalOpen={() => openOriginalViewer()} /> : null}
           <div className="board-info-box">
             <span aria-hidden="true">i</span>
             <p>{conversationInfoText}</p>
@@ -1623,12 +1625,13 @@ function ThreadDetail({
           >
         <ConversationDateChip label={initialConversationDate} />
 
-        {bufferedSummaryText ? (
+        {needsBufferedSummary ? (
           <BufferedSummaryCard
             canInspectOriginal={canInspectOriginal}
             onOpenOriginal={() => openOriginalViewer()}
             onOpenRiskEvidence={() => setActiveDetailTab('risk')}
-            summaryText={bufferedSummaryText}
+            summaryText={bufferedSummaryText ?? '완충 요약이 준비되지 않았습니다. 필요한 경우 원문 보기에서 내용을 직접 확인해 주세요.'}
+            unavailable={!bufferedSummaryText}
             thread={thread}
           />
         ) : null}
@@ -1950,9 +1953,10 @@ function ReplyComposerPage({
       thread.analysis.originalMessageAvailable &&
       thread.originalMessage,
   );
-  const isBufferedContext = riskLevel !== 'low' && Boolean(bufferedSummaryText);
+  const isBufferedContext = riskLevel !== 'low' ||
+    Boolean(thread.analysis && getAnalysisStatus(thread) !== 'ready');
   const contextMessageText = isBufferedContext
-    ? (bufferedSummaryText ?? getPrimaryParentMessage(thread))
+    ? (bufferedSummaryText ?? '완충 요약을 확인할 수 없습니다. 필요한 경우 원문 보기를 이용해 주세요.')
     : getPrimaryParentMessage(thread);
   const shouldShowOriginalButton = riskLevel !== 'low' && canInspectOriginal;
   const assistButtonLabel = thread.officialTemplateApplied

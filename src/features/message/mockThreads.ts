@@ -1,5 +1,11 @@
 import { formatMessageDate } from '../parent-message/conversation';
 import type { BoardThread } from './types';
+import { riskCategories, type RiskClassification } from '../risk-analysis';
+
+// Explicit demo results for the existing fixtures. Never classify live messages here.
+function mockClassifications(overrides: RiskClassification[] = []): RiskClassification[] {
+  return riskCategories.map(({ code }) => overrides.find((result) => result.code === code) ?? { code, status: 'ABSENT' });
+}
 
 // Mock inbox shown until the message API is connected.
 const exampleThreads: BoardThread[] = [
@@ -28,6 +34,10 @@ const exampleThreads: BoardThread[] = [
     ],
     analysis: {
       systemRiskLevel: 'emergency',
+      riskClassifications: mockClassifications([
+        { code: 'EMOTIONAL_EXPRESSION', status: 'PRESENT', evidenceSpan: '저도 너무 불안합니다', rationale: '학부모의 강한 불안이 표현되어 있습니다.' },
+        { code: 'UNREASONABLE_DEMAND', status: 'BOUNDARY', evidenceSpan: '오늘 중으로 꼭 연락 주세요', rationale: '당일 연락을 요청하지만 요청의 적절성은 상황 확인이 필요합니다.' },
+      ]),
       teacherReviewedRiskLevel: undefined,
       safetyLock: true,
       studentSafetySignal: 'POSSIBLE',
@@ -122,6 +132,9 @@ const exampleThreads: BoardThread[] = [
       '어제 쉬는 시간에 있었던 일 때문에 아이가 계속 속상해합니다. 상대 학생과 어떤 대화가 있었는지 확인 부탁드립니다.',
     analysis: {
       systemRiskLevel: 'medium',
+      riskClassifications: mockClassifications([
+        { code: 'EMOTIONAL_EXPRESSION', status: 'BOUNDARY', evidenceSpan: '아이가 계속 속상해합니다', rationale: '학생의 속상함을 전달하는 표현입니다. 교사에 대한 공격으로 단정하지 않습니다.' },
+      ]),
       safetyLock: false,
       studentSafetySignal: 'NONE',
       canViewOriginal: true,
@@ -194,6 +207,7 @@ const exampleThreads: BoardThread[] = [
     originalMessage: '',
     analysis: {
       systemRiskLevel: 'low',
+      riskClassifications: riskCategories.map(({ code }) => ({ code, status: 'UNKNOWN' })),
       safetyLock: false,
       studentSafetySignal: 'NONE',
       canViewOriginal: false,
@@ -260,6 +274,7 @@ const exampleThreads: BoardThread[] = [
     officialTemplates: ['생활 관찰 기록', '상담 연계 안내', '가정-학교 협력 메모'],
     analysis: {
       systemRiskLevel: 'high',
+      riskClassifications: mockClassifications(),
       safetyLock: false,
       studentSafetySignal: 'POSSIBLE',
       canViewOriginal: true,

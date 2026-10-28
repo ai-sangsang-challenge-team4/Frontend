@@ -116,12 +116,22 @@ export function RiskFactorTitle({ factor }: RiskFactorTitleProps) {
 
 type RiskFactorDetailProps = {
   factor: RiskFactor;
+  canInspectOriginal?: boolean;
+  onOriginalOpen?: (evidence: string) => void;
 };
 
-export function RiskFactorDetail({ factor }: RiskFactorDetailProps) {
+export function RiskFactorDetail({ factor, canInspectOriginal = false, onOriginalOpen }: RiskFactorDetailProps) {
   return (
     <div className="board-risk-factor-detail">
       <p>{factor.rationale}</p>
+      {canInspectOriginal ? (
+        factor.evidence.trim() ? (
+          <>
+            <blockquote className="board-factor-evidence"><strong>근거 구간</strong><p>“{factor.evidence}”</p></blockquote>
+            {onOriginalOpen ? <button className="board-outline-button" onClick={() => onOriginalOpen(factor.evidence)} type="button">원문에서 근거 확인</button> : null}
+          </>
+        ) : <p>제공된 근거 구간이 없습니다.</p>
+      ) : null}
     </div>
   );
 }

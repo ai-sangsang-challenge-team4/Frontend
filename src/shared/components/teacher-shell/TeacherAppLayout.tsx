@@ -9,6 +9,7 @@ type AppLayoutProps = {
   activeItem: SidebarItem;
   children: ReactNode;
   headerActions?: ReactNode;
+  showHeaderLogout?: boolean;
   title: string;
 };
 
@@ -16,6 +17,7 @@ export function AppLayout({
   activeItem,
   children,
   headerActions,
+  showHeaderLogout = true,
   title,
 }: AppLayoutProps) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -44,18 +46,18 @@ export function AppLayout({
       <div className="layout-body">
         <div className="content-shell">
           <Header
-            actions={
+            actions={headerActions || showHeaderLogout ? (
               <>
                 {headerActions}
-                <button
+                {showHeaderLogout ? <button
                   className="teacher-logout-button"
                   onClick={handleLogout}
                   type="button"
                 >
                   로그아웃
-                </button>
+                </button> : null}
               </>
-            }
+            ) : undefined}
             title={title}
           />
           <main className="layout-main">{children}</main>

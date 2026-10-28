@@ -1,5 +1,6 @@
 import type { ThreadActivityLog } from '../parent-message/parentMessageTypes';
 import type { ReplyTemplateDraft } from './replyTemplates';
+import type { RiskClassification } from '../risk-analysis';
 
 export type ThreadStatus = 'before' | 'inProgress' | 'complete';
 export type RiskLevel = 'normal' | 'attention' | 'danger' | 'urgent';
@@ -57,6 +58,9 @@ export type AiObjection = {
 };
 
 export type ThreadAnalysis = {
+  // Omitted by existing fixtures; a populated analysis was ready before status was added.
+  status?: 'ready' | 'loading' | 'failed';
+  riskClassifications?: RiskClassification[];
   aiObjections?: AiObjection[];
   activityLogs: ActivityLog[];
   canReviewRisk: boolean;

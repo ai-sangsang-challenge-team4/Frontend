@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { EmptyState } from '../../../shared/components/ui';
-import { getVisibleRiskFactors } from '../messageRules';
+import { getAnalysisStatus, getVisibleRiskFactors } from '../messageRules';
 import type { BoardThread, RiskFactor } from '../types';
 import { OriginalViewerIcon, RiskGuideIcon } from './MessageIcons';
 import { RiskFactorIcon } from './RiskFactorDisplay';
@@ -113,6 +113,7 @@ export function OriginalMessageViewer({
   thread,
 }: OriginalMessageViewerProps) {
   const [isRiskListOpen, setIsRiskListOpen] = useState(true);
+  const analysisReady = getAnalysisStatus(thread) === 'ready';
   const riskFactors = useMemo(() => getVisibleRiskFactors(thread), [thread]);
   const highlightedRiskFactors = useMemo(
     () =>
@@ -202,7 +203,7 @@ export function OriginalMessageViewer({
           <div>
             <RiskGuideIcon className="board-original-risk-title-icon" />
             <h2 id="board-original-risk-title">
-              탐지된 위험 표현 목록 ({detectedCount})
+              {analysisReady ? `탐지된 위험 표현 목록 (${detectedCount})` : '위험 표현 분석 결과 확인 필요'}
             </h2>
           </div>
           <button
@@ -297,8 +298,8 @@ export function OriginalMessageViewer({
           ) : (
             <EmptyState
               className="board-risk-empty board-risk-factor-empty"
-              description="이 메시지에서는 별도 위험 요소가 감지되지 않았습니다."
-              title="없음"
+              description={analysisReady ? '분류 결과의 미탐지와 미확인 상태를 구분해 확인해 주세요.' : 'AI 분석 결과가 없어 위험 표현과 판단 근거를 표시할 수 없습니다.'}
+              title="표시할 판단 근거가 없습니다"
             />
           )
         ) : activeFactor ? (
