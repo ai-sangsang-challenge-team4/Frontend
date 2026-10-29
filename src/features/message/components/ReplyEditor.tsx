@@ -19,8 +19,10 @@ type ReplyEditorProps = {
   isLocked: boolean;
   isDraftInputDisabled: boolean;
   isManualTabDisabled: boolean;
-  isOfficialTemplateAvailable: boolean;
+  // A request (AI draft, save, send) is in flight; the draft cannot change meanwhile.
+  isBusy?: boolean;
   lockNoticeId: string;
+  maxLength?: number;
   onAssist: () => void;
   onDraftChange: (value: string) => void;
   onDraftTabChange: (tab: ReplyDraftTab) => void;
@@ -28,6 +30,9 @@ type ReplyEditorProps = {
   onDraftSave: () => void;
   onSubmit: () => void;
   onOpenProcedure: () => void;
+  saveDisabled?: boolean;
+  // The official template button on the AI tab, or the AI draft button when the tab is empty.
+  showAssistButton: boolean;
   stageNotice: string;
   submitDisabled: boolean;
   templateEditor?: ReactNode;
@@ -44,8 +49,9 @@ export function ReplyEditor({
   isLocked,
   isDraftInputDisabled,
   isManualTabDisabled,
-  isOfficialTemplateAvailable,
+  isBusy = false,
   lockNoticeId,
+  maxLength,
   onAssist,
   onDraftChange,
   onDraftTabChange,
@@ -53,6 +59,8 @@ export function ReplyEditor({
   onDraftSave,
   onSubmit,
   onOpenProcedure,
+  saveDisabled = false,
+  showAssistButton,
   stageNotice,
   submitDisabled,
   templateEditor,
@@ -74,8 +82,9 @@ export function ReplyEditor({
 
   const draftEditor = templateEditor ?? <textarea
     aria-describedby={replyTextareaDescription || undefined}
-    disabled={isDraftInputDisabled}
+    disabled={isDraftInputDisabled || isBusy}
     id="board-reply-composer-input"
+    maxLength={maxLength}
     onChange={(event) => onDraftChange(event.target.value)}
     placeholder={isDraftInputDisabled
       ? 'AI 초안을 제공할 수 없습니다. 직접 작성 탭에서 답변을 작성해 주세요.'
@@ -117,7 +126,7 @@ export function ReplyEditor({
       <div className="board-reply-bottom-actions">
         <button
           className="board-composer-action-button"
-          disabled={isLocked || !hasDraft}
+          disabled={isLocked || isBusy || saveDisabled || !hasDraft}
           onClick={onDraftSave}
           type="button"
         >
@@ -125,9 +134,9 @@ export function ReplyEditor({
           <span>임시저장</span>
         </button>
         <div className="board-composer-action-group">
-          {activeDraftTab === 'ai' && isOfficialTemplateAvailable ? <button
+          {activeDraftTab === 'ai' && showAssistButton ? <button
             className="board-composer-action-button"
-            disabled={assistButtonDisabled}
+            disabled={assistButtonDisabled || isBusy}
             onClick={onAssist}
             type="button"
           >
@@ -136,7 +145,7 @@ export function ReplyEditor({
           </button> : null}
           <button
             className="board-composer-action-button"
-            disabled={isLocked || !hasDraft}
+            disabled={isLocked || isBusy || !hasDraft}
             onClick={onDraftReset}
             type="button"
           >
@@ -146,7 +155,7 @@ export function ReplyEditor({
           <button
             aria-describedby={isLocked ? lockNoticeId : undefined}
             className="board-composer-action-button board-composer-action-button--primary"
-            disabled={isLocked || !hasDraft || submitDisabled}
+            disabled={isLocked || isBusy || !hasDraft || submitDisabled}
             onClick={onSubmit}
             type="button"
           >
