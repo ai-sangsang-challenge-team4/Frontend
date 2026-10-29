@@ -4,7 +4,8 @@ import { getApiErrorMessage, toApiError } from '../../src/shared/api/apiError';
 import { httpParentComplaintApi } from '../../src/features/parent-message/api/httpParentComplaintApi';
 import type { RiskRevisionResponse } from '../../src/features/parent-message/api/parentComplaintTypes';
 import type { MessageDraft, ServerComplaintDraft } from '../../src/features/parent-message/messageDraft';
-import { createMessageReview } from '../../src/features/parent-message/parentMessageTypes';
+import { createMessageReview, getSelectedMessage } from '../../src/features/parent-message/parentMessageTypes';
+import { detectionConfidence, detectionEvidence, detectionState } from '../../src/features/parent-message/riskDetectorResults';
 import {
   analyzeServerDraft,
   listServerChildren,
@@ -36,7 +37,8 @@ function json(status: number, body: unknown) {
 function route(routes: Record<string, () => Response>) {
   return (call: FetchCall) => {
     const key = `${call.method} ${new URL(call.url).pathname}`;
-    const respond = routes[key];
+    const respond = routes[key] ?? (key === 'POST /complaints/42/mask'
+      ? () => json(200, { complaintId: 42, contentVersion: 1, maskedContent: server().content }) : undefined);
     if (!respond) throw new Error(`Unexpected request ${key}`);
     return respond();
   };
@@ -83,6 +85,7 @@ function server(overrides: Partial<ServerComplaintDraft> = {}): ServerComplaintD
     title: '상담 일정 문의 [전화번호]',
     content: '상담 가능한 시간을 알려 주세요. 연락은 [이메일] 으로 부탁드립니다.',
     analysisId: 7,
+    contentVersion: 1,
     ...overrides,
   };
 }
@@ -122,6 +125,13 @@ test('학부모 문의 API는 백엔드 경로·메서드·본문을 사용한�
   await httpParentComplaintApi.getFindings(7);
   await httpParentComplaintApi.submit(42);
   await httpParentComplaintApi.getStatus(42);
+  await httpParentComplaintApi.mask(42);
+  await httpParentComplaintApi.getDetectorResults(7);
+  await httpParentComplaintApi.saveFollowUpDraft(42, { content: '추가 문의' });
+  await httpParentComplaintApi.getFollowUpDraft(42);
+  await httpParentComplaintApi.analyzeFollowUp(42, 101);
+  await httpParentComplaintApi.submitFollowUp(42, 101);
+  await httpParentComplaintApi.getConversation(42);
 
   expect(calls.map(({ method, url, body }) => [method, url.replace('https://api.test', ''), body])).toEqual([
     ['GET', '/complaints?page=1', undefined],
@@ -132,6 +142,13 @@ test('학부모 문의 API는 백엔드 경로·메서드·본문을 사용한�
     ['GET', '/risk-analyses/7/findings', undefined],
     ['POST', '/complaints/42/send', undefined],
     ['GET', '/complaints/42/status', undefined],
+    ['POST', '/complaints/42/mask', undefined],
+    ['GET', '/risk-analyses/7/detector-results', undefined],
+    ['PUT', '/complaints/42/message-draft', { content: '추가 문의' }],
+    ['GET', '/complaints/42/message-draft', undefined],
+    ['POST', '/complaints/42/messages/101/risk-analysis', undefined],
+    ['POST', '/complaints/42/messages/101/send', undefined],
+    ['GET', '/complaints/42/messages', undefined],
   ]);
 });
 
@@ -208,7 +225,7 @@ test('첫 분석은 마스킹한 제목·본문으로 서버 초안을 만든 �
     title: '상담 일정 문의 [전화번호]',
     content: '상담 가능한 시간을 알려 주세요. 연락은 [이메일] 으로 부탁드립니다.',
   });
-  expect(calls.map((call) => call.method)).toEqual(['POST', 'POST', 'GET']);
+  expect(calls.map((call) => call.method)).toEqual(['POST', 'POST', 'POST', 'GET']);
   expect(persisted.map((value) => value.analysisId)).toEqual([null, 7]);
   expect(result.server).toEqual(server());
   expect(result.analysis.risks).toHaveLength(3);
@@ -224,11 +241,11 @@ test('분석 후 본문을 바꾸면 PATCH하고, 서버가 재분석을 막으�
   const result = await analyzeServerDraft(draft({ body: '바꾼 본문', server: server() }), target, (value) => persisted.push(value), new AbortController().signal);
 
   expect(calls.map((call) => `${call.method} ${new URL(call.url).pathname}`)).toEqual([
-    'PATCH /complaints/42', 'POST /complaints/42/risk-analysis',
+    'PATCH /complaints/42', 'POST /complaints/42/mask', 'POST /complaints/42/risk-analysis',
   ]);
   expect(calls[0].body).toEqual({ content: '바꾼 본문' });
   expect(persisted).toEqual([server({ content: '바꾼 본문' })]);
-  expect(result.analysis).toEqual({ status: 'ready', revisedText: null, risks: [], meaningWarning: null, analyzeOnSubmit: true });
+  expect(result.analysis).toMatchObject({ status: 'ready', revisedText: null, risks: [], meaningWarning: null, analyzeOnSubmit: true });
 });
 
 test('수정안 조회가 실패해도 저장된 분석으로 제출할 수 있게 실패 상태로 넘긴다', async () => {
@@ -304,4 +321,155 @@ test('아직 DRAFT인 민원의 제출 오류는 그대로 돌려준다', async 
 
   expect(error.code).toBe('ANALYSIS_REQUIRED');
   expect(getApiErrorMessage(error)).toBe('AI 분석과 수정안 확인을 마친 후 제출해 주세요.');
+});
+
+test('서버 마스킹이 실패하면 분석을 시작하지 않고, 성공 응답의 점수와 수정 이유를 유지한다', async () => {
+  mockFetch(route({ 'POST /complaints/42/mask': () => json(500, { code: 'INTERNAL_SERVER_ERROR' }) }));
+  await expect(analyzeServerDraft(draft({ body: server().content, server: server() }), target, () => undefined, new AbortController().signal)).rejects.toMatchObject({ status: 500 });
+  expect(calls.map((call) => new URL(call.url).pathname)).toEqual(['/complaints/42/mask']);
+  calls = [];
+  mockFetch(route({
+    'POST /complaints/42/risk-analysis': () => json(200, { analysisId: 7, complaintId: 42, riskScore: 30, riskLevel: 'HIGH' }),
+    'GET /risk-analyses/7/findings': () => json(200, findings),
+  }));
+  const result = await analyzeServerDraft(draft({ body: server().content, server: server() }), target, () => undefined, new AbortController().signal);
+  expect(result.analysis).toMatchObject({ riskSummary: { riskScore: 30, riskLevel: 'HIGH' }, revisionReason: '[MOCK] 수정안', maskedContent: server().content, maskingContentVersion: 1 });
+});
+
+test('추가 문의는 서버 메시지 ID로 분석하며 최초 민원 mask API를 호출하지 않는다', async () => {
+  const saved = { messageId: 101, complaintId: 42, content: '추가 문의', contentVersion: 1 };
+  let stored = false;
+  mockFetch(route({
+    'GET /complaints/42/message-draft': () => stored ? json(200, saved) : json(404, { code: 'MESSAGE_DRAFT_NOT_FOUND' }),
+    'PUT /complaints/42/message-draft': () => { stored = true; return json(200, saved); },
+    'POST /complaints/42/messages/101/risk-analysis': () => json(200, { analysisId: 8, complaintId: 42, riskScore: 3, riskLevel: 'MEDIUM' }),
+    'GET /risk-analyses/8/findings': () => json(200, findings),
+  }));
+  const result = await analyzeServerDraft(draft({ threadId: 'thread-local', body: '추가 문의' }), { ...target, complaintId: 42 }, () => undefined, new AbortController().signal);
+  expect(result.server).toMatchObject({ complaintId: 42, serverMessageId: 101, analysisId: 8 });
+  expect(calls.map((call) => new URL(call.url).pathname)).not.toContain('/complaints/42/mask');
+  expect(calls[1].body).toEqual({ content: '추가 문의' });
+});
+
+test('추가 문의의 서버 초안이 다른 내용이면 덮어쓰지 않는다', async () => {
+  mockFetch(route({ 'GET /complaints/42/message-draft': () => json(200, { messageId: 101, complaintId: 42, content: '다른 탭에서 작성한 내용' }) }));
+  await expect(analyzeServerDraft(draft({ threadId: 'thread-local', body: '내가 작성한 내용', server: server({ serverMessageId: 101 }) }), target, () => undefined, new AbortController().signal)).rejects.toMatchObject({ status: 409 });
+  expect(calls.every((call) => call.method === 'GET')).toBe(true);
+});
+
+test('추가 문의 전송 응답을 놓치면 같은 서버 메시지의 전송 여부로 복구하고 중복 추가하지 않는다', async () => {
+  const storage = installStorage();
+  const sentAt = '2026-10-30T10:00:00';
+  storage.set('teacher-hub.parent-sent-messages.101', JSON.stringify([{
+    messageId: 'thread-local', serverComplaintId: 42, teacherId: '20', teacherName: 'Demo Teacher', title: server().title,
+    originalBody: '최초 문의', finalBody: '최초 문의', status: 'SENT', selectionType: 'ORIGINAL', selectionSource: 'ORIGINAL', sentAt, auditLog: [],
+  }]));
+  mockFetch(route({
+    'GET /complaints/42/message-draft': () => json(404, { code: 'MESSAGE_DRAFT_NOT_FOUND' }),
+    'GET /complaints/42/messages': () => json(200, { complaintId: 42, messages: [{ messageId: 101, content: '추가 문의', status: 'SENT', sentAt }] }),
+  }));
+  const current = draft({ threadId: 'thread-local', title: server().title, body: '추가 문의', server: server({ serverMessageId: 101, content: '추가 문의' }) });
+  const review = createMessageReview({ status: 'ready', revisedText: null, risks: [], meaningWarning: null });
+  const sent = await submitServerDraft(101, current, review, new AbortController().signal);
+  expect(sent.conversation).toEqual(expect.arrayContaining([expect.objectContaining({ id: current.messageId, body: '추가 문의' })]));
+  calls = [];
+  await submitServerDraft(101, current, review, new AbortController().signal);
+  expect(calls).toHaveLength(0);
+});
+
+test('detector 결과의 새 상태·복수 근거·이전 boolean 응답을 구분하며 누락은 미확인이다', () => {
+  expect(detectionState('BOUNDARY', false)).toBe('BOUNDARY');
+  expect(detectionState(undefined, true)).toBe('PRESENT');
+  expect(detectionState(undefined, false)).toBe('ABSENT');
+  expect(detectionState(undefined)).toBe('UNKNOWN');
+  expect(detectionEvidence({ state: 'PRESENT', confidence: 0, evidenceSpans: [{ text: '첫 근거' }, { text: '둘째 근거' }] })).toEqual(['첫 근거', '둘째 근거']);
+  expect(detectionEvidence({ confidence: 0, evidenceSpans: [], evidences: ['이전 근거'] })).toEqual([]);
+  expect(detectionConfidence(0)).toBe('0%');
+  expect(detectionConfidence(0.91)).toBe('91%');
+  expect(detectionConfidence(null)).toBe('제공되지 않음');
+});
+
+function seedFollowUpThread() {
+  const storage = installStorage();
+  storage.set('teacher-hub.parent-sent-messages.101', JSON.stringify([{
+    messageId: 'thread-local', serverComplaintId: 42, teacherId: '20', teacherName: 'Demo Teacher', title: server().title,
+    originalBody: '최초 문의', finalBody: '최초 문의', status: 'SENT', selectionType: 'ORIGINAL', selectionSource: 'ORIGINAL', sentAt: '2026-10-30T10:00:00Z', auditLog: [],
+  }]));
+  return storage;
+}
+
+test('서로 다른 로컬 초안이 같은 서버 메시지를 보내도 대화에는 한 번만 표시한다', async () => {
+  const storage = seedFollowUpThread();
+  let sent = false;
+  mockFetch(route({
+    'GET /complaints/42/message-draft': () => sent ? json(404, { code: 'MESSAGE_DRAFT_NOT_FOUND' }) : json(200, { messageId: 101, content: '추가 문의' }),
+    'POST /complaints/42/messages/101/send': () => { sent = true; return json(200, { messageId: 101, content: '추가 문의', sentAt: '2026-10-30T10:03:00' }); },
+    'GET /complaints/42/messages': () => json(200, { messages: [{ messageId: 101, content: '추가 문의', status: 'SENT', sentAt: '2026-10-30T10:03:00' }] }),
+  }));
+  const current = draft({ threadId: 'thread-local', title: server().title, body: '추가 문의', server: server({ serverMessageId: 101, content: '추가 문의' }) });
+  const review = createMessageReview({ status: 'ready', revisedText: null, risks: [], meaningWarning: null });
+  await submitServerDraft(101, current, review, new AbortController().signal);
+  await submitServerDraft(101, { ...current, messageId: 'other-local-id' }, review, new AbortController().signal);
+  const stored = JSON.parse(storage.get('teacher-hub.parent-sent-messages.101')!)[0];
+  expect(stored.conversation.filter((entry: { body: string }) => entry.body === '추가 문의')).toHaveLength(1);
+  expect(calls.filter((call) => call.url.endsWith('/send'))).toHaveLength(1);
+  // A different confirmed sentence must not be treated as that already-sent message.
+  await expect(submitServerDraft(101, { ...current, messageId: 'unsent-edit' }, { ...review, originalEdit: '아직 전송하지 않은 수정문' }, new AbortController().signal)).rejects.toMatchObject({ code: 'PARENT_MESSAGE_CONTENT_MISMATCH' });
+  await expect(submitServerDraft(101, current, { ...review, originalEdit: '같은 로컬 초안에서 수정한 문장' }, new AbortController().signal)).rejects.toMatchObject({ code: 'PARENT_MESSAGE_CONTENT_MISMATCH' });
+  expect(JSON.parse(storage.get('teacher-hub.parent-sent-messages.101')!)[0].conversation).toHaveLength(2);
+});
+
+test('추가 문의 저장 성공 뒤 전송이 실패해도 저장 응답을 유지해 문장을 바꿔 재시도할 수 있다', async () => {
+  seedFollowUpThread();
+  let content = '원래 문의';
+  let failSend = true;
+  mockFetch((call) => {
+    const path = new URL(call.url).pathname;
+    if (path.endsWith('/message-draft')) {
+      if (call.method === 'PUT') content = (call.body as { content: string }).content;
+      return json(200, { messageId: 101, content, contentVersion: 2 });
+    }
+    if (path.endsWith('/send')) return failSend ? json(500, { code: 'INTERNAL_SERVER_ERROR' }) : json(200, { messageId: 101, content, sentAt: '2026-10-30T10:03:00' });
+    if (path.endsWith('/messages')) return json(200, { messages: [] });
+    throw new Error(`Unexpected request ${path}`);
+  });
+  let acknowledged = server({ serverMessageId: 101, content });
+  const current = draft({ threadId: 'thread-local', title: server().title, body: content, server: acknowledged });
+  const review = createMessageReview({ status: 'ready', revisedText: '첫 수정', risks: [], meaningWarning: null });
+  await expect(submitServerDraft(101, current, review, new AbortController().signal, undefined,
+    (next: ServerComplaintDraft) => { acknowledged = next; })).rejects.toMatchObject({ status: 500 });
+  expect(acknowledged.content).toBe('첫 수정');
+  failSend = false;
+  const result = await submitServerDraft(101, { ...current, server: acknowledged }, { ...review, aiText: '다시 수정' }, new AbortController().signal);
+  expect(result.conversation?.at(-1)?.body).toBe('다시 수정');
+});
+
+test('재분석이 제한돼도 이미 조회한 서버 마스킹 결과를 원문 선택에 유지한다', async () => {
+  mockFetch(route({
+    'POST /complaints/42/mask': () => json(200, { complaintId: 42, contentVersion: 3, maskedContent: '서버에서 추가로 가린 내용' }),
+    'POST /complaints/42/risk-analysis': () => json(409, { code: 'FINAL_ANALYSIS_ON_SUBMIT' }),
+  }));
+  const current = draft({ body: server().content, server: server() });
+  const result = await analyzeServerDraft(current, target, () => undefined, new AbortController().signal);
+  expect(result.analysis).toMatchObject({ analyzeOnSubmit: true, maskedContent: '서버에서 추가로 가린 내용', maskingContentVersion: 3 });
+  expect(getSelectedMessage(current.body, createMessageReview(result.analysis)).text).toBe('서버에서 추가로 가린 내용');
+});
+
+test('전송 응답의 본문이 확인한 문장과 다르면 로컬에 성공 사본을 만들지 않는다', async () => {
+  const storage = seedFollowUpThread();
+  mockFetch(route({
+    'GET /complaints/42/message-draft': () => json(200, { messageId: 101, content: '확인한 문장' }),
+    'POST /complaints/42/messages/101/send': () => json(200, { messageId: 101, content: '다른 탭의 문장', sentAt: '2026-10-30T10:03:00' }),
+    'GET /complaints/42/messages': () => json(200, { messages: [{ messageId: 101, content: '다른 탭의 문장', status: 'SENT' }] }),
+  }));
+  const current = draft({ threadId: 'thread-local', title: server().title, body: '확인한 문장', server: server({ serverMessageId: 101, content: '확인한 문장' }) });
+  const review = createMessageReview({ status: 'ready', revisedText: null, risks: [], meaningWarning: null });
+  await expect(submitServerDraft(101, current, review, new AbortController().signal)).rejects.toMatchObject({ code: 'PARENT_MESSAGE_CONTENT_MISMATCH' });
+  expect(JSON.parse(storage.get('teacher-hub.parent-sent-messages.101')!)[0].conversation).toBeUndefined();
+});
+
+test('최종 수정 이유가 null이어도 유효한 수정문과 위험 근거를 유지한다', () => {
+  const analysis = toServerAnalysis({ ...findings, finalRevision: { content: '수정된 문장', reason: null } }, '원문');
+  expect(analysis).toMatchObject({ status: 'ready', revisedText: '수정된 문장', revisionReason: null });
+  expect(analysis.risks).not.toHaveLength(0);
 });

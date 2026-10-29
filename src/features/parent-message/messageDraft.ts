@@ -5,16 +5,20 @@ import { RISK_EXPRESSION_KINDS, type MessageReview, type SentParentMessage } fro
 export type MessageDraftStep = 'DRAFT' | 'PARENT_REVIEW';
 
 // The server DRAFT behind a local draft (VITE_MESSAGE_API=http). Title, student, and teacher are fixed once
-// it exists because PATCH /complaints/{id} only changes the content.
+// it exists because PATCH /complaints/{id} only changes the content. Follow-ups keep their own serverMessageId
+// and do not need a separate student selection.
 export type ServerComplaintDraft = {
   complaintId: number;
-  studentId: number;
+  studentId?: number;
   teacherId: number;
   teacherName: string;
   title: string;
   // Masked content last stored on the server.
   content: string;
   analysisId: number | null;
+  // Present only for additional inquiries; the initial inquiry is addressed by complaintId alone.
+  serverMessageId?: number;
+  contentVersion?: number;
 };
 
 export type MessageDraft = {
@@ -60,6 +64,11 @@ function isMessageReview(value: unknown): value is MessageReview {
     (analysis.revisedText === null || typeof analysis.revisedText === 'string') &&
     (analysis.meaningWarning === null || typeof analysis.meaningWarning === 'string') &&
     (analysis.analyzeOnSubmit === undefined || typeof analysis.analyzeOnSubmit === 'boolean') &&
+    (analysis.revisionReason === undefined || analysis.revisionReason === null || typeof analysis.revisionReason === 'string') &&
+    (analysis.maskedContent === undefined || typeof analysis.maskedContent === 'string') &&
+    (analysis.riskSummary === undefined || (isRecord(analysis.riskSummary) &&
+      typeof analysis.riskSummary.riskScore === 'number' && Number.isFinite(analysis.riskSummary.riskScore) &&
+      ['LOW', 'MEDIUM', 'HIGH', 'EMERGENCY'].includes(String(analysis.riskSummary.riskLevel)))) &&
     Array.isArray(analysis.risks) && analysis.risks.every((risk: unknown) => (
       isRecord(risk) && typeof risk.id === 'string' &&
       (RISK_EXPRESSION_KINDS as readonly unknown[]).includes(risk.kind) &&
@@ -75,7 +84,9 @@ function isPositiveInteger(value: unknown): value is number {
 
 function isServerDraft(value: unknown): value is ServerComplaintDraft {
   return isRecord(value) &&
-    isPositiveInteger(value.complaintId) && isPositiveInteger(value.studentId) && isPositiveInteger(value.teacherId) &&
+    isPositiveInteger(value.complaintId) && (value.studentId === undefined || isPositiveInteger(value.studentId)) && isPositiveInteger(value.teacherId) &&
+    (value.serverMessageId === undefined || isPositiveInteger(value.serverMessageId)) &&
+    (value.contentVersion === undefined || (typeof value.contentVersion === 'number' && Number.isInteger(value.contentVersion) && value.contentVersion >= 0)) &&
     typeof value.teacherName === 'string' && typeof value.title === 'string' && typeof value.content === 'string' &&
     (value.analysisId === null || isPositiveInteger(value.analysisId));
 }
@@ -83,6 +94,7 @@ function isServerDraft(value: unknown): value is ServerComplaintDraft {
 function isSentMessage(value: unknown): value is SentParentMessage {
   return isRecord(value) && value.status === 'SENT' &&
     (value.serverComplaintId === undefined || isPositiveInteger(value.serverComplaintId)) &&
+    (value.serverMessageId === undefined || isPositiveInteger(value.serverMessageId)) &&
     ['messageId', 'teacherId', 'teacherName', 'title', 'originalBody', 'finalBody', 'sentAt']
       .every((field) => typeof value[field] === 'string') &&
     (value.selectionType === 'AI' || value.selectionType === 'ORIGINAL' || value.selectionType === 'CUSTOM') &&
@@ -101,6 +113,7 @@ function isSentMessage(value: unknown): value is SentParentMessage {
     (value.consultationStatus === undefined || ['before', 'inProgress', 'complete'].includes(String(value.consultationStatus))) &&
     (value.conversation === undefined || (Array.isArray(value.conversation) && value.conversation.every((entry: unknown) => (
       isRecord(entry) && typeof entry.id === 'string' && typeof entry.body === 'string' &&
+      (entry.serverMessageId === undefined || isPositiveInteger(entry.serverMessageId)) &&
       typeof entry.sentAt === 'string' && (entry.authorRole === 'parent' || entry.authorRole === 'teacher') &&
       (entry.deliveryStatus === undefined || entry.deliveryStatus === 'SENT_TO_PARENT')
     )))) &&

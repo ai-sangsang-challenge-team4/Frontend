@@ -1,4 +1,4 @@
-import type { ComplaintStatus, RiskLevel, WaitingFor } from '../../../shared/types';
+import type { ComplaintStatus, MessageStatus, RiskFactorStatus, RiskLevel, WaitingFor } from '../../../shared/types';
 import type { DetectedFactorCode } from '../../escalation/escalationTypes';
 import type { ComplaintPageResponse } from '../../message/api/teacherInboxTypes';
 
@@ -73,5 +73,62 @@ export type RiskFinding = {
 // (an analysis made on /send).
 export type RiskRevisionResponse = {
   findings: RiskFinding[];
-  finalRevision: { reason: string; content: string } | null;
+  finalRevision: { reason: string | null; content: string } | null;
+};
+
+export type ComplaintMaskResponse = {
+  complaintId: number;
+  contentVersion: number;
+  maskedContent: string;
+};
+
+export type RiskDetection = {
+  state?: RiskFactorStatus;
+  confidence: number | null;
+  evidenceSpans?: { text: string; start?: number | null; end?: number | null }[];
+  // Older deployed servers use boolean flags and plain evidence strings.
+  detected?: boolean;
+  evidences?: string[];
+};
+
+export type RiskDetectorResponse = {
+  analysisId: number;
+  results: {
+    code: DetectedFactorCode;
+    finalState?: RiskFactorStatus;
+    finalDetected?: boolean;
+    rule: RiskDetection | null;
+    llm: RiskDetection | null;
+  }[];
+  llm: { modelName: string; temperature: number | null } | null;
+};
+
+export type ParentFollowUpResponse = {
+  messageId: number;
+  complaintId: number;
+  content: string;
+  status: MessageStatus;
+  waitingFor: WaitingFor;
+  contentVersion: number;
+  createdAt: string;
+  updatedAt: string;
+  sentAt: string | null;
+};
+
+// GET /complaints/{id}/messages. Swagger shows the teacher Message schema here (string messageId, summarized)
+// because both DTOs are named Message; the parent DTO answers the numeric id and no summary flag.
+export type ParentConversationResponse = {
+  complaintId: number;
+  status: ComplaintStatus;
+  waitingFor: WaitingFor;
+  messages: {
+    messageId: number;
+    type: 'PARENT_INQUIRY' | 'TEACHER_REPLY';
+    senderRole: 'PARENT' | 'TEACHER';
+    senderName: string;
+    content: string;
+    status: MessageStatus;
+    sentAt: string | null;
+    readAt: string | null;
+  }[];
 };

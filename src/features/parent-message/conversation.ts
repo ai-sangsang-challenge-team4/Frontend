@@ -1,5 +1,5 @@
 import { findSentMessage, readSentMessages, updateSentMessage, type MessageDraft } from './messageDraft';
-import type { ConversationMessage, SentParentMessage } from './parentMessageTypes';
+import { getSelectedMessage, maskContactInfo, type ConversationMessage, type MessageReview, type SentParentMessage } from './parentMessageTypes';
 
 export const consultationLabels = { before: '상담 전', inProgress: '상담 중', complete: '상담 완료' };
 export const consultationChips = { before: 'pending', inProgress: 'progress', complete: 'complete' } as const;
@@ -45,9 +45,15 @@ export function getDraftPath(draft: MessageDraft) {
     : `/parent/messages/new?draft=${encodeURIComponent(draft.messageId)}`;
 }
 
-export function findSentSubmission(userId: number, draft: MessageDraft) {
+// null checks only identity, allowing callers to distinguish an already-sent message with different text.
+export function findSentSubmission(userId: number, draft: MessageDraft, review: MessageReview | null | undefined = draft.review) {
   const thread = findSentMessage(userId, draft.threadId ?? draft.messageId);
-  return thread && (!draft.threadId || getConversation(thread).some((entry) => entry.id === draft.messageId)) ? thread : null;
+  const remoteId = thread?.serverComplaintId === draft.server?.complaintId ? draft.server?.serverMessageId : undefined;
+  const expectedBody = review ? maskContactInfo(getSelectedMessage(draft.body, review).text.trim()).text : null;
+  return thread && (!draft.threadId ? expectedBody === null || thread.finalBody === expectedBody
+    : getConversation(thread).some((entry) => entry.authorRole === 'parent' &&
+      (entry.id === draft.messageId || (remoteId !== undefined && entry.serverMessageId === remoteId)) &&
+      (expectedBody === null || entry.body === expectedBody))) ? thread : null;
 }
 
 export function findSentSubmissionById(userId: number, submissionId: string) {
@@ -57,7 +63,9 @@ export function findSentSubmissionById(userId: number, submissionId: string) {
 
 export function appendFollowUp(userId: number, draft: MessageDraft, submission: SentParentMessage) {
   return updateSentMessage(userId, draft.threadId!, (thread) => {
-    if (getConversation(thread).some((entry) => entry.id === draft.messageId)) return thread;
+    if (getConversation(thread).some((entry) => entry.id === draft.messageId ||
+      (thread.serverComplaintId === submission.serverComplaintId && submission.serverMessageId !== undefined &&
+        entry.authorRole === 'parent' && entry.serverMessageId === submission.serverMessageId))) return thread;
     if (thread.teacherId !== draft.teacherId || thread.title !== draft.title) throw new Error('기존 문의 정보를 다시 확인해 주세요.');
     const isComplete = thread.consultationStatus === 'complete';
     return {
@@ -65,6 +73,7 @@ export function appendFollowUp(userId: number, draft: MessageDraft, submission: 
       parentName: thread.parentName ?? submission.parentName,
       conversation: [...getConversation(thread), {
         id: submission.messageId, authorRole: 'parent', body: submission.finalBody, sentAt: submission.sentAt,
+        ...(submission.serverMessageId !== undefined ? { serverMessageId: submission.serverMessageId } : {}),
       }],
       updatedAt: submission.sentAt,
       consultationStatus: isComplete ? 'inProgress' : thread.consultationStatus ?? 'before',

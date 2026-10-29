@@ -7,9 +7,13 @@ import type {
   ParentComplaintPageResponse,
   RiskRevisionResponse,
   RiskSummaryResponse,
+  ComplaintMaskResponse,
+  RiskDetectorResponse,
+  ParentFollowUpResponse,
+  ParentConversationResponse,
 } from './parentComplaintTypes';
 
-// The parent's new inquiry: server draft, analysis, revision suggestions, and submission.
+// New inquiries and follow-ups: server draft, masking, analysis, suggestions, and submission.
 export type ParentComplaintApi = {
   listComplaints: (page: number, signal?: AbortSignal) => Promise<ParentComplaintPageResponse>;
   listRecipients: (studentId: number, signal?: AbortSignal) => Promise<ComplaintRecipientResponse[]>;
@@ -19,4 +23,11 @@ export type ParentComplaintApi = {
   getFindings: (analysisId: number, signal?: AbortSignal) => Promise<RiskRevisionResponse>;
   submit: (complaintId: number, signal?: AbortSignal) => Promise<ComplaintMessageResponse>;
   getStatus: (complaintId: number, signal?: AbortSignal) => Promise<ComplaintResponse>;
+  mask: (complaintId: number, signal?: AbortSignal) => Promise<ComplaintMaskResponse>;
+  getDetectorResults: (analysisId: number, signal?: AbortSignal) => Promise<RiskDetectorResponse>;
+  saveFollowUpDraft: (complaintId: number, request: ComplaintDraftUpdateRequest, signal?: AbortSignal) => Promise<ParentFollowUpResponse>;
+  getFollowUpDraft: (complaintId: number, signal?: AbortSignal) => Promise<ParentFollowUpResponse | null>;
+  analyzeFollowUp: (complaintId: number, messageId: number, signal?: AbortSignal) => Promise<RiskSummaryResponse>;
+  submitFollowUp: (complaintId: number, messageId: number, signal?: AbortSignal) => Promise<ParentFollowUpResponse>;
+  getConversation: (complaintId: number, signal?: AbortSignal) => Promise<ParentConversationResponse>;
 };
