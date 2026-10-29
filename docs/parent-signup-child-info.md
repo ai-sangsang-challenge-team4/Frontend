@@ -1,73 +1,45 @@
-# Issue #36 학부모 회원가입 자녀 정보
+# 회원가입 학교·자녀·소속 정보 (#36·#44 → 백엔드 #34 반영)
 
-## 구현 범위
+## 정책 변경
 
-학부모를 선택했을 때는 계정 유형 바로 아래에 `기본 정보`와 자녀 이름을 표시하고, 이메일 인증·비밀번호 입력을 그 아래에 배치합니다. `기본 정보 *` 제목과 `학교·학급 목록은 예시 데이터입니다.` 안내는 같은 줄에 표시합니다. 학부모 본인 이름은 입력받거나 가입 입력에 포함하지 않습니다. 교사는 기존 이름 입력과 필수 검증을 유지합니다. 교사로 전환하면 자녀 정보의 표시와 검증을 생략하고, 가입 입력에도 자녀 정보를 포함하지 않습니다. 계정 유형을 다시 학부모로 바꾸면 입력했던 자녀 정보를 복원합니다.
+백엔드 `SignupRequest`(dev, PR #34)가 모든 역할에 `name`을 필수로 받고, 교사 이름을 교직원 명부와 대조합니다. 그래서 이전 정책 **"학부모 본인 이름은 입력받지 않는다"를 폐기**하고 학부모도 본인 이름을 입력합니다. 자녀 이름(`studentName`)은 별도 필드로 학생 실명과 대조됩니다.
 
-- 학교는 검색 결과에서 선택해야 합니다. 학교 이름을 직접 입력하기만 하면 선택되지 않습니다.
-- 학교 선택 → 학년 → 반 → 번호 순으로 활성화합니다.
-- 초등학교는 1~6학년, 중·고등학교는 1~3학년을 표시합니다.
-- 학교를 바꾸거나 검색어를 수정하면 학년·반·번호를 초기화합니다.
-- 학년을 바꾸면 반·번호, 반을 바꾸면 번호를 초기화합니다.
-- 학교·학년·반·번호·자녀 이름은 필수입니다. 공백 이름과 목록에 없는 값도 거절합니다.
-- 학교 검색은 클릭·터치와 방향키·Enter 선택, Escape·포커스 이동 시 닫기를 지원합니다.
-- 데스크톱에서는 학교·학년·반·번호를 레이블 옆에 배치하며, 작은 화면에서는 위아래로 배치합니다. 자녀 이름은 전체 너비를 사용합니다.
-
-## 현재 데이터와 저장 범위
-
-기존 인증 어댑터는 `mockAuthApi`이며 실제 회원가입·이메일 인증 API를 호출하지 않습니다. 같은 방식으로 학교·학급 자료를 `src/features/auth/api/mockSchoolDirectory.ts`에 분리했습니다. 화면과 검색 결과에 예시 데이터임을 표시합니다.
-
-상상초등학교·상상중학교·상상고등학교는 가상의 학교입니다. 각 학년의 1~3반과 각 반의 1~30번은 UI 확인용 데이터이며, 실제 학교의 반 수나 학생 수를 의미하지 않습니다. 실제 데이터나 명세가 없는 상태에서 외부 API 경로를 임의로 추가하지 않았습니다.
-
-학부모 가입 입력은 다음과 같습니다. **프론트엔드/Mock 전용 구조이며 서버와 합의한 DTO가 아닙니다.** `schoolId` 역시 예시 ID입니다.
-
-```ts
-{
-  email: 'parent-signup@example.com',
-  password: 'password123',
-  role: 'PARENT',
-  child: {
-    schoolId: 'mock-elementary',
-    grade: 6,
-    classNumber: 2,
-    studentNumber: 17,
-    name: '김상상',
-  },
-}
-```
-
-`studentNumber`는 학급 내 학생 번호입니다. 자녀 정보는 화면과 Mock 어댑터에서 검증한 뒤 이름 양끝 공백을 제거하여 `teacher-hub.auth-accounts`의 해당 계정에 함께 저장합니다. 교사 계정에는 `child`를 저장하지 않습니다. 기존 테스트 계정, 로그인 응답, 인증 세션의 `User` 구조는 유지합니다. 서버 저장과 실제 학부모·학생 연결은 아직 수행하지 않습니다.
-
-학부모 신규 계정의 Mock `User.name`에는 화면 표시용 기본 문구인 `학부모`를 사용합니다. 실제 학부모 이름을 수집하거나 교사 입력값·자녀 이름으로 대체하지 않습니다.
-
-## 백엔드 확인 결과
-
-2026-10-25, `Backend` 기본 개발 브랜치 `dev`의 커밋 `05611ec21baa15f638349930621d44bf868c55c5`를 기준으로 확인했습니다.
-
-| 항목 | 확인 결과 | 근거 |
+| 역할 | 화면 입력 | 서버로 보내는 값 |
 | --- | --- | --- |
-| 학교 검색 | 학교 검색 컨트롤러·학교 목록 API 없음 | [개발 브랜치 소스](https://github.com/ai-sangsang-challenge-team4/Backend/tree/05611ec21baa15f638349930621d44bf868c55c5/src/main/java/com/teacherhub) |
-| 학년·반·번호 조회 | `SchoolClass`·`StudentClass` 엔티티와 Repository는 있지만 조회 API 없음. `SchoolClass`에는 학년도·학년·반·담임 교사가 있고 학교 ID·학교급 없음 | [SchoolClass](https://github.com/ai-sangsang-challenge-team4/Backend/blob/05611ec21baa15f638349930621d44bf868c55c5/src/main/java/com/teacherhub/school/entity/SchoolClass.java), [StudentClass](https://github.com/ai-sangsang-challenge-team4/Backend/blob/05611ec21baa15f638349930621d44bf868c55c5/src/main/java/com/teacherhub/school/entity/StudentClass.java) |
-| 회원가입 자녀 정보 | `SignupRequest`는 `email`, `password`, `name`, `role`, `employeeNo`만 받음. 자녀 정보 필드 없음 | [SignupRequest](https://github.com/ai-sangsang-challenge-team4/Backend/blob/05611ec21baa15f638349930621d44bf868c55c5/src/main/java/com/teacherhub/auth/dto/SignupRequest.java) |
-| 학부모·자녀 연결 | 회원가입 서비스는 학부모 계정만 생성하며 학생·학급·학부모 연결을 저장하지 않음 | [AuthService](https://github.com/ai-sangsang-challenge-team4/Backend/blob/05611ec21baa15f638349930621d44bf868c55c5/src/main/java/com/teacherhub/auth/service/AuthService.java) |
-| 학생 번호 | 학생 엔티티에 문자열 `studentNo`가 있지만, 학급 내 번호인지와 학년도 변경 시의 의미는 계약 확인 필요 | [Student](https://github.com/ai-sangsang-challenge-team4/Backend/blob/05611ec21baa15f638349930621d44bf868c55c5/src/main/java/com/teacherhub/user/entity/Student.java) |
+| 공통 | 이름, 아이디(이메일), 비밀번호 | `name`, `email`, `password`, `role` |
+| 학부모 | 기본 정보: 학교 검색 → 학년 → 반 → 번호, 자녀 이름 | `schoolId`, `schoolClassId`, `studentId`, `studentName` |
+| 교사 | 소속 정보: 소속학교 검색, 교번(#44) | `schoolId`, `employeeNo` |
 
-## 별도 백엔드 작업
+폼 상태(`SignupInput`, `ChildSignupInfo`)는 `authState.ts`의 `toSignupRequest()`로 백엔드 `SignupRequest`가 됩니다. `schoolName`·`grade`는 화면 구성용이라 보내지 않습니다.
 
-- 학교 ID·학교명·학교급·지역을 포함한 가입 전 공개 학교 검색 API를 마련합니다. 동명 학교를 구분할 정보와 검색·페이지 처리 정책을 정해야 합니다.
-- 학교·학년·학년도에 따른 실제 반 목록과 반별로 선택할 수 있는 학생 번호 조회 계약을 마련합니다. 학생 이름 등 불필요한 개인정보를 공개하지 않는 방식으로 설계해야 합니다.
-- `SignupRequest`에 자녀 정보 필드를 추가하고, `studentNo`와 학급 내 학생 번호의 대응 관계 및 타입을 확정합니다.
-- 현재 서버 DTO는 모든 역할에 `name`을 필수로 요구하므로, 학부모 이름을 받지 않는 요구사항에 맞춰 교사에게만 이름을 필수로 요구하도록 수정하고 이름 없는 학부모의 표시 정책을 확정해야 합니다.
-- 학교·학년도·학년·반·번호·이름으로 학생을 확인하고, 학부모·학생·학급 연결을 회원가입과 함께 저장합니다. 동명이인, 잘못된 번호, 이미 연결된 학생의 처리 기준도 필요합니다.
-- 학부모에만 자녀 정보를 필수로 검증하고, 자녀 정보 저장 실패 시 가입 전체를 되돌리는 트랜잭션과 오류 응답을 정의합니다.
-- 확정된 계약을 기준으로 Mock 학교 목록과 인증 어댑터를 실제 API 구현으로 교체합니다. 기존 이메일 인증·로그인 계약의 연동은 별도 확인이 필요합니다.
+## 화면 규칙
+
+- 계정 유형 아래에 역할별 정보(학부모 `기본 정보`, 교사 `소속 정보`), 그 아래 이름을 표시합니다.
+- 학교는 검색 결과에서 선택해야 합니다. 이름을 입력하기만 하면 선택되지 않습니다. 검색은 150ms 디바운스, 이전 요청은 취소합니다.
+- 학교 선택 → 학년 → 반 → 번호 순으로 활성화하고, 상위 항목을 바꾸면 하위 항목을 초기화합니다.
+- 학년은 서버 허용 범위인 1~6을 표시합니다(서버에 학교급 정보가 없음). 학년을 고르면 `grade` 쿼리로 학급을 조회하고, 응답의 `classNo`로 `N반`을 표시합니다. 학급이 없으면 "선택할 수 있는 반이 없습니다."를 안내합니다.
+- 번호는 학생 응답의 `displayName`(예: `5번`)을 그대로 표시하고 값은 학생 ID입니다.
+- 계정 유형을 바꿔도 이름·아이디·비밀번호와 역할별 입력값을 유지합니다.
+- 학교 검색은 클릭·터치와 방향키·Enter 선택, Escape·포커스 이동 시 닫기를 지원합니다.
+- `VITE_AUTH_API=http`에서는 이메일 인증 API가 없어 인증번호 단계를 표시하지 않습니다. mock에서는 기존처럼 인증을 거칩니다.
+
+## 데이터 출처
+
+| 모드 | 학교·학급·학생 번호 | 가입 |
+| --- | --- | --- |
+| `VITE_AUTH_API=http` | `GET /auth/schools?keyword=`, `/auth/schools/{schoolId}/classes?grade=`, `/auth/classes/{schoolClassId}/students` (공개 API) | `POST /auth/signup` |
+| mock(기본) | `mockSignupOptionsApi.ts` 예시 데이터(상상초·중·고, 학년별 1~3반, 반별 1~30번). 화면에 예시 데이터임을 표시 | localStorage `teacher-hub.auth-accounts` |
+
+학교·학급·학생 ID와 학생 이름이 서로 맞는지는 서버가 판단합니다(`SIGNUP_REFERENCE_NOT_FOUND` 404, `SIGNUP_VALIDATION_FAILED` 400). 이 오류들은 서버 메시지를 그대로 보여 줍니다. 프론트 검증은 "선택했는지"와 공백 이름만 확인합니다.
+
+dev 프로필 백엔드에는 상상초등학교(2026학년도 3학년 2반, 학생 번호 `DEV-20260001`, 이름 `Demo Student`)와 가입 가능한 교사 명부(`DEV-2026-002`, 이름 `가입용 교사`)가 있습니다.
+
+비밀번호는 서버가 8~100자를 받지만 화면은 기존 정책대로 8~20자로 제한합니다.
 
 ## 검증
 
 ```bash
 npm run build
 npm run lint
-npm run test:auth -- auth-flow.spec.ts child-signup.spec.ts
+npm run test:auth -- auth-flow.spec.ts child-signup.spec.ts auth-http-api.spec.ts
 ```
-
-데스크톱·모바일에서 기존 인증 흐름과 함께 학부모 전용 표시, 계정 유형 전환, 학교급별 학년, 단계별 활성화·초기화, 검색 결과와 키보드 조작, 필수값·공백·범위 검증, 가입 실패 후 재시도, 자녀 정보의 Mock 저장, 교사 가입 시 자녀 정보 제외를 검사합니다.
