@@ -35,6 +35,11 @@ export const httpAuthApi: AuthApi = {
       apiClient.post<LoginResponse>('/auth/login', { email: input.email.trim(), password: input.password }, { auth: false }),
       '로그인하지 못했습니다. 잠시 후 다시 시도해 주세요.',
     );
+    // An unusable token or expiry would show a signed-in user whose requests all fail or who is signed out at once.
+    if (typeof response.accessToken !== 'string' || !response.accessToken.trim() ||
+      !Number.isFinite(response.expiresIn) || response.expiresIn <= 0) {
+      throw new AuthApiError({ code: 'INVALID_LOGIN_RESPONSE', message: '로그인 정보를 확인하지 못했습니다. 다시 시도해 주세요.', status: 502 });
+    }
     return {
       accessToken: response.accessToken,
       expiresAt: Date.now() + response.expiresIn * 1000,

@@ -68,6 +68,18 @@ test('로그인 401은 서버 사유를 AuthApiError로 전달한다', async () 
   expect(unauthorizedCount).toBe(0);
 });
 
+test('로그인 응답의 토큰이 비었거나 만료 시간이 유효하지 않으면 세션을 만들지 않는다', async () => {
+  for (const response of [
+    { accessToken: '  ', tokenType: 'Bearer', expiresIn: 3600, user },
+    { accessToken: 'jwt', tokenType: 'Bearer', expiresIn: 0, user },
+    { accessToken: 'jwt', tokenType: 'Bearer', expiresIn: null, user },
+  ]) {
+    mockFetch(() => json(200, response));
+    await expect(httpAuthApi.login({ email: 'teacher@test.com', password: 'Test1234!' }))
+      .rejects.toMatchObject({ code: 'INVALID_LOGIN_RESPONSE', status: 502 });
+  }
+});
+
 test('사용자 조회는 전달받은 토큰으로 /users/me를 부르고 만료 시각은 돌려주지 않는다', async () => {
   mockFetch(() => json(200, user));
 
