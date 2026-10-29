@@ -10,5 +10,5 @@
     "noEmit": true,
     "types": ["node", "vite/client"]
   },
-  "include": ["playwright.config.ts", "tests/auth/**/*.ts"]
+  "include": ["playwright*.config.ts", "tests/**/*.ts"]
 }

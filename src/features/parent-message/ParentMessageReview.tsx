@@ -10,6 +10,7 @@ import { Accordion, Button, EmptyState, Modal, Tabs, TextareaField, Toast } from
 import { parentMessageApiMode } from './api/parentComplaintApi';
 import { clearMessageDraft, findSentMessage, mockConnectedTeachers, readMessageDraft, saveMessageDraft, type MessageDraft } from './messageDraft';
 import { ParentMessageHeader } from './ParentMessageHeader';
+import { ParentRiskAnalysisDetails } from './ParentRiskAnalysisDetails';
 import { createMockAnalysis, sendParentMessage } from './parentMessageApi';
 import { findSentSubmission, findSentSubmissionById, getDraftPath } from './conversation';
 import { submitServerDraft } from './serverComplaint';
@@ -101,7 +102,7 @@ export function ParentMessageReview({ userId, messageId }: { userId: number; mes
   }
   // A new inquiry reviewed without a server draft (made in mock mode) goes back to the composer to be analyzed
   // on the server, since only a server draft can be submitted.
-  if (parentMessageApiMode === 'http' && !initial.draft.threadId && !initial.draft.server) {
+  if (parentMessageApiMode === 'http' && !initial.draft.server) {
     return <Navigate replace to={getDraftPath(initial.draft)} />;
   }
   return <MessageReviewEditor draft={initial.draft} userId={userId} />;
@@ -110,9 +111,8 @@ export function ParentMessageReview({ userId, messageId }: { userId: number; mes
 function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: number }) {
   const { user } = useAuth();
   const navigate = useNavigate();
-  // A new inquiry in http mode always goes through the server draft (a draft without one asks to analyze
-  // again); follow-ups stay on the local flow.
-  const isServer = parentMessageApiMode === 'http' && !draft.threadId;
+  // Every inquiry in HTTP mode has a server draft before it can be reviewed or sent.
+  const isServer = parentMessageApiMode === 'http' && Boolean(draft.server);
   const [review, setReview] = useState<MessageReview>(() => {
     const restored = draft.review ?? createMessageReview(isServer
       ? { status: 'failed', revisedText: null, risks: [], meaningWarning: null }
@@ -129,6 +129,8 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
   const [maskingFailed, setMaskingFailed] = useState(false);
   const sendPending = useRef(false);
   const sendController = useRef<AbortController | null>(null);
+  // Preserve acknowledged saves even if the following send fails; props retain the original analysis snapshot.
+  const serverDraft = useRef(draft.server);
   const dismissNotice = useCallback(() => setNotice(null), []);
   const selected = getSelectedMessage(draft.body, review);
   const masked = maskContactInfo(selected.text.trim());
@@ -137,12 +139,13 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
     ? { label: `${draft.server.teacherName} 선생님` } : mockConnectedTeachers.find((item) => item.value === draft.teacherId);
   const hasAiDraft = review.analysis.revisedText !== null && review.analysis.revisedText !== draft.body;
   // The server analyzes the final text again on send when it differs from the reviewed content.
-  const analyzedOnSend = isServer && (review.analysis.analyzeOnSubmit === true || masked.text !== draft.server?.content);
+  const analyzedOnSend = isServer && (review.analysis.analyzeOnSubmit === true ||
+    masked.text !== (review.analysis.maskedContent ?? draft.server?.content));
 
   useEffect(() => () => sendController.current?.abort(), []);
 
   function persistReview() {
-    saveMessageDraft(userId, { ...draft, status: 'PARENT_REVIEW', review });
+    saveMessageDraft(userId, { ...draft, server: serverDraft.current, status: 'PARENT_REVIEW', review });
   }
 
   function handleSave() {
@@ -185,7 +188,10 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
     try {
       persistReview();
       const sent = isServer
-        ? await submitServerDraft(userId, draft, review, controller.signal, user?.name)
+        ? await submitServerDraft(userId, { ...draft, server: serverDraft.current }, review, controller.signal, user?.name, (next) => {
+          serverDraft.current = next;
+          saveMessageDraft(userId, { ...draft, server: next, status: 'PARENT_REVIEW', review });
+        })
         : await sendParentMessage(userId, draft, review, controller.signal, user?.name);
       if (controller.signal.aborted) return;
       let stored = true;
@@ -268,7 +274,7 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
         ) : (
           <div aria-label="원문 내용" className="parent-review-original" tabIndex={0}>
             {/* The analysis evidence comes from the masked text, so the highlights are placed on it. */}
-            <HighlightedMessage onSelect={selectRisk} risks={review.analysis.risks} text={maskContactInfo(draft.body).text} />
+            <HighlightedMessage onSelect={selectRisk} risks={review.analysis.risks} text={review.analysis.maskedContent ?? maskContactInfo(draft.body).text} />
           </div>
         )}
         {!isEditable && error ? <p className="ui-field-error" role="alert">{error}</p> : null}
@@ -329,6 +335,9 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
             <p className="parent-review-meaning-notice" role="note">{review.analysis.meaningWarning}</p>
           ) : null}
         </section>
+
+        {isServer && draft.server?.analysisId && !review.analysis.analyzeOnSubmit
+          ? <ParentRiskAnalysisDetails analysis={review.analysis} analysisId={draft.server.analysisId} /> : null}
 
         <PrivacyMaskingNotice
           onRetry={() => setMaskingFailed(checkPersonalInfo(selected.text).status === 'failed')}
