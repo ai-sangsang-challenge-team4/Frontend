@@ -68,7 +68,9 @@ const mockRiskRules: (RiskExpression & { replacement: string })[] = [
   },
 ];
 
-// Local preview rules only. The analysis API will supply the final suggestions and evidence.
+export const OFFICIAL_MEANING_WARNING = 'AI 초안에서 공식 절차에 관한 의사가 완화되었을 수 있습니다. 원문과 비교하여 전달하려는 의미가 유지되는지 확인해 주세요.';
+
+// Local preview rules only (VITE_MESSAGE_API=mock). The server flow is in serverComplaint.ts.
 export function createMockAnalysis(original: string): ParentMessageAnalysis {
   const matched = mockRiskRules.filter((rule) => original.includes(rule.excerpt));
   let revised = original;
@@ -84,8 +86,7 @@ export function createMockAnalysis(original: string): ParentMessageAnalysis {
     status: 'ready',
     revisedText: revised === original ? null : revised,
     risks: matched.map(({ id, kind, title, excerpt, explanation }) => ({ id, kind, title, excerpt, explanation })),
-    meaningWarning: matched.some((rule) => rule.kind === 'official')
-      ? 'AI 초안에서 공식 절차에 관한 의사가 완화되었을 수 있습니다. 원문과 비교하여 전달하려는 의미가 유지되는지 확인해 주세요.' : null,
+    meaningWarning: matched.some((rule) => rule.kind === 'official') ? OFFICIAL_MEANING_WARNING : null,
   };
 }
 
