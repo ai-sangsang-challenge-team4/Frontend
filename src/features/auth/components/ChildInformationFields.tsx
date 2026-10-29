@@ -30,11 +30,12 @@ export function ChildInformationFields({ disabled, errors, value, onChange }: Ch
   );
   const classes = useApiRequest(loadClasses);
   const students = useApiRequest(loadStudents);
-  const classOptions = (classes.data ?? []).map((option) => ({
+  // useApiRequest keeps the previous data on failure; those IDs belong to the previous grade or class.
+  const classOptions = (classes.error ? [] : classes.data ?? []).map((option) => ({
     value: String(option.id),
     label: option.classNo === null ? option.displayName : `${option.classNo}반`,
   }));
-  const studentOptions = (students.data ?? []).map((option) => ({
+  const studentOptions = (students.error ? [] : students.data ?? []).map((option) => ({
     value: String(option.id),
     label: option.displayName,
   }));
