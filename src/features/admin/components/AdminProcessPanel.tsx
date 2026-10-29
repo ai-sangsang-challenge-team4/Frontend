@@ -47,6 +47,8 @@ export function AdminProcessPanel({ summary, onConflict }: AdminProcessPanelProp
   const riskReviewStatus = actionState?.riskReviewStatus ?? null;
   const currentStep = steps.indexOf(escalationStatus);
   const isSubmitting = pendingAction !== null;
+  // The backend rejects a blank message on every action (@NotBlank), despite minLength 0 in the spec.
+  const trimmedMemo = memo.trim();
   const trimmedDecision = decisionMessage.trim();
 
   const run = async (action: PanelAction, call: () => Promise<EscalationStateResponse>) => {
@@ -71,9 +73,9 @@ export function AdminProcessPanel({ summary, onConflict }: AdminProcessPanelProp
   };
 
   const startReview = () =>
-    run('review', () => startEscalationReview(summary.escalationId, { message: memo.trim() }));
+    run('review', () => startEscalationReview(summary.escalationId, { message: trimmedMemo }));
   const complete = () =>
-    run('complete', () => completeEscalation(summary.escalationId, { message: memo.trim() }));
+    run('complete', () => completeEscalation(summary.escalationId, { message: trimmedMemo }));
   const decide = (status: RiskChangeDecision) =>
     run(status, () => decideRiskChange(summary.escalationId, { message: trimmedDecision, status }));
 
@@ -146,15 +148,18 @@ export function AdminProcessPanel({ summary, onConflict }: AdminProcessPanelProp
 
       {canStart || canComplete ? (
         <div className="admin-process-form">
-          <label className="board-ai-objection-reason-label" htmlFor={memoId}>처리 메모</label>
+          <label className="board-ai-objection-reason-label" htmlFor={memoId}>
+            처리 메모 <strong aria-hidden="true">*</strong>
+          </label>
           <div className="board-risk-review-textarea-shell admin-process-memo">
             <textarea
+              aria-required="true"
               id={memoId}
               maxLength={ADMIN_MESSAGE_MAX_LENGTH}
               onChange={(event) => setMemo(event.target.value)}
               placeholder={canStart
-                ? '검토 시작 시 남길 메모가 있다면 적어 주세요. (선택)'
-                : '확인한 규정, 담당 교사와 협의한 대응 방향 등 처리 결과를 적어 주세요. (선택)'}
+                ? '검토를 시작하며 확인할 내용이나 계획을 적어 주세요.'
+                : '확인한 규정, 담당 교사와 협의한 대응 방향 등 처리 결과를 적어 주세요.'}
               value={memo}
             />
             <span>{memo.length} / {ADMIN_MESSAGE_MAX_LENGTH}</span>
@@ -162,7 +167,7 @@ export function AdminProcessPanel({ summary, onConflict }: AdminProcessPanelProp
           <div className="admin-process-actions">
             <button
               className="board-primary-button admin-process-button"
-              disabled={isSubmitting}
+              disabled={isSubmitting || !trimmedMemo}
               onClick={() => (canStart ? void startReview() : setIsConfirmOpen(true))}
               type="button"
             >
@@ -184,7 +189,7 @@ export function AdminProcessPanel({ summary, onConflict }: AdminProcessPanelProp
         actions={[
           { label: '취소', onClick: () => setIsConfirmOpen(false) },
           {
-            disabled: isSubmitting,
+            disabled: isSubmitting || !trimmedMemo,
             label: pendingAction === 'complete' ? '변경 중…' : '처리 완료',
             onClick: () => void complete(),
             tone: 'primary',

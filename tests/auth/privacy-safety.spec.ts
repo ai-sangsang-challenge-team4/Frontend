@@ -105,6 +105,11 @@ test('긴급 안내와 재검토 접수를 표시하고 중복 요청 및 답변
   await expect(page.locator('.board-risk-guide')).toContainText('‘긴급’ 단계에서는 답변 작성이 제한됩니다.');
   await expect(page.locator('.ai-judgment-notice')).toHaveCount(0);
   const request = page.getByRole('button', { name: '재검토 요청', exact: true });
+  // The teacher's own risk review comes first.
+  await expect(request).toBeDisabled();
+  await expect(page.locator('.board-risk-lock-review')).toContainText('위험도 검토를 먼저 완료해야 재검토를 요청할 수 있습니다.');
+  await page.getByRole('button', { name: '검토 완료', exact: true }).click();
+  await expect(request).toBeEnabled();
   await request.evaluate((button) => { (button as HTMLButtonElement).click(); (button as HTMLButtonElement).click(); });
   await expect(page.getByRole('button', { name: '재검토 요청 완료', exact: true })).toBeDisabled();
   await expect(page.getByRole('status')).toContainText('재검토 요청이 접수되었습니다.');

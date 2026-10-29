@@ -229,6 +229,15 @@ export function getAnalysisStatus(thread: BoardThread) {
   return 'ready';
 }
 
+// On a locked reply (emergency or safety lock), a teacher who can review the risk saves their own
+// review first, then asks a reviewer to look again. Without a lock, saving the review already
+// clears riskReviewRequired, so the request stays available as before.
+export function needsTeacherReviewBeforeRequest(thread: BoardThread) {
+  return Boolean(
+    isReplyLocked(thread) && thread.analysis?.canReviewRisk && !thread.analysis.teacherReviewedRiskLevel,
+  );
+}
+
 // safetyLock is set by the analysis and only a designated reviewer can lift it,
 // so it blocks replies even after a teacher lowers the risk level.
 export function isReplyLocked(thread: BoardThread) {

@@ -168,7 +168,7 @@ function AdminShareDialog({ onClose, onShared, open, thread }: AdminShareDialogP
   return (
     <BoardConfirmDialog
       actions={[
-        { label: '취소', onClick: close },
+        { disabled: isSubmitting, label: '취소', onClick: close },
         {
           disabled: !trimmedReason || isSubmitting,
           label: isSubmitting ? '공유 중…' : '공유하기',
