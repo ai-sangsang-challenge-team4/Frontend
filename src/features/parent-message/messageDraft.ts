@@ -20,8 +20,10 @@ export type ServerComplaintDraft = {
 export type MessageDraft = {
   messageId: string;
   teacherId: string;
-  // The selected child (http mode).
+  // The selected child and the selected teacher's name (http mode), kept for drafts saved before analysis,
+  // which have no server draft to carry the name.
   studentId?: number;
+  teacherName?: string;
   title: string;
   body: string;
   status: MessageDraftStep;
@@ -118,7 +120,8 @@ function parseDraft(draft: unknown): MessageDraft | null {
     (draft.status !== 'DRAFT' && draft.status !== 'PARENT_REVIEW') ||
     (draft.threadId !== undefined && typeof draft.threadId !== 'string') ||
     (draft.savedAt !== undefined && typeof draft.savedAt !== 'string') ||
-    (draft.studentId !== undefined && !isPositiveInteger(draft.studentId))) return null;
+    (draft.studentId !== undefined && !isPositiveInteger(draft.studentId)) ||
+    (draft.teacherName !== undefined && typeof draft.teacherName !== 'string')) return null;
   let result = draft as MessageDraft;
   // An unreadable server state keeps the text; the next analysis starts a new server draft.
   if (result.server !== undefined && !isServerDraft(result.server)) result = { ...result, server: undefined, review: undefined, status: 'DRAFT' };

@@ -24,8 +24,11 @@ function MessageHistory({ userId }: { userId: number }) {
   const [notice, setNotice] = useState<string | null>(null);
   const dismissNotice = useCallback(() => setNotice(null), []);
   const { messages, drafts, error, refresh } = useParentMessages(userId);
-  const teacherName = (draft: MessageDraft) => draft.server ? `${draft.server.teacherName} 선생님`
-    : mockConnectedTeachers.find((teacher) => teacher.value === draft.teacherId)?.label ?? '선생님';
+  const teacherName = (draft: MessageDraft) => {
+    const serverName = draft.server?.teacherName ?? draft.teacherName;
+    return serverName ? `${serverName} 선생님`
+      : mockConnectedTeachers.find((teacher) => teacher.value === draft.teacherId)?.label ?? '선생님';
+  };
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const matches = (values: string[]) => values.join(' ').toLocaleLowerCase().includes(normalizedQuery);
   const visibleMessages = messages.filter((message) => (tab !== 'starred' || message.isImportant) &&

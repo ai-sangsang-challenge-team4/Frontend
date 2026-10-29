@@ -231,13 +231,20 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
     setErrors((previous) => ({ ...previous, studentId: undefined, teacherId: undefined }));
   }
 
+  // The selected server teacher's name, so the history lists the draft under it before a server draft exists.
+  function withTeacherName(next: MessageDraft): MessageDraft {
+    if (!isServer || next.server) return next;
+    const teacherName = recipients.data?.find((teacher) => String(teacher.teacherId) === next.teacherId)?.teacherName;
+    return { ...next, teacherName };
+  }
+
   function handleSaveDraft() {
     if (!draft.title.trim() && !draft.body.trim()) {
       setNotice('임시저장할 제목이나 내용을 입력해 주세요.');
       return;
     }
     try {
-      saveMessageDraft(userId, { ...draft, status: 'DRAFT' });
+      saveMessageDraft(userId, withTeacherName({ ...draft, status: 'DRAFT' }));
       setNotice('문의가 임시저장되었습니다.');
       if (fresh) navigate(getDraftPath(draft), { replace: true, state: { draftSaved: true } });
     } catch {
@@ -282,9 +289,9 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
       return;
     }
     try {
-      const nextDraft: MessageDraft = {
+      const nextDraft = withTeacherName({
         ...draft, title: draft.title.trim(), body: draft.body.trim(), status: 'DRAFT',
-      };
+      });
       saveMessageDraft(userId, nextDraft);
       const recipient = recipients.data?.find((item) => String(item.teacherId) === draft.teacherId);
       analysisTarget.current = draft.server ?? (studentId && recipient
