@@ -13,7 +13,7 @@ import {
 } from '../../escalation/escalationRules';
 import type { EscalationStateResponse } from '../../escalation/escalationTypes';
 import { createEscalationSnapshot } from '../escalationSnapshot';
-import { riskLabel } from '../messageRules';
+import { hasOriginalMessage, riskLabel } from '../messageRules';
 import type { BoardThread } from '../types';
 import { BoardConfirmDialog } from './BoardConfirmDialog';
 import { ExternalLinkIcon } from './MessageIcons';
@@ -140,7 +140,7 @@ function AdminShareDialog({ onClose, onShared, open, thread }: AdminShareDialogP
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const trimmedReason = reason.trim();
-  const hasOriginal = Boolean(thread.originalMessage?.trim());
+  const hasOriginal = hasOriginalMessage(thread);
 
   const close = () => {
     setReason('');

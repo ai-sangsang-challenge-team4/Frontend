@@ -26,7 +26,8 @@ import {
 import {
   emergencyOfficialProcedurePostId,
 } from '../safety/guidePostIds';
-import { getApiErrorMessage } from '../../shared/api';
+import { getApiErrorMessage, type ApiError } from '../../shared/api';
+import { AsyncContent } from '../../shared/components/feedback';
 import { useAuth } from '../auth';
 import { canSendEscalationRequest, getEscalationState, submitRiskReview } from '../escalation/api';
 import { canRequestEmergencyReview } from '../escalation/escalationRules';
@@ -71,6 +72,7 @@ import {
   getReplyLockNotice,
   getThreadRiskLevel,
   getVisibleRiskFactors,
+  hasOriginalMessage,
   isReplyLocked,
   matchesStatusFilter,
   needsTeacherReviewBeforeRequest,
@@ -79,6 +81,7 @@ import {
   riskScores,
   riskScoreToLevel,
   riskStageGuides,
+  serverSortOptions,
   sortOptions,
   statusChipStatus,
   statusLabel,
@@ -123,8 +126,13 @@ import {
   syncThreadWithEmergencyReview,
   systemRiskLevelFromApi,
 } from './escalationSnapshot';
+import { messageApiMode } from './api/teacherInboxApi';
 import { initialTeacherThreads } from './mockThreads';
 import { persistTeacherParentThread, readTeacherParentThreads } from './teacherParentMessages';
+import { useActiveMessageCount } from './useActiveMessageCount';
+import { useServerTeacherInbox } from './useServerTeacherInbox';
+
+const isServerInbox = messageApiMode === 'http';
 
 type TeacherMessagesProps = {
   initialThreadId?: string | null;
@@ -532,10 +540,21 @@ type BoardFilters = {
 
 const defaultBoardFilters: BoardFilters = { query: '', risk: 'all', sort: 'latest', status: 'active' };
 
+// Server inbox only: the page request state below the list.
+type ServerListStatus = {
+  error: ApiError | null;
+  hasNext: boolean;
+  isLoading: boolean;
+  isLoadingMore: boolean;
+  onLoadMore: () => void;
+  onRetry: () => void;
+};
+
 type BoardWorkspaceProps = {
   emptyDescription: string;
   emptyTitle: string;
   filters: BoardFilters;
+  serverList?: ServerListStatus;
   isDetailFilterOpen: boolean;
   onDetailFilterToggle: () => void;
   onFiltersChange: (filters: Partial<BoardFilters>) => void;
@@ -555,6 +574,7 @@ function BoardWorkspace({
   onSelect,
   onToggleStar,
   selectedThreadId,
+  serverList,
   threads,
 }: BoardWorkspaceProps) {
   const detailFilterId = useId();
@@ -579,6 +599,8 @@ function BoardWorkspace({
           containerClassName="board-search-field"
           leadingIcon={<SearchIcon />}
           onChange={(event) => onFiltersChange({ query: event.currentTarget.value })}
+          // The server rejects a keyword over 100 characters (400 VALIDATION_FAILED).
+          maxLength={serverList ? 100 : undefined}
           placeholder="이름 또는 메시지 내용으로 검색"
           type="search"
           value={filters.query}
@@ -622,7 +644,7 @@ function BoardWorkspace({
               className="board-filter-select board-detail-filter-select"
               menuLabel="정렬 기준"
               onValueChange={(nextValue) => onFiltersChange({ sort: nextValue as SortValue })}
-              options={sortOptions}
+              options={serverList ? serverSortOptions : sortOptions}
               value={filters.sort}
             />
           </div>
@@ -637,14 +659,37 @@ function BoardWorkspace({
         </div>
       ) : null}
 
-      <ThreadList
-        emptyDescription={emptyDescription}
-        emptyTitle={emptyTitle}
-        onSelect={onSelect}
-        onToggleStar={onToggleStar}
-        selectedThreadId={selectedThreadId}
-        threads={threads}
-      />
+      <AsyncContent
+        error={serverList?.error && threads.length === 0 ? serverList.error : null}
+        isLoading={Boolean(serverList?.isLoading)}
+        loadingMessage="메시지 목록을 불러오고 있어요."
+        onRetry={serverList?.onRetry}
+      >
+        <ThreadList
+          emptyDescription={emptyDescription}
+          emptyTitle={emptyTitle}
+          onSelect={onSelect}
+          onToggleStar={onToggleStar}
+          selectedThreadId={selectedThreadId}
+          threads={threads}
+        />
+        {serverList?.error && threads.length > 0 ? (
+          <p className="board-admin-share-error" role="alert">
+            {getApiErrorMessage(serverList.error, '메시지를 더 불러오지 못했습니다.')}{' '}
+            <button className="board-admin-share-retry" onClick={serverList.onRetry} type="button">다시 시도</button>
+          </p>
+        ) : null}
+        {serverList?.hasNext ? (
+          <button
+            className="board-outline-button board-thread-load-more"
+            disabled={serverList.isLoadingMore}
+            onClick={serverList.onLoadMore}
+            type="button"
+          >
+            {serverList.isLoadingMore ? '불러오는 중…' : '메시지 더 보기'}
+          </button>
+        ) : null}
+      </AsyncContent>
     </>
   );
 }
@@ -1043,6 +1088,8 @@ type RiskAnalysisPanelProps = {
   onReviewRequest: (threadId: string) => void;
   // Receives every server escalation state so the thread can pick up the admin's decision.
   onServerStateLoaded: (threadId: string, state: EscalationStateResponse) => void;
+  // Server inbox only: reloads the thread's detail after a failed request.
+  onReloadServerDetail?: (threadId: string) => void;
   thread: BoardThread;
 };
 
@@ -1054,6 +1101,7 @@ function RiskAnalysisPanel({
   onOriginalOpen,
   onReviewRequest,
   onServerStateLoaded,
+  onReloadServerDetail,
   thread,
 }: RiskAnalysisPanelProps) {
   const [isProcedureOpen, setIsProcedureOpen] = useState(false);
@@ -1100,13 +1148,19 @@ function RiskAnalysisPanel({
   }, [analysis?.teacherReviewReason, initialReviewScore, thread.id]);
 
   if (!analysis || getAnalysisStatus(thread) !== 'ready') {
-    return <AnalysisStateNotice thread={thread} onOriginalOpen={() => onOriginalOpen()} />;
+    return (
+      <AnalysisStateNotice
+        onOriginalOpen={() => onOriginalOpen()}
+        onRetry={onReloadServerDetail ? () => onReloadServerDetail(thread.id) : undefined}
+        thread={thread}
+      />
+    );
   }
 
   const canInspectOriginal = Boolean(
     analysis.canViewOriginal &&
       analysis.originalMessageAvailable &&
-      thread.originalMessage,
+      hasOriginalMessage(thread),
   );
   const effectiveRiskLevel = getThreadRiskLevel(thread);
   const currentTone = systemRiskTone[effectiveRiskLevel];
@@ -1437,11 +1491,23 @@ function RiskAnalysisPanel({
 }
 
 type ActivityLogPanelProps = {
+  onReload?: () => void;
   thread: BoardThread;
 };
 
-function ActivityLogPanel({ thread }: ActivityLogPanelProps) {
+function ActivityLogPanel({ onReload, thread }: ActivityLogPanelProps) {
   const logs = getActivityLogs(thread);
+  // A failed GET /history keeps the last loaded logs rather than claiming there are none.
+  const unavailableNotice = thread.analysis?.activityLogsUnavailable ? (
+    <p className="board-admin-share-error" role="alert">
+      처리 기록을 불러오지 못했습니다.{logs.length > 0 ? ' 마지막으로 불러온 기록을 표시합니다.' : ''}{' '}
+      {onReload ? <button className="board-admin-share-retry" onClick={onReload} type="button">다시 시도</button> : null}
+    </p>
+  ) : null;
+
+  if (logs.length === 0 && unavailableNotice) {
+    return <section className="board-activity-panel" aria-label="처리 기록">{unavailableNotice}</section>;
+  }
 
   if (logs.length === 0) {
     return (
@@ -1461,6 +1527,7 @@ function ActivityLogPanel({ thread }: ActivityLogPanelProps) {
           <h2 className="board-risk-section-title">처리 기록</h2>
         </div>
       </div>
+      {unavailableNotice}
       <ol className="board-activity-list">
         {logs.map((log) => (
           <li key={log.id}>
@@ -1486,12 +1553,15 @@ function isAcknowledgedByParent(thread: BoardThread) {
 
 type DetailProps = {
   onConsultationComplete: (threadId: string) => void;
+  // Server inbox only: reloads the thread's detail after a failed request.
+  onReloadServerDetail?: (threadId: string) => void;
   initialOriginalViewer?: OriginalMessageRequest;
   initialTab?: DetailTab;
   onBack: () => void;
   onEvidencePackageCreate: (threadId: string) => void;
   onOpenReplyComposer: (threadId: string) => void;
-  onOriginalViewed: (threadId: string, evidence?: string) => void;
+  // Resolves once the original can be shown; a server thread fetches it first (POST /original-views).
+  onOriginalViewed: (threadId: string, evidence?: string) => Promise<boolean>;
   onReturnToReplyComposer: (threadId: string) => void;
   // Rejects with the API error so the panel can show it.
   onReviewComplete: (threadId: string, review: RiskReviewSubmission) => Promise<void>;
@@ -1516,6 +1586,7 @@ function ThreadDetail({
   onReviewComplete,
   onReviewRequest,
   onServerStateLoaded,
+  onReloadServerDetail,
   thread,
 }: DetailProps) {
   const [activeDetailTab, setActiveDetailTab] =
@@ -1531,18 +1602,22 @@ function ThreadDetail({
   const bufferedSummaryText = getBufferedSummaryText(thread);
   const needsBufferedSummary = effectiveRiskLevel !== 'low' ||
     Boolean(thread.analysis && getAnalysisStatus(thread) !== 'ready');
-  const visibleConversationReplies = needsBufferedSummary
+  // A server thread carries a summary per parent message, so every message stays in the conversation and
+  // each summarized one shows as its own summary card.
+  const usesMessageSummaries = Boolean(thread.serverComplaintId);
+  const firstParentReplyId = thread.replies.find((reply) => reply.authorRole === 'parent')?.id;
+  const visibleConversationReplies = needsBufferedSummary && !usesMessageSummaries
     ? thread.replies.filter((reply) => reply.authorRole !== 'parent')
     : thread.replies;
   const initialConversationDate = thread.messageDateLabel ?? formatConversationDate(
     thread.replies[0]?.sentAt ?? thread.latestAt,
   );
   const showBufferedSummaryOnly =
-    needsBufferedSummary && visibleConversationReplies.length === 0;
+    needsBufferedSummary && !usesMessageSummaries && visibleConversationReplies.length === 0;
   const canInspectOriginal = Boolean(
     thread.analysis?.canViewOriginal &&
       thread.analysis.originalMessageAvailable &&
-      thread.originalMessage,
+      hasOriginalMessage(thread),
   );
   const conversationInfoText =
     effectiveRiskLevel === 'low'
@@ -1556,7 +1631,11 @@ function ThreadDetail({
           </>
         );
 
+  // The thread on screen, so a slow original request for a thread left behind does not open its viewer here.
+  const activeThreadIdRef = useRef(thread.id);
+
   useEffect(() => {
+    activeThreadIdRef.current = thread.id;
     setActiveDetailTab(initialTab ?? 'conversation');
     setOriginalRequest(null);
     setOriginalViewer(initialOriginalViewer ?? null);
@@ -1570,14 +1649,16 @@ function ThreadDetail({
     setOriginalRequest({ evidence, source: 'detail' });
   };
 
-  const confirmOriginalViewer = () => {
+  const confirmOriginalViewer = async () => {
     if (!originalRequest) {
       return;
     }
 
-    setOriginalViewer(originalRequest);
+    const request = originalRequest;
+    const requestedThreadId = thread.id;
     setOriginalRequest(null);
-    onOriginalViewed(thread.id, originalRequest.evidence);
+    if (!(await onOriginalViewed(requestedThreadId, request.evidence))) return;
+    if (activeThreadIdRef.current === requestedThreadId) setOriginalViewer(request);
   };
   const closeOriginalViewer = () => {
     if (originalViewer?.source === 'replyComposer') {
@@ -1688,7 +1769,13 @@ function ThreadDetail({
 
       {!originalViewer && activeDetailTab === 'conversation' ? (
         <>
-          {thread.analysis ? <AnalysisStateNotice thread={thread} onOriginalOpen={() => openOriginalViewer()} /> : null}
+          {thread.analysis ? (
+            <AnalysisStateNotice
+              onOriginalOpen={() => openOriginalViewer()}
+              onRetry={onReloadServerDetail ? () => onReloadServerDetail(thread.id) : undefined}
+              thread={thread}
+            />
+          ) : null}
           <div className="board-info-box">
             <span aria-hidden="true">i</span>
             <p>{conversationInfoText}</p>
@@ -1702,7 +1789,7 @@ function ThreadDetail({
           >
         <ConversationDateChip label={initialConversationDate} />
 
-        {needsBufferedSummary ? (
+        {needsBufferedSummary && !usesMessageSummaries ? (
           <BufferedSummaryCard
             canInspectOriginal={canInspectOriginal}
             onOpenOriginal={() => openOriginalViewer()}
@@ -1724,25 +1811,37 @@ function ThreadDetail({
           return (
             <Fragment key={reply.id}>
               {dateLabel !== previousDateLabel ? <ConversationDateChip label={dateLabel} /> : null}
-              <article className={`board-reply board-reply-${reply.authorRole}`}>
-                <div className="board-reply-author">
-                  <ProfileAvatar className="board-mini-avatar" />
-                  <strong>{reply.authorName}</strong>
-                </div>
-                <div className="board-reply-row">
-                  {reply.authorRole === 'teacher' ? (
-                    <div className="board-reply-time">
-                      {reply.readByParent ? <span>1</span> : null}
-                      <time dateTime={reply.sentAt}>{time}</time>
-                    </div>
-                  ) : null}
-                  <div className="board-reply-bubble">
-                    <span>{reply.label}</span>
-                    <p>{reply.content}</p>
+              {reply.summarized ? (
+                <BufferedSummaryCard
+                  // POST /original-views returns only the first inquiry's original.
+                  canInspectOriginal={canInspectOriginal && reply.id === firstParentReplyId}
+                  onOpenOriginal={() => openOriginalViewer()}
+                  onOpenRiskEvidence={() => setActiveDetailTab('risk')}
+                  sentAt={reply.sentAt}
+                  summaryText={reply.content}
+                  thread={thread}
+                />
+              ) : (
+                <article className={`board-reply board-reply-${reply.authorRole}`}>
+                  <div className="board-reply-author">
+                    <ProfileAvatar className="board-mini-avatar" />
+                    <strong>{reply.authorName}</strong>
                   </div>
-                  {reply.authorRole === 'parent' ? <time dateTime={reply.sentAt}>{time}</time> : null}
-                </div>
-              </article>
+                  <div className="board-reply-row">
+                    {reply.authorRole === 'teacher' ? (
+                      <div className="board-reply-time">
+                        {reply.readByParent ? <span>1</span> : null}
+                        <time dateTime={reply.sentAt}>{time}</time>
+                      </div>
+                    ) : null}
+                    <div className="board-reply-bubble">
+                      <span>{reply.label}</span>
+                      <p>{reply.content}</p>
+                    </div>
+                    {reply.authorRole === 'parent' ? <time dateTime={reply.sentAt}>{time}</time> : null}
+                  </div>
+                </article>
+              )}
             </Fragment>
           );
         })}
@@ -1829,12 +1928,16 @@ function ThreadDetail({
           onOriginalOpen={openOriginalViewer}
           onReviewRequest={onReviewRequest}
           onServerStateLoaded={onServerStateLoaded}
+          onReloadServerDetail={onReloadServerDetail}
           thread={thread}
         />
       ) : null}
 
       {!originalViewer && activeDetailTab === 'activity' ? (
-        <ActivityLogPanel thread={thread} />
+        <ActivityLogPanel
+          onReload={onReloadServerDetail ? () => onReloadServerDetail(thread.id) : undefined}
+          thread={thread}
+        />
       ) : null}
 
       <OriginalMessageConfirmDialog
@@ -2029,7 +2132,7 @@ function ReplyComposerPage({
   const canInspectOriginal = Boolean(
     thread.analysis?.canViewOriginal &&
       thread.analysis.originalMessageAvailable &&
-      thread.originalMessage,
+      hasOriginalMessage(thread),
   );
   const isBufferedContext = riskLevel !== 'low' ||
     Boolean(thread.analysis && getAnalysisStatus(thread) !== 'ready');
@@ -2280,15 +2383,23 @@ export function TeacherMessages({
     null,
   );
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [threads, setThreads] = useState(() => [...readTeacherParentThreads(user?.userId ?? 0), ...initialTeacherThreads]);
+  const [threads, setThreads] = useState<BoardThread[]>(() => isServerInbox
+    ? []
+    : [...readTeacherParentThreads(user?.userId ?? 0), ...initialTeacherThreads]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  // The sidebar badge follows the inbox's default "진행 중 상담" filter.
-  const activeMessageCount = threads.filter((thread) => thread.status !== 'complete').length;
+  const serverInbox = useServerTeacherInbox({ enabled: isServerInbox, filters, setThreads });
+  const { loadDetail: loadServerDetail, viewOriginal: viewServerOriginal } = serverInbox;
+  // The sidebar badge follows the inbox's default "진행 중 상담" filter (the server's OPEN count over HTTP).
+  const serverActiveMessageCount = useActiveMessageCount(user?.userId ?? 0);
+  const activeMessageCount = isServerInbox
+    ? serverActiveMessageCount
+    : threads.filter((thread) => thread.status !== 'complete').length;
   const dismissToast = useCallback(() => setToastMessage(null), []);
   // Submission keys already handled, so a double click or retry stores the reply only once.
   const sentReplyKeysRef = useRef(new Set<string>());
 
   useEffect(() => {
+    if (isServerInbox) return;
     const refresh = () => setThreads((current) => [
       ...readTeacherParentThreads(user?.userId ?? 0), ...current.filter((thread) => thread.parentUserId === undefined),
     ]);
@@ -2339,6 +2450,12 @@ export function TeacherMessages({
   }, [syncRouteState]);
 
   const filteredThreads = useMemo(() => {
+    // The server already filtered and sorted the list.
+    if (isServerInbox) {
+      return serverInbox.listIds
+        .map((id) => threads.find((thread) => thread.id === id))
+        .filter((thread): thread is BoardThread => Boolean(thread));
+    }
     const normalizedQuery = filters.query.trim().toLowerCase();
 
     return threads.filter((thread) => {
@@ -2362,7 +2479,36 @@ export function TeacherMessages({
         matchesQuery
       );
     }).sort((left, right) => compareThreads(left, right, filters.sort));
-  }, [filters, threads]);
+  }, [filters, serverInbox.listIds, threads]);
+
+  // Opening a server thread loads its detail, conversation, risk, and history.
+  useEffect(() => {
+    if (!isServerInbox || !selectedThreadId) return;
+    const controller = new AbortController();
+    loadServerDetail(selectedThreadId, controller.signal).catch((error: unknown) => {
+      if (controller.signal.aborted) return;
+      setToastMessage(getApiErrorMessage(error, '메시지 상세 정보를 불러오지 못했습니다.'));
+    });
+    return () => controller.abort();
+  }, [loadServerDetail, selectedThreadId]);
+
+  // Replies and closing are a later step (D); until then a server thread must not look answered locally.
+  const blockServerOnlyAction = (thread: BoardThread | undefined) => {
+    if (!thread?.serverComplaintId) return false;
+    setToastMessage('서버 메시지의 답변 전송·상담 완료는 아직 연동되지 않았습니다.');
+    return true;
+  };
+
+  const retryServerDetail = (threadId: string) => {
+    loadServerDetail(threadId).catch((error: unknown) => {
+      setToastMessage(getApiErrorMessage(error, '메시지 상세 정보를 불러오지 못했습니다.'));
+    });
+  };
+
+  const refreshServerThread = (threadId: string) => {
+    if (!isServerInbox) return;
+    loadServerDetail(threadId).catch(() => undefined);
+  };
 
   const starredThreads = filteredThreads.filter((thread) => thread.isPinned);
   const draftThreads = filteredThreads.filter(
@@ -2593,6 +2739,7 @@ export function TeacherMessages({
         },
       ]),
     );
+    refreshServerThread(threadId);
   };
 
   const logReplyBlocked = (threadId: string) => {
@@ -2721,6 +2868,8 @@ export function TeacherMessages({
         riskReviewRequired: false,
       };
     });
+    // The server holds the resulting level, lock, and RISK_REVIEWED history.
+    refreshServerThread(threadId);
   };
 
   const handleServerStateLoaded: RiskAnalysisPanelProps['onServerStateLoaded'] = (threadId, state) => {
@@ -2793,7 +2942,17 @@ export function TeacherMessages({
     });
   };
 
-  const handleOriginalViewed = (threadId: string, evidence?: string) => {
+  const handleOriginalViewed = async (threadId: string, evidence?: string) => {
+    // The server records the view itself (ORIGINAL_VIEWED) and its history replaces the local log.
+    if (threads.find((thread) => thread.id === threadId)?.serverComplaintId) {
+      try {
+        await viewServerOriginal(threadId);
+        return true;
+      } catch (error) {
+        setToastMessage(getApiErrorMessage(error, '원문을 불러오지 못했습니다. 다시 시도해 주세요.'));
+        return false;
+      }
+    }
     updateThread(threadId, (thread) =>
       appendActivityLogs(thread, [
         {
@@ -2805,10 +2964,11 @@ export function TeacherMessages({
         },
       ]),
     );
+    return true;
   };
 
-  const handleOpenOriginalPageFromComposer = (threadId: string) => {
-    handleOriginalViewed(threadId);
+  const handleOpenOriginalPageFromComposer = async (threadId: string) => {
+    if (!(await handleOriginalViewed(threadId))) return;
     setInitialDetailTabRequest({ tab: 'conversation', threadId });
     setInitialOriginalViewerRequest({
       request: { source: 'replyComposer' },
@@ -2830,7 +2990,7 @@ export function TeacherMessages({
   const handleSubmitReply = (threadId: string) => {
     const thread = threads.find((currentThread) => currentThread.id === threadId);
 
-    if (!thread) {
+    if (!thread || blockServerOnlyAction(thread)) {
       return;
     }
 
@@ -2937,6 +3097,11 @@ export function TeacherMessages({
 
   const workspaceProps = {
     filters,
+    serverList: isServerInbox ? {
+      ...serverInbox.listState,
+      onLoadMore: serverInbox.loadMore,
+      onRetry: serverInbox.retry,
+    } : undefined,
     isDetailFilterOpen,
     onDetailFilterToggle: () => setIsDetailFilterOpen((isOpen) => !isOpen),
     onFiltersChange: (nextFilters: Partial<BoardFilters>) =>
@@ -3051,7 +3216,10 @@ export function TeacherMessages({
         />
         <main className="board-detail-page">
           <ThreadDetail
-            onConsultationComplete={(threadId) => updateThread(threadId, (thread) => ({ ...thread, status: 'complete', needsTeacherReview: false }))}
+            onConsultationComplete={(threadId) => {
+              if (blockServerOnlyAction(threads.find((thread) => thread.id === threadId))) return;
+              updateThread(threadId, (thread) => ({ ...thread, status: 'complete', needsTeacherReview: false }));
+            }}
             initialOriginalViewer={
               initialOriginalViewerRequest?.threadId === selectedThread.id
                 ? initialOriginalViewerRequest.request
@@ -3075,6 +3243,7 @@ export function TeacherMessages({
             onReviewComplete={handleReviewComplete}
             onReviewRequest={handleReviewRequest}
             onServerStateLoaded={handleServerStateLoaded}
+            onReloadServerDetail={isServerInbox ? retryServerDetail : undefined}
             onAdminShared={handleAdminShared}
             onAiObjection={handleAiObjection}
             thread={selectedThread}

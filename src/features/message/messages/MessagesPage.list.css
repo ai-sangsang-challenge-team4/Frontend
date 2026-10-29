@@ -372,3 +372,11 @@
   border-top: 0.7px solid var(--color-border-default);
   border-bottom: 0.7px solid var(--color-border-default);
 }
+
+/* Server inbox: the next page of GET /teacher/complaints (10 per page). */
+.board-thread-load-more {
+  display: block;
+  width: auto;
+  margin: 16px auto 0;
+  padding: 8px 24px;
+}

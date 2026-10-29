@@ -1,7 +1,7 @@
 import type { ThreadActivityLog } from '../parent-message/parentMessageTypes';
 import type { ReplyTemplateDraft } from './replyTemplates';
 import type { RiskClassification } from '../risk-analysis';
-import type { RiskReviewStatus } from '../../shared/types';
+import type { ComplaintStatus, RiskReviewStatus, WaitingFor } from '../../shared/types';
 
 export type ThreadStatus = 'before' | 'inProgress' | 'complete';
 export type RiskLevel = 'normal' | 'attention' | 'danger' | 'urgent';
@@ -21,7 +21,8 @@ export type ReplyDraftState = {
 };
 export type FilterValue = 'active' | 'complete' | 'all';
 export type RiskFilterValue = 'all' | SystemRiskLevel;
-export type SortValue = 'latest' | 'risk' | 'status';
+// 'oldest' is offered only for the server inbox, whose sort is LATEST or OLDEST.
+export type SortValue = 'latest' | 'oldest' | 'risk' | 'status';
 // Teacher's own 1 (very safe) to 7 (very dangerous) rating; it maps onto SystemRiskLevel for locks and templates.
 export type RiskScore = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 export type AiObjectionType = 'overestimated' | 'underestimated' | 'wrongEvidence' | 'other';
@@ -66,6 +67,8 @@ export type ThreadAnalysis = {
   activityLogs: ActivityLog[];
   canReviewRisk: boolean;
   canViewActivityLog: boolean;
+  // Server inbox: GET /history failed, so activityLogs are the last ones loaded (possibly none).
+  activityLogsUnavailable?: boolean;
   canViewOriginal: boolean;
   originalMessageAvailable: boolean;
   packageAvailable: boolean;
@@ -91,6 +94,8 @@ export type BoardReply = {
   label: string;
   // Set once the reply is stored as the final answer delivered to the parent.
   deliveryStatus?: 'SENT_TO_PARENT';
+  // Server inbox: a parent message above LOW arrives as its buffered summary instead of the original.
+  summarized?: boolean;
   readByParent?: boolean;
   time: string;
   sentAt?: string;
@@ -103,6 +108,9 @@ export type ConversationSummary = {
 };
 
 export type BoardThread = {
+  // Set for threads read from GET /teacher/complaints (VITE_MESSAGE_API=http); the id is this number as a string.
+  serverComplaintId?: number;
+  serverStatus?: { status: ComplaintStatus; waitingFor: WaitingFor };
   conversationSummary?: ConversationSummary;
   parentUserId?: number;
   needsTeacherReview?: boolean;
