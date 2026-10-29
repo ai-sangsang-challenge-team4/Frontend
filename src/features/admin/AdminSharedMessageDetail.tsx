@@ -360,6 +360,8 @@ function HistoryPanel({ escalationId }: { escalationId: number }) {
 
   const missingLogs = data?.missingLogs ?? [];
   const hasMissingLogs = data?.logComplete === false || missingLogs.length > 0;
+  // Only a response that certifies completeness may say there is no history at all.
+  const logsConfirmed = data?.logComplete === true && missingLogs.length === 0;
 
   return (
     <AsyncContent
@@ -421,8 +423,8 @@ function HistoryPanel({ escalationId }: { escalationId: number }) {
         ) : (
           <EmptyState
             className="board-risk-empty"
-            description={hasMissingLogs ? '조회된 처리 기록이 없습니다.' : '아직 남겨진 처리 기록이 없습니다.'}
-            title={hasMissingLogs ? '조회된 기록 없음' : '기록 없음'}
+            description={logsConfirmed ? '아직 남겨진 처리 기록이 없습니다.' : '조회된 처리 기록이 없습니다.'}
+            title={logsConfirmed ? '기록 없음' : '조회된 기록 없음'}
           />
         )}
       </section>

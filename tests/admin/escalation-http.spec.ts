@@ -125,6 +125,22 @@ test('이벤트가 없어도 로그 누락을 알리고, 불완전 응답은 기
   await expect(panel.getByText('조회된 처리 기록이 없습니다.', { exact: true })).toBeVisible();
 });
 
+test('logComplete가 없는 이전 응답은 빈 이력을 기록 없음으로 단정하지 않는다', async ({ page }) => {
+  await setup(page, { history: { complaintId: 12, events: [] } });
+  await openTab(page, '처리 기록');
+  const panel = page.getByRole('region', { name: '처리 기록', exact: true });
+  await expect(panel.getByRole('alert')).toHaveCount(0);
+  await expect(panel.getByText('조회된 처리 기록이 없습니다.', { exact: true })).toBeVisible();
+  await expect(panel.getByText('아직 남겨진 처리 기록이 없습니다.', { exact: true })).toHaveCount(0);
+});
+
+test('완전한 빈 이력만 기록 없음으로 표시한다', async ({ page }) => {
+  await setup(page, { history: { complaintId: 12, logComplete: true, missingLogs: [], events: [] } });
+  await openTab(page, '처리 기록');
+  const panel = page.getByRole('region', { name: '처리 기록', exact: true });
+  await expect(panel.getByText('아직 남겨진 처리 기록이 없습니다.', { exact: true })).toBeVisible();
+});
+
 test('이전 응답 형식도 표시하며 누락 목록이 있으면 logComplete 값과 관계없이 알린다', async ({ page }) => {
   await setup(page, {
     risk: { ...risk, detectedFactors: [{ code: 'THREAT', name: '위협', evidence: '이전 형식의 근거', reason: '위협 표현' }] },
