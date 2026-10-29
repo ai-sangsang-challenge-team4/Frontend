@@ -59,16 +59,25 @@ export function restoreServerDraft(thread: BoardThread, draft: TeacherResponseDr
   };
 }
 
-// After PUT /response-draft the current tab is the server copy; another tab's "saved" mark would be stale.
-export function markServerDraftSaved(thread: BoardThread, draft: TeacherResponseDraftResponse): BoardThread {
+// After PUT /response-draft the saved tab is the server copy, and only while it still holds the saved text;
+// any other tab's "saved" mark would be stale. The saved tab may no longer be on screen.
+export function markServerDraftSaved(
+  thread: BoardThread,
+  draft: TeacherResponseDraftResponse,
+  savedTab: ReplyDraftTab = getReplyDraftTab(thread),
+  content = thread.draftText.trim(),
+): BoardThread {
+  const savedAt = formatServerSavedAt(draft.updatedAt);
   const activeTab = getReplyDraftTab(thread);
+  const markFor = (tab: string, text: string) => tab === savedTab && text.trim() === content ? savedAt : undefined;
   const replyDrafts = Object.fromEntries(
     Object.entries(thread.replyDrafts ?? {}).map(([tab, state]) => [
       tab,
-      tab === activeTab || !state ? state : { ...state, draftSavedAt: undefined },
+      // The active tab's live state is on the thread itself.
+      tab === activeTab || !state ? state : { ...state, draftSavedAt: markFor(tab, state.draftText) },
     ]),
   ) as BoardThread['replyDrafts'];
-  return { ...thread, replyDrafts, draftSavedAt: formatServerSavedAt(draft.updatedAt) };
+  return { ...thread, replyDrafts, draftSavedAt: markFor(activeTab, thread.draftText) };
 }
 
 // Shows the sent reply right away; the following detail reload brings the server's conversation and history.

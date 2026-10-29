@@ -150,6 +150,25 @@ test('임시저장하면 현재 탭만 저장 표시를 남기고 다른 탭의 
   expect(saved.replyDrafts?.ai?.draftSavedAt).toBeUndefined();
 });
 
+test('저장 응답 전에 탭을 바꿔도 저장한 탭에만 저장 표시를 남긴다', () => {
+  // The manual tab was saved; before the response the teacher went back to an AI tab that carried an older mark.
+  const savingManual = selectReplyDraft(
+    thread({ draftText: 'AI 초안', draftSavedAt: '이전 저장', replyDraftTab: 'ai' }),
+    'manual',
+  );
+  const onAi = selectReplyDraft({ ...savingManual, draftText: '직접 쓴 답변' }, 'ai');
+
+  const saved = markServerDraftSaved(onAi, serverDraft, 'manual', '직접 쓴 답변');
+
+  expect(getReplyDraftTab(saved)).toBe('ai');
+  expect(saved.draftSavedAt).toBeUndefined();
+  expect(saved.replyDrafts?.manual?.draftSavedAt).toBeTruthy();
+
+  // Text changed after the request no longer matches the server copy.
+  const edited = markServerDraftSaved({ ...savingManual, draftText: '바꾼 답변' }, serverDraft, 'manual', '직접 쓴 답변');
+  expect(edited.draftSavedAt).toBeUndefined();
+});
+
 test('AI 초안은 화면에 없는 AI 탭에도 채울 수 있다', () => {
   const onManual = selectReplyDraft(thread({ replyDraftTab: 'ai' }), 'manual');
   const filled = setReplyDraftTabState(onManual, 'ai', { draftText: 'AI 응답', aiDraftGenerated: true });

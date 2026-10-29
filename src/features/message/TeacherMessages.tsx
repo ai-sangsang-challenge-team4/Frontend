@@ -2363,7 +2363,7 @@ function ReplyComposerPage({
                 <p className="board-reply-lock-notice" role="alert">이 예시는 더 이상 사용할 수 없습니다. 최신 예시를 다시 적용하면 입력한 빈칸과 직접 고친 문장은 유지됩니다.</p>
               ) : null}
               <TemplateReplyEditor
-                disabled={isTemplateInactive}
+                disabled={isTemplateInactive || serverReplyAction !== null || Boolean(serverBlockReason)}
                 draft={thread.appliedTemplate}
                 onApply={(templateId) => onApplyOfficialTemplate(thread.id, templateId)}
                 onChange={(change) => onTemplateChange(thread.id, change)}
@@ -2463,6 +2463,11 @@ export function TeacherMessages({
   const dismissToast = useCallback(() => setToastMessage(null), []);
   // Submission keys already handled, so a double click or retry stores the reply only once.
   const sentReplyKeysRef = useRef(new Set<string>());
+  // The composer on screen, read when a server send finishes after the teacher may have moved on.
+  const replyComposerThreadIdRef = useRef(replyComposerThreadId);
+  useEffect(() => {
+    replyComposerThreadIdRef.current = replyComposerThreadId;
+  }, [replyComposerThreadId]);
 
   useEffect(() => {
     if (isServerInbox) return;
@@ -3112,8 +3117,14 @@ export function TeacherMessages({
     // The server stores the reply and its history (MESSAGE_SENT); a failure keeps the draft for a retry.
     if (thread.serverComplaintId !== undefined) {
       void serverReply.submit(thread, user?.name ?? '선생님').then((sent) => {
-        if (sent) showSentReply();
-        else sentReplyKeysRef.current.delete(submissionKey);
+        if (!sent) {
+          sentReplyKeysRef.current.delete(submissionKey);
+        } else if (replyComposerThreadIdRef.current === threadId) {
+          showSentReply();
+        } else {
+          // The teacher left this composer while sending; stay where they are.
+          setToastMessage(`${thread.parentName}님에게 답변을 전송했습니다.`);
+        }
       });
       return;
     }
