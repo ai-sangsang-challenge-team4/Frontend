@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { AuthSession } from '../../src/features/auth/api/authApiContract';
-import { fillChildInformation } from './helpers/childSignup';
+import { fillChildInformation, MOCK_CHILD } from './helpers/childSignup';
 
 const SESSION_KEY = 'teacher-hub.auth-session';
 const ISSUED_KEY = 'teacher-hub.auth-mock-sessions';
@@ -117,13 +117,12 @@ for (const role of ['PARENT', 'TEACHER'] as const) {
     await page.goto(`/signup?role=${role}`);
     await expect(page.getByRole('radio', { name: role === 'PARENT' ? '학부모' : '교사' })).toBeChecked();
     await expect(page.getByRole('radio')).toHaveCount(2);
+    // Both roles send their own name; a teacher also sends the school and staff number (교번).
+    await page.locator('input[name="name"]').fill('테스트 사용자');
     if (role === 'TEACHER') {
-      await page.locator('input[name="name"]').fill('테스트 사용자');
       await page.getByRole('combobox', { name: '소속학교', exact: true }).fill('상상중');
       await page.getByRole('option', { name: '상상중학교 예시 학교' }).click();
       await page.getByLabel('교번', { exact: true }).fill('  00123  ');
-    } else {
-      await expect(page.locator('input[name="name"]')).toHaveCount(0);
     }
     const email = `${role.toLowerCase()}-signup@example.com`;
     await requestVerification(page, email);
@@ -141,16 +140,15 @@ for (const role of ['PARENT', 'TEACHER'] as const) {
       const accounts = JSON.parse(localStorage.getItem('teacher-hub.auth-accounts') ?? '[]');
       return accounts.find((account: { email: string }) => account.email === email);
     }, email);
+    expect(account.name).toBe('테스트 사용자');
     if (role === 'PARENT') {
       expect(account).not.toHaveProperty('schoolId');
       expect(account).not.toHaveProperty('employeeNo');
-      expect(account.name).toBe('학부모');
-      expect(account.child).toEqual({
-        schoolId: 'mock-elementary', grade: 6, classNumber: 2, studentNumber: 17, name: '김상상',
-      });
+      expect(account.child).toEqual({ ...MOCK_CHILD, studentName: '김상상' });
     } else {
       expect(account).not.toHaveProperty('child');
-      expect(account).toMatchObject({ schoolId: 'mock-middle', employeeNo: '00123' });
+      // 상상중학교 is school 2 in mockSignupOptionsApi.
+      expect(account).toMatchObject({ schoolId: 2, employeeNo: '00123' });
     }
     await page.locator('input[name="password"]').fill('newpassword123');
     await page.getByRole('button', { name: '로그인', exact: true }).click();

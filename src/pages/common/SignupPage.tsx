@@ -7,9 +7,10 @@ import {
   useAuth,
   type SignupRole,
 } from '../../features/auth';
+import { authApiMode, isEmailVerificationSupported } from '../../features/auth/api/authApi';
 import { PasswordField } from '../../features/auth/components';
 import { ChildInformationFields } from '../../features/auth/components/ChildInformationFields';
-import { SchoolSearchField } from '../../features/auth/components/SchoolSearchField';
+import { SchoolSearchField, type SelectedSchool } from '../../features/auth/components/SchoolSearchField';
 import {
   createEmptyChildSignupInfo,
   validateChildSignupInfo,
@@ -57,7 +58,7 @@ export function SignupPage() {
     getInitialSignupRole(searchParams.get('role')),
   );
   const [name, setName] = useState('');
-  const [schoolId, setSchoolId] = useState('');
+  const [teacherSchool, setTeacherSchool] = useState<SelectedSchool>({ id: 0, displayName: '' });
   const [employeeNo, setEmployeeNo] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
@@ -71,11 +72,12 @@ export function SignupPage() {
 
     const nextErrors: SignupFormErrors = {};
 
-    if (role === 'TEACHER' && !name.trim()) {
+    // Every role sends its own name; a teacher's must match the staff roster.
+    if (!name.trim()) {
       nextErrors.name = '이름을 입력해 주세요.';
     }
     if (role === 'TEACHER') {
-      Object.assign(nextErrors, validateTeacherSignupInfo({ schoolId, employeeNo }));
+      Object.assign(nextErrors, validateTeacherSignupInfo({ schoolId: teacherSchool.id, employeeNo }));
     }
 
     if (!role) {
@@ -90,7 +92,7 @@ export function SignupPage() {
       nextErrors.passwordConfirmation = '비밀번호가 일치하지 않습니다.';
     }
 
-    if (verificationStatus !== 'verified') {
+    if (isEmailVerificationSupported && verificationStatus !== 'verified') {
       nextErrors.verification = '이메일 인증을 완료해 주세요.';
     }
 
@@ -109,9 +111,10 @@ export function SignupPage() {
       await signup({
         email: email.trim(),
         password,
+        name: name.trim(),
         ...(role === 'PARENT'
           ? { role, child: { ...child, name: child.name.trim() } }
-          : { role, name: name.trim(), schoolId, employeeNo: employeeNo.trim() }),
+          : { role, schoolId: teacherSchool.id, employeeNo: employeeNo.trim() }),
       });
       navigate(`/login?role=${role}`, {
         replace: true,
@@ -207,66 +210,70 @@ export function SignupPage() {
             ) : null}
 
             {role === 'TEACHER' ? (
-              <>
-                <fieldset
-                  className="auth-fieldset auth-child-information auth-teacher-information"
-                  disabled={isLoading}
-                >
-                  <legend className="auth-child-information__heading">
-                    <span className="auth-child-information__title">
-                      소속 정보 <span className="auth-required">*</span>
-                    </span>
+              <fieldset
+                className="auth-fieldset auth-child-information auth-teacher-information"
+                disabled={isLoading}
+              >
+                <legend className="auth-child-information__heading">
+                  <span className="auth-child-information__title">
+                    소속 정보 <span className="auth-required">*</span>
+                  </span>
+                  {authApiMode === 'mock' ? (
                     <span className="auth-child-information__notice">
                       학교 목록은 예시 데이터입니다.
                     </span>
-                  </legend>
-                  <div className="auth-child-information__fields">
-                    <SchoolSearchField
-                      disabled={isLoading}
-                      error={formErrors.schoolId}
-                      label="소속학교"
-                      name="teacherSchool"
-                      onSelect={(nextSchoolId) => {
-                        setSchoolId(nextSchoolId);
-                        setFormErrors((errors) => ({ ...errors, schoolId: '', submit: '' }));
-                      }}
-                      placeholder="소속학교를 검색해 주세요."
-                      schoolId={schoolId}
-                    />
-                    <TextField
-                      aria-required="true"
-                      autoComplete="off"
-                      containerClassName="auth-child-row"
-                      disabled={isLoading}
-                      error={formErrors.employeeNo}
-                      fieldSize="lg"
-                      label="교번"
-                      name="employeeNo"
-                      onChange={(event) => {
-                        setEmployeeNo(event.target.value);
-                        setFormErrors((errors) => ({ ...errors, employeeNo: '', submit: '' }));
-                      }}
-                      placeholder="교번을 입력해 주세요."
-                      value={employeeNo}
-                    />
-                  </div>
-                </fieldset>
-                <TextField
-                  autoComplete="name"
-                  disabled={isLoading}
-                  error={formErrors.name}
-                  fieldSize="lg"
-                  label={<RequiredLabel>이름</RequiredLabel>}
-                  name="name"
-                  onChange={(event) => {
-                    setName(event.target.value);
-                    setFormErrors((errors) => ({ ...errors, name: '', submit: '' }));
-                  }}
-                  placeholder="이름을 입력해주세요."
-                  value={name}
-                />
-              </>
+                  ) : null}
+                </legend>
+                <div className="auth-child-information__fields">
+                  <SchoolSearchField
+                    disabled={isLoading}
+                    error={formErrors.schoolId}
+                    label="소속학교"
+                    name="teacherSchool"
+                    onSelect={(school) => {
+                      setTeacherSchool(school);
+                      setFormErrors((errors) => ({ ...errors, schoolId: '', submit: '' }));
+                    }}
+                    placeholder="소속학교를 검색해 주세요."
+                    school={teacherSchool}
+                  />
+                  <TextField
+                    aria-required="true"
+                    autoComplete="off"
+                    containerClassName="auth-child-row"
+                    disabled={isLoading}
+                    error={formErrors.employeeNo}
+                    fieldSize="lg"
+                    label="교번"
+                    maxLength={100}
+                    name="employeeNo"
+                    onChange={(event) => {
+                      setEmployeeNo(event.target.value);
+                      setFormErrors((errors) => ({ ...errors, employeeNo: '', submit: '' }));
+                    }}
+                    placeholder="교번을 입력해 주세요."
+                    value={employeeNo}
+                  />
+                </div>
+              </fieldset>
             ) : null}
+
+            {/* Every role sends the account holder's own name; a teacher's must match the staff roster. */}
+            <TextField
+              autoComplete="name"
+              disabled={isLoading}
+              error={formErrors.name}
+              fieldSize="lg"
+              helperText={role === 'PARENT' ? '자녀가 아닌 학부모 본인의 이름을 입력해 주세요.' : '교직원 명부에 등록된 이름을 입력해 주세요.'}
+              label={<RequiredLabel>이름</RequiredLabel>}
+              name="name"
+              onChange={(event) => {
+                setName(event.target.value);
+                setFormErrors((errors) => ({ ...errors, name: '', submit: '' }));
+              }}
+              placeholder="이름을 입력해주세요."
+              value={name}
+            />
 
             <div className="auth-stacked-field">
               <div className="auth-inline-row">
@@ -289,17 +296,19 @@ export function SignupPage() {
                   type="email"
                   value={email}
                 />
-                <Button
-                  className="auth-inline-button"
-                  disabled={requestStatus === 'loading' || verificationStatus === 'verified'}
-                  isLoading={requestStatus === 'loading'}
-                  onClick={requestVerification}
-                  size="lg"
-                  type="button"
-                  variant="outline"
-                >
-                  {hasRequestedVerification ? '재전송' : '인증번호 받기'}
-                </Button>
+                {isEmailVerificationSupported ? (
+                  <Button
+                    className="auth-inline-button"
+                    disabled={requestStatus === 'loading' || verificationStatus === 'verified'}
+                    isLoading={requestStatus === 'loading'}
+                    onClick={requestVerification}
+                    size="lg"
+                    type="button"
+                    variant="outline"
+                  >
+                    {hasRequestedVerification ? '재전송' : '인증번호 받기'}
+                  </Button>
+                ) : null}
               </div>
               {developmentCode ? (
                 <p className="auth-dev-code" role="status">
@@ -308,85 +317,87 @@ export function SignupPage() {
               ) : null}
             </div>
 
-            <div className="auth-stacked-field">
-              <div className="auth-inline-row">
-                <TextField
-                  autoComplete="one-time-code"
-                  disabled={!hasRequestedVerification || verificationStatus === 'verified'}
-                  error={
-                    verificationStatus === 'verified'
-                      ? undefined
-                      : verificationError || formErrors.verification
-                  }
-                  fieldSize="lg"
-                  inputMode="numeric"
-                  label={<RequiredLabel>인증</RequiredLabel>}
-                  maxLength={6}
-                  name="verificationCode"
-                  onChange={(event) => {
-                    updateVerificationCode(event.target.value);
-                    setFormErrors((errors) => ({
-                      ...errors,
-                      submit: '',
-                      verification: '',
-                    }));
-                  }}
-                  placeholder="인증번호를 입력해주세요."
-                  trailingIcon={
-                    hasRequestedVerification && verificationStatus !== 'verified' ? (
-                      <span className="auth-verification-timer">
-                        {formattedRemainingTime}
-                      </span>
-                    ) : undefined
-                  }
-                  value={verificationCode}
-                />
-                <Button
-                  className="auth-inline-button"
-                  disabled={
-                    !hasRequestedVerification ||
-                    isVerificationExpired ||
-                    verificationStatus === 'verified'
-                  }
-                  isLoading={verificationStatus === 'loading'}
-                  onClick={() => {
-                    setFormErrors((errors) => ({
-                      ...errors,
-                      verification: '',
-                    }));
-                    void verify();
-                  }}
-                  size="lg"
-                  type="button"
-                  variant={verificationStatus === 'verified' ? 'secondary' : 'outline'}
-                >
-                  {verificationStatus === 'verified' ? '인증 완료' : '인증하기'}
-                </Button>
-              </div>
-              {hasRequestedVerification ? (
-                <ul className="auth-verification-help">
-                  <li>
-                    인증번호는 3분 이내에 입력해주세요.
-                    <span className="sr-only">
-                      {' '}남은 시간 {formattedRemainingTime}
-                    </span>
-                  </li>
-                  {verificationStatus !== 'verified' ? (
+            {isEmailVerificationSupported ? (
+              <div className="auth-stacked-field">
+                <div className="auth-inline-row">
+                  <TextField
+                    autoComplete="one-time-code"
+                    disabled={!hasRequestedVerification || verificationStatus === 'verified'}
+                    error={
+                      verificationStatus === 'verified'
+                        ? undefined
+                        : verificationError || formErrors.verification
+                    }
+                    fieldSize="lg"
+                    inputMode="numeric"
+                    label={<RequiredLabel>인증</RequiredLabel>}
+                    maxLength={6}
+                    name="verificationCode"
+                    onChange={(event) => {
+                      updateVerificationCode(event.target.value);
+                      setFormErrors((errors) => ({
+                        ...errors,
+                        submit: '',
+                        verification: '',
+                      }));
+                    }}
+                    placeholder="인증번호를 입력해주세요."
+                    trailingIcon={
+                      hasRequestedVerification && verificationStatus !== 'verified' ? (
+                        <span className="auth-verification-timer">
+                          {formattedRemainingTime}
+                        </span>
+                      ) : undefined
+                    }
+                    value={verificationCode}
+                  />
+                  <Button
+                    className="auth-inline-button"
+                    disabled={
+                      !hasRequestedVerification ||
+                      isVerificationExpired ||
+                      verificationStatus === 'verified'
+                    }
+                    isLoading={verificationStatus === 'loading'}
+                    onClick={() => {
+                      setFormErrors((errors) => ({
+                        ...errors,
+                        verification: '',
+                      }));
+                      void verify();
+                    }}
+                    size="lg"
+                    type="button"
+                    variant={verificationStatus === 'verified' ? 'secondary' : 'outline'}
+                  >
+                    {verificationStatus === 'verified' ? '인증 완료' : '인증하기'}
+                  </Button>
+                </div>
+                {hasRequestedVerification ? (
+                  <ul className="auth-verification-help">
                     <li>
-                      인증번호를 받지 못하셨나요?{' '}
-                      <button
-                        className="auth-resend-button"
-                        disabled={requestStatus === 'loading'}
-                        onClick={requestVerification}
-                        type="button"
-                      >
-                        재요청
-                      </button>
+                      인증번호는 3분 이내에 입력해주세요.
+                      <span className="sr-only">
+                        {' '}남은 시간 {formattedRemainingTime}
+                      </span>
                     </li>
-                  ) : null}
-                </ul>
-              ) : null}
-            </div>
+                    {verificationStatus !== 'verified' ? (
+                      <li>
+                        인증번호를 받지 못하셨나요?{' '}
+                        <button
+                          className="auth-resend-button"
+                          disabled={requestStatus === 'loading'}
+                          onClick={requestVerification}
+                          type="button"
+                        >
+                          재요청
+                        </button>
+                      </li>
+                    ) : null}
+                  </ul>
+                ) : null}
+              </div>
+            ) : null}
 
             <PasswordField
               autoComplete="new-password"

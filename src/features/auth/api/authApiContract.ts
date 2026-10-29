@@ -3,12 +3,14 @@ import type { LoginInput, SignupInput } from '../authState';
 
 export type AuthSession = {
   accessToken: string;
-  refreshToken: string;
+  // The backend issues no refresh token; only the mock fills this in.
+  refreshToken?: string;
   expiresAt: number;
   user: User;
 };
 
-export type CurrentUserResult = Pick<AuthSession, 'user' | 'expiresAt'>;
+// expiresAt is omitted when the server reports no expiry (GET /users/me); the stored value is kept.
+export type CurrentUserResult = Pick<AuthSession, 'user'> & Partial<Pick<AuthSession, 'expiresAt'>>;
 export type VerificationCodeResult = { code: string; expiresAt: number };
 
 export type AuthApi = {
@@ -16,8 +18,10 @@ export type AuthApi = {
   signup: (input: SignupInput) => Promise<User>;
   getCurrentUser: (accessToken: string) => Promise<CurrentUserResult>;
   logout: (accessToken: string) => Promise<void>;
-  sendEmailVerificationCode: (email: string) => Promise<VerificationCodeResult>;
-  verifyEmailCode: (email: string, code: string) => Promise<boolean>;
+  // The backend has no email verification API, so the HTTP adapter leaves these out
+  // and the signup form skips the verification step.
+  sendEmailVerificationCode?: (email: string) => Promise<VerificationCodeResult>;
+  verifyEmailCode?: (email: string, code: string) => Promise<boolean>;
 };
 
 export class AuthApiError extends Error {
