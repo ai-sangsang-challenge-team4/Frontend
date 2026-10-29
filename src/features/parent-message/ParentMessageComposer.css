@@ -108,6 +108,15 @@
   box-shadow: var(--shadow-sm);
 }
 
+.parent-write-retry {
+  padding: 0;
+  color: var(--color-primary);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .parent-write-field .ui-input-shell:focus-within,
 .parent-write-field .ui-select-shell:focus-within,
 .parent-write-field .ui-textarea-control:focus {

@@ -5,7 +5,11 @@ export const MESSAGE_MAX_LENGTH = 1500;
 
 export type MessageSource = 'AI' | 'ORIGINAL';
 export type MessageSelectionType = MessageSource | 'CUSTOM';
-export type RiskExpressionKind = 'repeat' | 'demand' | 'official';
+// The local mock uses repeat, demand, and official; the server findings cover all eight backend tags.
+export const RISK_EXPRESSION_KINDS = [
+  'repeat', 'demand', 'official', 'profanity', 'insult', 'threat', 'exposure', 'privacy',
+] as const;
+export type RiskExpressionKind = typeof RISK_EXPRESSION_KINDS[number];
 
 export type RiskExpression = {
   id: string;
@@ -13,6 +17,8 @@ export type RiskExpression = {
   title: string;
   excerpt: string;
   explanation: string;
+  // Server revision suggestion for the excerpt.
+  suggestion?: string;
 };
 
 export type ParentMessageAnalysis = {
@@ -20,6 +26,9 @@ export type ParentMessageAnalysis = {
   revisedText: string | null;
   risks: RiskExpression[];
   meaningWarning: string | null;
+  // The server already reviewed an earlier version of this message, so the edited content gets no new
+  // suggestions and is analyzed again on submit.
+  analyzeOnSubmit?: boolean;
 };
 
 export type MessageReview = {
@@ -50,6 +59,8 @@ export type ThreadActivityLog = {
 export type SentParentMessage = {
   parentName?: string;
   messageId: string;
+  // Set when the inquiry was submitted to the backend; the local record is a copy for the receipt and history.
+  serverComplaintId?: number;
   teacherId: string;
   teacherName: string;
   title: string;

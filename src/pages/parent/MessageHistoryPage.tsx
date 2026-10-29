@@ -24,12 +24,16 @@ function MessageHistory({ userId }: { userId: number }) {
   const [notice, setNotice] = useState<string | null>(null);
   const dismissNotice = useCallback(() => setNotice(null), []);
   const { messages, drafts, error, refresh } = useParentMessages(userId);
-  const teacherName = (id: string) => mockConnectedTeachers.find((teacher) => teacher.value === id)?.label ?? '선생님';
+  const teacherName = (draft: MessageDraft) => {
+    const serverName = draft.server?.teacherName ?? draft.teacherName;
+    return serverName ? `${serverName} 선생님`
+      : mockConnectedTeachers.find((teacher) => teacher.value === draft.teacherId)?.label ?? '선생님';
+  };
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const matches = (values: string[]) => values.join(' ').toLocaleLowerCase().includes(normalizedQuery);
   const visibleMessages = messages.filter((message) => (tab !== 'starred' || message.isImportant) &&
     matches([message.teacherName, message.title, ...getConversation(message).map((entry) => entry.body)]));
-  const visibleDrafts = drafts.filter((draft) => matches([teacherName(draft.teacherId), draft.title, draft.body]));
+  const visibleDrafts = drafts.filter((draft) => matches([teacherName(draft), draft.title, draft.body]));
 
   function toggleImportant(messageId: string) {
     try {
@@ -52,7 +56,7 @@ function MessageHistory({ userId }: { userId: number }) {
             {visibleDrafts.map((draft) => <li key={draft.messageId}>
               <button className="parent-draft-row" onClick={() => setResumeDraft(draft)} type="button">
                 <FilePenLine aria-hidden="true" size={28} />
-                <span className="parent-inquiry-copy"><strong>{draft.title.trim() || '제목 없는 문의'}</strong><span>{draft.body || '작성한 내용이 없습니다.'}</span><small>{teacherName(draft.teacherId)}{draft.threadId ? ' · 추가 문의' : ' · 새 문의'}</small></span>
+                <span className="parent-inquiry-copy"><strong>{draft.title.trim() || '제목 없는 문의'}</strong><span>{draft.body || '작성한 내용이 없습니다.'}</span><small>{teacherName(draft)}{draft.threadId ? ' · 추가 문의' : ' · 새 문의'}</small></span>
                 <span className="parent-inquiry-meta"><Badge>임시저장</Badge>{draft.savedAt ? <time dateTime={draft.savedAt}>{formatMessageDate(draft.savedAt)}</time> : null}</span>
               </button>
             </li>)}

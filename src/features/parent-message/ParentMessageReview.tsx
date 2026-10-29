@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, Eye, Gavel, Pencil, Repeat2, RotateCcw, Save, Send, UserRoundX } from 'lucide-react';
+import {
+  Ban, ChevronDown, ChevronUp, Eye, Gavel, LockKeyhole, Megaphone, MessageCircleWarning, Pencil, Repeat2, RotateCcw, Save, Send,
+  ShieldAlert, UserRoundX,
+} from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth';
+import { getApiErrorMessage, isApiError } from '../../shared/api';
 import { Accordion, Button, EmptyState, Modal, Tabs, TextareaField, Toast } from '../../shared/components/ui';
-import { clearMessageDraft, mockConnectedTeachers, readMessageDraft, saveMessageDraft, type MessageDraft } from './messageDraft';
+import { parentMessageApiMode } from './api/parentComplaintApi';
+import { clearMessageDraft, findSentMessage, mockConnectedTeachers, readMessageDraft, saveMessageDraft, type MessageDraft } from './messageDraft';
 import { ParentMessageHeader } from './ParentMessageHeader';
 import { createMockAnalysis, sendParentMessage } from './parentMessageApi';
 import { findSentSubmission, findSentSubmissionById, getDraftPath } from './conversation';
+import { submitServerDraft } from './serverComplaint';
 import { checkPersonalInfo, MaskingError, PrivacyMaskingNotice } from '../pii';
 import { AiJudgmentNotice } from '../safety/AiJudgmentNotice';
 import {
@@ -18,10 +24,15 @@ import {
   type MessageReview,
   type MessageSource,
   type RiskExpression,
+  type RiskExpressionKind,
 } from './parentMessageTypes';
 import './ParentMessageReview.css';
 
-const riskIcons = { repeat: Repeat2, demand: UserRoundX, official: Gavel };
+const riskIcons: Record<RiskExpressionKind, typeof Gavel> = {
+  repeat: Repeat2, demand: UserRoundX, official: Gavel,
+  profanity: Ban, insult: MessageCircleWarning, threat: ShieldAlert, exposure: Megaphone, privacy: LockKeyhole,
+};
+const SEND_FAILED_MESSAGE = '문의를 전송하지 못했습니다. 작성한 내용은 유지됩니다. 다시 시도해 주세요.';
 const selectionLabels = { AI: 'AI 초안', ORIGINAL: '원문', CUSTOM: '직접 수정' };
 
 function HighlightedMessage({ text, risks, onSelect }: {
@@ -88,14 +99,24 @@ export function ParentMessageReview({ userId, messageId }: { userId: number; mes
       </>
     );
   }
+  // A new inquiry reviewed without a server draft (made in mock mode) goes back to the composer to be analyzed
+  // on the server, since only a server draft can be submitted.
+  if (parentMessageApiMode === 'http' && !initial.draft.threadId && !initial.draft.server) {
+    return <Navigate replace to={getDraftPath(initial.draft)} />;
+  }
   return <MessageReviewEditor draft={initial.draft} userId={userId} />;
 }
 
 function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: number }) {
   const { user } = useAuth();
   const navigate = useNavigate();
+  // A new inquiry in http mode always goes through the server draft (a draft without one asks to analyze
+  // again); follow-ups stay on the local flow.
+  const isServer = parentMessageApiMode === 'http' && !draft.threadId;
   const [review, setReview] = useState<MessageReview>(() => {
-    const restored = draft.review ?? createMessageReview(createMockAnalysis(maskContactInfo(draft.body).text));
+    const restored = draft.review ?? createMessageReview(isServer
+      ? { status: 'failed', revisedText: null, risks: [], meaningWarning: null }
+      : createMockAnalysis(maskContactInfo(draft.body).text));
     return restored.analysis.revisedText === draft.body ? { ...restored, source: 'ORIGINAL' } : restored;
   });
   const [isEditingOriginal, setIsEditingOriginal] = useState(review.originalEdit !== null);
@@ -112,8 +133,11 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
   const selected = getSelectedMessage(draft.body, review);
   const masked = maskContactInfo(selected.text.trim());
   const privacyPreview = maskContactInfo(`제목: ${draft.title}\n\n내용: ${selected.text.trim()}`);
-  const teacher = mockConnectedTeachers.find((item) => item.value === draft.teacherId);
+  const teacher = draft.server
+    ? { label: `${draft.server.teacherName} 선생님` } : mockConnectedTeachers.find((item) => item.value === draft.teacherId);
   const hasAiDraft = review.analysis.revisedText !== null && review.analysis.revisedText !== draft.body;
+  // The server analyzes the final text again on send when it differs from the reviewed content.
+  const analyzedOnSend = isServer && (review.analysis.analyzeOnSubmit === true || masked.text !== draft.server?.content);
 
   useEffect(() => () => sendController.current?.abort(), []);
 
@@ -160,14 +184,27 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
     sendController.current = controller;
     try {
       persistReview();
-      const sent = await sendParentMessage(userId, draft, review, controller.signal, user?.name);
+      const sent = isServer
+        ? await submitServerDraft(userId, draft, review, controller.signal, user?.name)
+        : await sendParentMessage(userId, draft, review, controller.signal, user?.name);
       if (controller.signal.aborted) return;
+      let stored = true;
       try {
-        clearMessageDraft(userId, draft.messageId);
+        stored = findSentMessage(userId, sent.messageId) !== null;
       } catch {
-        // The sent record remains authoritative if draft cleanup fails.
+        stored = false;
       }
-      navigate(`/parent/messages/${sent.messageId}`, { replace: true, state: { justSent: true } });
+      // Without the local copy the draft stays: sending it again finds the complaint already submitted
+      // (COMPLAINT_NOT_DRAFT and a non-DRAFT status) and stores the copy without a second submission.
+      if (stored) {
+        try {
+          clearMessageDraft(userId, draft.messageId);
+        } catch {
+          // The sent record remains authoritative if draft cleanup fails.
+        }
+      }
+      // A server submission whose local copy could not be saved has no receipt to show.
+      navigate(stored ? `/parent/messages/${sent.messageId}` : '/parent/messages', { replace: true, state: { justSent: true } });
     } catch (failure) {
       if (!controller.signal.aborted) {
         if (failure instanceof MaskingError) {
@@ -175,9 +212,10 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
           setDialog(null);
           return;
         }
-        setNotice(failure instanceof DOMException
-          ? '문의 내용을 저장하지 못했습니다. 작성한 내용은 유지됩니다.'
-          : failure instanceof Error ? failure.message : '문의를 전송하지 못했습니다. 다시 시도해 주세요.');
+        setNotice(isApiError(failure) ? getApiErrorMessage(failure, SEND_FAILED_MESSAGE)
+          : failure instanceof DOMException
+            ? '문의 내용을 저장하지 못했습니다. 작성한 내용은 유지됩니다.'
+            : failure instanceof Error ? failure.message : '문의를 전송하지 못했습니다. 다시 시도해 주세요.');
       }
     } finally {
       sendPending.current = false;
@@ -229,7 +267,8 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
           />
         ) : (
           <div aria-label="원문 내용" className="parent-review-original" tabIndex={0}>
-            <HighlightedMessage onSelect={selectRisk} risks={review.analysis.risks} text={draft.body} />
+            {/* The analysis evidence comes from the masked text, so the highlights are placed on it. */}
+            <HighlightedMessage onSelect={selectRisk} risks={review.analysis.risks} text={maskContactInfo(draft.body).text} />
           </div>
         )}
         {!isEditable && error ? <p className="ui-field-error" role="alert">{error}</p> : null}
@@ -280,9 +319,11 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
           />
           {!hasAiDraft ? (
             <p className="parent-review-analysis-notice" role="status">
-              {review.analysis.status === 'failed'
-                ? 'AI 수정안을 불러오지 못했습니다. 원문을 확인하거나 직접 수정해 전송할 수 있습니다.'
-                : '원문과 다른 AI 수정안이 없습니다. 원문을 확인해 주세요.'}
+              {review.analysis.analyzeOnSubmit
+                ? 'AI 검토는 문의마다 한 번만 받을 수 있어 수정한 내용에는 새 수정안이 없습니다. 전송할 때 수정한 내용을 한 번 더 분석합니다.'
+                : review.analysis.status === 'failed'
+                  ? 'AI 수정안을 불러오지 못했습니다. 원문을 확인하거나 직접 수정해 전송할 수 있습니다.'
+                  : '원문과 다른 AI 수정안이 없습니다. 원문을 확인해 주세요.'}
             </p>
           ) : review.source === 'AI' && review.analysis.meaningWarning ? (
             <p className="parent-review-meaning-notice" role="note">{review.analysis.meaningWarning}</p>
@@ -315,9 +356,12 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
                     id: risk.id,
                     title: <>
                       <span className="parent-review-risk-label"><Icon aria-hidden="true" size={20} />{risk.title}</span>
-                      <span className="parent-review-risk-excerpt"><mark>&quot;{risk.excerpt}&quot;</mark></span>
+                      {risk.excerpt ? <span className="parent-review-risk-excerpt"><mark>&quot;{risk.excerpt}&quot;</mark></span> : null}
                     </>,
-                    content: <p>{risk.explanation}</p>,
+                    content: <>
+                      <p>{risk.explanation}</p>
+                      {risk.suggestion ? <p className="parent-review-risk-suggestion">수정 제안: {risk.suggestion}</p> : null}
+                    </>,
                   };
                 })} value={openRiskIds} />
             </div>
@@ -346,7 +390,8 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
           <dt>문의 제목</dt><dd>{maskContactInfo(draft.title).text}</dd>
           <dt>선택 문장</dt><dd>{selectionLabels[selected.selectionType]}</dd>
         </dl>
-        {privacyPreview.count > 0 ? <p className="parent-review-meaning-notice">전화번호 또는 이메일 {privacyPreview.count}건을 가린 문장으로 전송합니다.</p> : null}
+        {privacyPreview.count > 0 ? <p className="parent-review-meaning-notice">전화번호·이메일·주민등록번호 {privacyPreview.count}건을 가린 문장으로 전송합니다.</p> : null}
+        {dialog === 'confirm' && analyzedOnSend ? <p className="parent-review-meaning-notice">AI 검토를 받은 내용과 달라 전송할 때 한 번 더 분석합니다. 전송이 조금 늦어질 수 있습니다.</p> : null}
         <p className="parent-review-preview-body">{masked.text}</p>
       </Modal>
       {notice ? <Toast message={notice} onClose={dismissNotice} /> : null}

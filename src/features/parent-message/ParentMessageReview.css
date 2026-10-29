@@ -234,6 +234,12 @@
   line-height: 30px;
 }
 
+.parent-review-risk-suggestion {
+  margin-top: 12px;
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}
+
 .parent-review-actions {
   margin-top: 96px;
 }

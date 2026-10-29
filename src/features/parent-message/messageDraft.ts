@@ -1,16 +1,34 @@
-import type { MessageReview, SentParentMessage } from './parentMessageTypes';
+import { RISK_EXPRESSION_KINDS, type MessageReview, type SentParentMessage } from './parentMessageTypes';
 
 // Local composer step, not the server MessageStatus: PARENT_REVIEW means the parent is
 // comparing the AI revision before sending.
 export type MessageDraftStep = 'DRAFT' | 'PARENT_REVIEW';
 
+// The server DRAFT behind a local draft (VITE_MESSAGE_API=http). Title, student, and teacher are fixed once
+// it exists because PATCH /complaints/{id} only changes the content.
+export type ServerComplaintDraft = {
+  complaintId: number;
+  studentId: number;
+  teacherId: number;
+  teacherName: string;
+  title: string;
+  // Masked content last stored on the server.
+  content: string;
+  analysisId: number | null;
+};
+
 export type MessageDraft = {
   messageId: string;
   teacherId: string;
+  // The selected child and the selected teacher's name (http mode), kept for drafts saved before analysis,
+  // which have no server draft to carry the name.
+  studentId?: number;
+  teacherName?: string;
   title: string;
   body: string;
   status: MessageDraftStep;
   review?: MessageReview;
+  server?: ServerComplaintDraft;
   threadId?: string;
   savedAt?: string;
 };
@@ -41,16 +59,30 @@ function isMessageReview(value: unknown): value is MessageReview {
     (analysis.status === 'ready' || analysis.status === 'failed') &&
     (analysis.revisedText === null || typeof analysis.revisedText === 'string') &&
     (analysis.meaningWarning === null || typeof analysis.meaningWarning === 'string') &&
+    (analysis.analyzeOnSubmit === undefined || typeof analysis.analyzeOnSubmit === 'boolean') &&
     Array.isArray(analysis.risks) && analysis.risks.every((risk: unknown) => (
       isRecord(risk) && typeof risk.id === 'string' &&
-      (risk.kind === 'repeat' || risk.kind === 'demand' || risk.kind === 'official') &&
+      (RISK_EXPRESSION_KINDS as readonly unknown[]).includes(risk.kind) &&
       typeof risk.title === 'string' && typeof risk.excerpt === 'string' &&
-      typeof risk.explanation === 'string'
+      typeof risk.explanation === 'string' &&
+      (risk.suggestion === undefined || typeof risk.suggestion === 'string')
     )) && !(value.source === 'AI' && analysis.revisedText === null);
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
+}
+
+function isServerDraft(value: unknown): value is ServerComplaintDraft {
+  return isRecord(value) &&
+    isPositiveInteger(value.complaintId) && isPositiveInteger(value.studentId) && isPositiveInteger(value.teacherId) &&
+    typeof value.teacherName === 'string' && typeof value.title === 'string' && typeof value.content === 'string' &&
+    (value.analysisId === null || isPositiveInteger(value.analysisId));
 }
 
 function isSentMessage(value: unknown): value is SentParentMessage {
   return isRecord(value) && value.status === 'SENT' &&
+    (value.serverComplaintId === undefined || isPositiveInteger(value.serverComplaintId)) &&
     ['messageId', 'teacherId', 'teacherName', 'title', 'originalBody', 'finalBody', 'sentAt']
       .every((field) => typeof value[field] === 'string') &&
     (value.selectionType === 'AI' || value.selectionType === 'ORIGINAL' || value.selectionType === 'CUSTOM') &&
@@ -87,8 +119,12 @@ function parseDraft(draft: unknown): MessageDraft | null {
     typeof draft.title !== 'string' || typeof draft.body !== 'string' ||
     (draft.status !== 'DRAFT' && draft.status !== 'PARENT_REVIEW') ||
     (draft.threadId !== undefined && typeof draft.threadId !== 'string') ||
-    (draft.savedAt !== undefined && typeof draft.savedAt !== 'string')) return null;
-  const result = draft as MessageDraft;
+    (draft.savedAt !== undefined && typeof draft.savedAt !== 'string') ||
+    (draft.studentId !== undefined && !isPositiveInteger(draft.studentId)) ||
+    (draft.teacherName !== undefined && typeof draft.teacherName !== 'string')) return null;
+  let result = draft as MessageDraft;
+  // An unreadable server state keeps the text; the next analysis starts a new server draft.
+  if (result.server !== undefined && !isServerDraft(result.server)) result = { ...result, server: undefined, review: undefined, status: 'DRAFT' };
   return result.review !== undefined && !isMessageReview(result.review) ? { ...result, review: undefined } : result;
 }
 
