@@ -181,6 +181,32 @@
   color: var(--color-text-secondary);
 }
 
+.admin-history-warning {
+  padding: 16px 20px;
+  border: 1px solid var(--color-border-default);
+  border-left: 4px solid var(--color-primary);
+  border-radius: 8px;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  line-height: 22px;
+  overflow-wrap: anywhere;
+}
+
+.admin-history-warning p {
+  margin: 0;
+}
+
+.admin-history-warning ul {
+  display: grid;
+  gap: 12px;
+  margin: 12px 0 0;
+  padding-left: 20px;
+}
+
+.admin-history-warning li > span {
+  margin-left: 8px;
+}
+
 @media (max-width: 980px) {
   .admin-status-tabs .ui-tabs-list {
     height: auto;

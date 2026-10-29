@@ -1,5 +1,22 @@
 import type { StatusChipStatus } from '../../shared/components/ui';
-import type { EscalationStatus, HistoryEventType, RiskLevel, RiskReviewStatus } from '../../shared/types';
+import { toServerInstant } from '../../shared/api';
+import type { EscalationStatus, HistoryEventType, RiskFactorStatus, RiskLevel, RiskReviewStatus } from '../../shared/types';
+import type { DetectedFactor } from './escalationTypes';
+
+export function getDetectedFactorState(factor: DetectedFactor): RiskFactorStatus {
+  // The old DTO contains only detected factors and has no state field.
+  if (factor.state === undefined) return 'PRESENT';
+  switch (factor.state) {
+    case 'PRESENT': case 'ABSENT': case 'BOUNDARY': case 'UNKNOWN': return factor.state;
+    default: return 'UNKNOWN';
+  }
+}
+
+export function getDetectedFactorEvidence(factor: DetectedFactor): string[] {
+  // An explicitly empty span list must not revive an older evidence string.
+  if (factor.evidenceSpans) return factor.evidenceSpans.map((span) => span.text).filter((text) => text.trim());
+  return factor.evidence?.trim() ? [factor.evidence] : [];
+}
 
 export const escalationStatusLabel: Record<EscalationStatus, string> = {
   NOT_SHARED: '공유 전',
@@ -106,7 +123,7 @@ export const RISK_REVIEW_REASON_MAX_LENGTH = 300;
 
 export function formatEscalationTime(value: string | null | undefined) {
   if (!value) return '-';
-  const date = new Date(value);
+  const date = new Date(toServerInstant(value));
   if (Number.isNaN(date.getTime())) return '-';
   return date.toLocaleString('ko-KR', {
     timeZone: 'Asia/Seoul',

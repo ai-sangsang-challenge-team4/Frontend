@@ -1,7 +1,7 @@
 import { toServerInstant } from '../../shared/api';
 import type { ComplaintStatus, RiskLevel as ApiRiskLevel, WaitingFor } from '../../shared/types';
 import type { DetectedFactorCode, HistoryEvent, TeacherRiskResponse } from '../escalation/escalationTypes';
-import { historyEventLabel } from '../escalation/escalationRules';
+import { getDetectedFactorEvidence, getDetectedFactorState, historyEventLabel } from '../escalation/escalationRules';
 import { formatMessageDate } from '../parent-message/conversation';
 import { riskCategories, type RiskClassification } from '../risk-analysis';
 import type {
@@ -153,8 +153,9 @@ function toClassifications(risk: TeacherRiskResponse): RiskClassification[] {
   const detected = new Map(risk.detectedFactors.map((factor) => [classificationCodeByTag[factor.code], factor]));
   return riskCategories.map(({ code }) => {
     const factor = detected.get(code);
+    // The original viewer highlights evidence by exact text match, so only one span can be carried.
     return factor
-      ? { code, status: 'PRESENT', evidenceSpan: factor.evidence, rationale: factor.reason }
+      ? { code, status: getDetectedFactorState(factor), evidenceSpan: getDetectedFactorEvidence(factor)[0] ?? '', rationale: factor.reason }
       : { code, status: 'ABSENT' };
   });
 }
