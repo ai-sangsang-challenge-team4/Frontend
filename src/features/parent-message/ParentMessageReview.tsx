@@ -99,6 +99,11 @@ export function ParentMessageReview({ userId, messageId }: { userId: number; mes
       </>
     );
   }
+  // A new inquiry reviewed without a server draft (made in mock mode) goes back to the composer to be analyzed
+  // on the server, since only a server draft can be submitted.
+  if (parentMessageApiMode === 'http' && !initial.draft.threadId && !initial.draft.server) {
+    return <Navigate replace to={getDraftPath(initial.draft)} />;
+  }
   return <MessageReviewEditor draft={initial.draft} userId={userId} />;
 }
 
@@ -258,7 +263,8 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
           />
         ) : (
           <div aria-label="원문 내용" className="parent-review-original" tabIndex={0}>
-            <HighlightedMessage onSelect={selectRisk} risks={review.analysis.risks} text={draft.body} />
+            {/* The analysis evidence comes from the masked text, so the highlights are placed on it. */}
+            <HighlightedMessage onSelect={selectRisk} risks={review.analysis.risks} text={maskContactInfo(draft.body).text} />
           </div>
         )}
         {!isEditable && error ? <p className="ui-field-error" role="alert">{error}</p> : null}

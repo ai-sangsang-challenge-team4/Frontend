@@ -23,20 +23,20 @@ export type ServerChild = { studentId: number; studentName: string };
 
 export type ServerRecipient = { teacherId: number; teacherName: string; label: string };
 
-// Stops a runaway loop if hasNext never turns false.
-const MAX_COMPLAINT_PAGES = 20;
-
 // There is no children API yet, so the children come from the parent's own complaints (studentId and
-// studentName on each). A parent without any complaint has no child to choose. Replace this with the
-// children endpoint once the backend adds it.
+// studentName on each), across every page. A parent without any complaint has no child to choose. Replace
+// this with the children endpoint once the backend adds it.
 export async function listServerChildren(signal?: AbortSignal): Promise<ServerChild[]> {
   const children = new Map<number, string>();
-  for (let page = 0; page < MAX_COMPLAINT_PAGES; page += 1) {
+  // totalPages from the first page bounds the loop even if hasNext never turns false.
+  let totalPages = 1;
+  for (let page = 0; page < totalPages; page += 1) {
     const result = await parentComplaintApi.listComplaints(page, signal);
     for (const item of result.content) {
       if (!children.has(item.studentId)) children.set(item.studentId, item.studentName);
     }
     if (!result.hasNext) break;
+    if (page === 0) totalPages = result.totalPages;
   }
   return [...children].map(([studentId, studentName]) => ({ studentId, studentName }));
 }

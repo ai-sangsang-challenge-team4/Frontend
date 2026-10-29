@@ -24,6 +24,10 @@ type FieldErrors = Partial<Record<FieldName, string>>;
 const ANALYSIS_FAILED_MESSAGE = 'AI 분석을 완료하지 못했어요. 작성한 내용은 유지됩니다. 잠시 후 다시 시도해 주세요.';
 const CHILD_LINK_MESSAGE = '선택한 자녀와 계정의 연결을 확인하지 못했어요. 학교에 학생 연결을 요청해 주세요.';
 
+// Server draft creations by `${userId}:${messageId}`. Module-level so a composer opened again after leaving the
+// page waits for a creation that is still running instead of sending a second POST /complaints.
+const pendingCreations = new Map<string, Promise<ServerComplaintDraft>>();
+
 export function ParentMessageComposer({ userId, threadId, draftId, fresh = false }: {
   userId: number; threadId?: string; draftId?: string; fresh?: boolean;
 }) {
@@ -42,10 +46,15 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
   });
   // Follow-ups stay on the local flow; the message-draft API is not connected yet.
   const isServer = parentMessageApiMode === 'http' && !threadId;
-  const [draft, setDraft] = useState<MessageDraft>(() => initial.saved ?? {
-    messageId: crypto.randomUUID(),
-    teacherId: initial.thread?.teacherId ?? (isServer ? '' : mockConnectedTeachers[0]?.value ?? ''),
-    title: initial.thread?.title ?? '', body: '', status: 'DRAFT', threadId,
+  const [draft, setDraft] = useState<MessageDraft>(() => {
+    const saved = initial.saved;
+    // A review made without a server draft (in mock mode) cannot be submitted to the server, so it is analyzed again.
+    if (saved && isServer && saved.review && !saved.server) return { ...saved, review: undefined, status: 'DRAFT' };
+    return saved ?? {
+      messageId: crypto.randomUUID(),
+      teacherId: initial.thread?.teacherId ?? (isServer ? '' : mockConnectedTeachers[0]?.value ?? ''),
+      title: initial.thread?.title ?? '', body: '', status: 'DRAFT', threadId,
+    };
   });
   const [errors, setErrors] = useState<FieldErrors>({});
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -53,8 +62,8 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
   const [notice, setNotice] = useState<string | null>(location.state?.draftSaved ? '문의가 임시저장되었습니다.' : null);
   const analysisPending = useRef(false);
   const analysisTarget = useRef<ServerDraftTarget | null>(null);
-  const pendingCreation = useRef<Promise<ServerComplaintDraft> | null>(null);
-  const [isCreatingServerDraft, setIsCreatingServerDraft] = useState(false);
+  const creationKey = `${userId}:${draft.messageId}`;
+  const [isCreatingServerDraft, setIsCreatingServerDraft] = useState(() => pendingCreations.has(creationKey));
   const loadingTitle = useRef<HTMLParagraphElement>(null);
   const dismissNotice = useCallback(() => setNotice(null), []);
   // Title, child, and teacher cannot change once the server draft exists (PATCH only takes the content),
@@ -83,6 +92,21 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
     if (!isServer || serverLocked || isAnalyzing || recipients.isLoading || !recipients.data || teacherListed) return;
     setDraft((previous) => ({ ...previous, teacherId: firstTeacherId ? String(firstTeacherId) : '' }));
   }, [firstTeacherId, isAnalyzing, isServer, recipients.data, recipients.isLoading, serverLocked, teacherListed]);
+
+  // Opened again while an earlier composer's creation is still running: link its result when it arrives.
+  useEffect(() => {
+    const pending = pendingCreations.get(creationKey);
+    if (!pending || draft.server) return;
+    let active = true;
+    pending.then((server) => {
+      if (active) setDraft((previous) => previous.server ? previous : { ...previous, server });
+    }, () => undefined).finally(() => {
+      if (active) setIsCreatingServerDraft(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [creationKey, draft.server]);
 
   useEffect(() => {
     if (!isAnalyzing) return;
@@ -115,7 +139,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
           let current = draft;
           if (!current.server) {
             // Leaving the analysis does not cancel the creation; a new attempt waits for the same one.
-            const creation = pendingCreation.current ?? createServerDraft(draft, target).then((server) => {
+            const creation = pendingCreations.get(creationKey) ?? createServerDraft(draft, target).then((server) => {
               try {
                 // Merged into the stored draft, which the parent may have edited after leaving.
                 saveMessageDraft(userId, { ...(readMessageDraft(userId, draft.messageId) ?? draft), server });
@@ -124,10 +148,10 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
               }
               return server;
             }).finally(() => {
-              pendingCreation.current = null;
+              pendingCreations.delete(creationKey);
               setIsCreatingServerDraft(false);
             });
-            pendingCreation.current = creation;
+            pendingCreations.set(creationKey, creation);
             setIsCreatingServerDraft(true);
             try {
               latestServer = await creation;
@@ -156,7 +180,15 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
           analysis = { status: 'failed', revisedText: null, risks: [], meaningWarning: null };
         } else {
           // Without a stored analysis the server refuses to submit, so the parent stays on the form to retry.
-          if (isApiError(failure) && failure.code === 'COMPLAINT_NOT_FOUND') latestServer = undefined;
+          if (isApiError(failure) && failure.code === 'COMPLAINT_NOT_FOUND') {
+            // The stored link is dropped too, so reopening the draft does not retry the missing complaint.
+            latestServer = undefined;
+            try {
+              saveMessageDraft(userId, { ...draft, server: undefined, review: undefined, status: 'DRAFT' });
+            } catch {
+              // The form state still drops the link for this session.
+            }
+          }
           stopAnalyzing();
           if (isApiError(failure) && failure.code === 'INVALID_COMPLAINT_RECIPIENT') {
             setErrors({ teacherId: getApiErrorMessage(failure) });
@@ -186,7 +218,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
     void analyze();
 
     return () => controller.abort();
-  }, [draft, isAnalyzing, isServer, navigate, retryRecipients, userId]);
+  }, [creationKey, draft, isAnalyzing, isServer, navigate, retryRecipients, userId]);
 
   function updateField(field: Exclude<FieldName, 'studentId'>, value: string) {
     setDraft((previous) => ({ ...previous, [field]: value, status: 'DRAFT', review: undefined }));
@@ -236,7 +268,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
       setMaskingFailed(true);
       return;
     }
-    if (draft.review) {
+    if (draft.review && (!isServer || draft.server)) {
       try {
         saveMessageDraft(userId, { ...draft, status: 'PARENT_REVIEW' });
         navigate(`/parent/messages/${draft.messageId}/review`);
