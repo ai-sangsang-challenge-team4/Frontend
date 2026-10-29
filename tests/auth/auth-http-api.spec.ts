@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { configureApiClient } from '../../src/shared/api/apiClient';
 import { getApiErrorMessage } from '../../src/shared/api/apiError';
 import { AuthApiError } from '../../src/features/auth/api/authApiContract';
-import { httpAuthApi } from '../../src/features/auth/api/httpAuthApi';
+import { fallbackUserForToken, httpAuthApi } from '../../src/features/auth/api/httpAuthApi';
 import { httpSignupOptionsApi } from '../../src/features/auth/api/httpSignupOptionsApi';
 import { toSignupRequest } from '../../src/features/auth/authState';
 
@@ -93,6 +93,35 @@ test('사용자 조회 401은 AuthProvider가 처리하도록 401 AuthApiError�
 
   await expect(httpAuthApi.getCurrentUser('expired')).rejects.toMatchObject({ status: 401 });
   expect(unauthorizedCount).toBe(0);
+});
+
+// Same claims as the backend JwtTokenProvider (sub = userId, email, role, exp in seconds); the signature is not checked.
+function jwt(claims: Record<string, unknown>) {
+  const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url');
+  return `${encode({ alg: 'HS384' })}.${encode(claims)}.signature`;
+}
+
+test('/users/me 서버 오류에는 토큰이 가리키는 저장된 사용자만 유지한다', () => {
+  const now = Date.UTC(2026, 9, 29, 9);
+  const token = jwt({ sub: '2', email: 'teacher@test.com', role: 'TEACHER', exp: now / 1000 + 600 });
+  const stored = { accessToken: token, user: user as never };
+
+  expect(fallbackUserForToken(token, stored, now)).toEqual(user);
+  // Another token, another user in the token, an expired token, or no saved session sign the user out as before.
+  expect(fallbackUserForToken(token, { ...stored, accessToken: 'other' }, now)).toBeNull();
+  expect(fallbackUserForToken(jwt({ sub: '3', email: 'teacher@test.com', role: 'TEACHER', exp: now / 1000 + 600 }), {
+    ...stored, accessToken: jwt({ sub: '3', email: 'teacher@test.com', role: 'TEACHER', exp: now / 1000 + 600 }),
+  }, now)).toBeNull();
+  expect(fallbackUserForToken(token, { ...stored, user: { ...user, role: 'ADMIN' } as never }, now)).toBeNull();
+  expect(fallbackUserForToken(token, stored, now + 601_000)).toBeNull();
+  expect(fallbackUserForToken('not-a-jwt', { ...stored, accessToken: 'not-a-jwt' }, now)).toBeNull();
+  expect(fallbackUserForToken(token, null, now)).toBeNull();
+});
+
+test('저장된 세션이 없으면 /users/me 500은 그대로 오류로 전달한다', async () => {
+  mockFetch(() => json(500, { code: 'INTERNAL_SERVER_ERROR', message: '서버 내부 오류가 발생했습니다.' }));
+
+  await expect(httpAuthApi.getCurrentUser('stored-jwt')).rejects.toMatchObject({ status: 500 });
 });
 
 test('HTTP 어댑터에는 로그아웃 API와 이메일 인증 API가 없다', async () => {

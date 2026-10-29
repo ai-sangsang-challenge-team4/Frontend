@@ -55,7 +55,7 @@
 - `allowedActions`는 백엔드가 위험 등급(잠금 중이면 EMERGENCY)으로 계산합니다. 화면 정책(낮음·주의 AI 초안, 위험 공식 템플릿, 긴급 답변 차단)과 대체로 같지만 `USE_RESPONSE_TEMPLATE`는 LOW·MEDIUM에도 포함됩니다. 지금은 증빙 패키지 가능 여부에만 사용합니다.
 - 목록 응답에 최신 메시지 내용이 없어 미리보기에 `aiSummary`를 씁니다.
 - `POST /original-views`는 최초 문의(`complaint.content`)의 원문만 반환합니다. 추가 문의의 원문을 열람할 API가 필요합니다.
-- `GET /users/me` 500 버그로 http 모드에서 새로고침하면 로그인이 풀립니다.
+- `GET /users/me` 500 버그: 프론트는 5xx일 때 저장된 사용자를 유지하는 임시 우회를 둡니다([auth-mock-testing.md](auth-mock-testing.md)).
 
 ## 테스트
 

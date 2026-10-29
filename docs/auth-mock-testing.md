@@ -8,9 +8,11 @@
 | --- | --- | --- |
 | 로그인 | `POST /auth/login` | `expiresAt = 요청 시각 + expiresIn(초)`. refresh token 없음 |
 | 회원가입 | `POST /auth/signup` | 이메일 인증 API가 없어 인증 단계 생략 |
-| 사용자 조회 | `GET /users/me` | 응답에 만료 정보가 없어 저장된 `expiresAt` 유지 |
+| 사용자 조회 | `GET /users/me` | 응답에 만료 정보가 없어 저장된 `expiresAt` 유지. 5xx면 아래 임시 우회 |
 | 로그아웃 | 없음 | 로컬 세션만 삭제(JWT는 만료 전까지 유효) |
 | 학교·학급·학생 번호 | `GET /auth/schools…`, `/auth/classes…` | 공개 API |
+
+**`/users/me` 500 임시 우회**: 백엔드 `UserController`가 `@AuthenticationPrincipal Long userId`로 받는데 principal은 `UserDetails`라, 유효한 토큰에도 항상 500을 반환합니다. 이 때문에 새로고침하면 로그인이 풀렸습니다. 백엔드가 고치기 전까지 `httpAuthApi.getCurrentUser`는 **5xx일 때만** 로그인 때 저장한 사용자를 유지합니다. 조건은 저장된 토큰과 같은 토큰이고, 토큰의 `sub`·`email`·`role`이 저장된 사용자와 같고, `exp`가 지나지 않았을 때입니다. 토큰 서명은 프론트에서 검증하지 않지만, 다른 API는 요청마다 토큰을 보내고 401이면 로그아웃됩니다. 401은 기존과 같이 로그아웃, 네트워크 오류는 기존과 같이 "다시 시도" 화면입니다. 백엔드가 고쳐지면 `fallbackUserForToken`을 지웁니다.
 
 dev 프로필 계정: `parent@test.com`, `teacher@test.com`, `admin@test.com` / `Test1234!`. 로컬에서는 Vite 프록시(`VITE_API_BASE_URL=/api`, `VITE_API_PROXY_TARGET`)를 거치며, 프록시가 `Origin` 헤더를 제거합니다(백엔드 CORS는 Vercel Origin만 허용해 다른 Origin은 403).
 
