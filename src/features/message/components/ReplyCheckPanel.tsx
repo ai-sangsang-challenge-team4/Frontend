@@ -7,6 +7,7 @@ import type { RegulationSearchResult, RegulationSource } from '../replyReference
 import { RagReferenceNotice } from './RagReferenceNotice';
 
 type ReplyCheckPanelProps = {
+  isAiDraftFromServer?: boolean;
   isOpen: boolean;
   onOpenReference: (source: RegulationSource) => void;
   onToggle: () => void;
@@ -14,6 +15,7 @@ type ReplyCheckPanelProps = {
 };
 
 export function ReplyCheckPanel({
+  isAiDraftFromServer,
   isOpen,
   onOpenReference,
   onToggle,
@@ -71,7 +73,7 @@ export function ReplyCheckPanel({
               <span>상담 가능한 일정(시간)을 제안하세요.</span>
             </p>
           </article>
-          <RagReferenceNotice onOpenReference={onOpenReference} result={regulationResult} />
+          <RagReferenceNotice isAiDraftFromServer={isAiDraftFromServer} onOpenReference={onOpenReference} result={regulationResult} />
         </div>
       ) : null}
     </section>

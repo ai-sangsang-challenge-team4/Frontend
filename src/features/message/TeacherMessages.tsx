@@ -131,6 +131,9 @@ import { initialTeacherThreads } from './mockThreads';
 import { persistTeacherParentThread, readTeacherParentThreads } from './teacherParentMessages';
 import { useActiveMessageCount } from './useActiveMessageCount';
 import { useServerTeacherInbox } from './useServerTeacherInbox';
+import { useServerReply, type ServerReplyAction } from './useServerReply';
+import { getServerReplyBlockReason } from './serverReplies';
+import { TEACHER_RESPONSE_MAX_LENGTH } from './api/teacherInboxTypes';
 
 const isServerInbox = messageApiMode === 'http';
 
@@ -350,6 +353,19 @@ function generateAiReplyDraft(thread: BoardThread, sources: RegulationSource[]) 
   );
 }
 
+// The server writes its own AI draft; the browser's mock draft needs a matching regulation.
+function canUseAiDraftTab(thread: BoardThread) {
+  return canGenerateReplyDraft(thread) &&
+    (thread.serverComplaintId !== undefined || searchRegulations(thread).status === 'found');
+}
+
+const serverReplyStatusText: Record<ServerReplyAction, string> = {
+  loadingDraft: '임시저장한 답변을 불러오는 중…',
+  generatingAiDraft: 'AI 초안을 만드는 중…',
+  saving: '임시저장 중…',
+  sending: '전송 중…',
+};
+
 // A draft built from a template that was deactivated or replaced by a newer version cannot be sent.
 function isAppliedTemplateInactive(thread: BoardThread) {
   if (!thread.appliedTemplate) {
@@ -374,6 +390,10 @@ function getAppliedTemplateLabel(thread: BoardThread) {
 }
 
 function getReplyDraftErrors(thread: BoardThread, teacherName: string) {
+  // The server's limit (@Size(max = 1500)) applies to every reply.
+  if (thread.draftText.trim().length > TEACHER_RESPONSE_MAX_LENGTH) {
+    return [`답변은 ${TEACHER_RESPONSE_MAX_LENGTH}자 이하로 입력해 주세요.`];
+  }
   if (!thread.appliedTemplate) {
     return canUseOfficialReplyTemplate(thread) && findReplyTemplate(thread)
       ? ['먼저 답장 예시를 골라 주세요.'] : [];
@@ -1598,6 +1618,8 @@ function ThreadDetail({
   const isLocked = isReplyLocked(thread);
   const effectiveRiskLevel = getThreadRiskLevel(thread);
   const hasDraft = hasReplyDraft(thread);
+  // Server threads: after the reply the turn is the parent's, so there is nothing to write yet.
+  const serverReplyBlockReason = getServerReplyBlockReason(thread);
   const lockedGuide = getReplyLockNotice(thread);
   const bufferedSummaryText = getBufferedSummaryText(thread);
   const needsBufferedSummary = effectiveRiskLevel !== 'low' ||
@@ -1889,11 +1911,20 @@ function ThreadDetail({
           ) : (
             <>
               <div className="board-answer-cta-copy">
-                <strong>답변 작성이 필요합니다.</strong>
-                <p>
-                  학부모 메시지와 위험 요소를 확인한 뒤 답변 작성 도우미에서
-                  초안을 다듬을 수 있습니다.
-                </p>
+                {serverReplyBlockReason ? (
+                  <>
+                    <strong>지금은 답변할 차례가 아닙니다.</strong>
+                    <p>{serverReplyBlockReason}</p>
+                  </>
+                ) : (
+                  <>
+                    <strong>답변 작성이 필요합니다.</strong>
+                    <p>
+                      학부모 메시지와 위험 요소를 확인한 뒤 답변 작성 도우미에서
+                      초안을 다듬을 수 있습니다.
+                    </p>
+                  </>
+                )}
               </div>
               <div className="board-answer-actions">
                 <button
@@ -1904,13 +1935,15 @@ function ThreadDetail({
                 >
                   {thread.status === 'complete' ? '상담 완료됨' : '상담 완료 처리'}
                 </button>
-                <button
-                  className="board-primary-button board-reply-compose-button"
-                  onClick={() => onOpenReplyComposer(thread.id)}
-                  type="button"
-                >
-                  {hasDraft ? '답변 이어서 작성하기' : '답변 작성하러 가기'}
-                </button>
+                {serverReplyBlockReason ? null : (
+                  <button
+                    className="board-primary-button board-reply-compose-button"
+                    onClick={() => onOpenReplyComposer(thread.id)}
+                    type="button"
+                  >
+                    {hasDraft ? '답변 이어서 작성하기' : '답변 작성하러 가기'}
+                  </button>
+                )}
               </div>
             </>
           )}
@@ -2084,6 +2117,10 @@ type ReplyComposerPageProps = {
   onListOpen: () => void;
   onOpenOriginalPage: (threadId: string) => void;
   onSubmitReply: (threadId: string) => void;
+  // Server threads only: makes the AI draft again after it failed or was cleared.
+  onGenerateAiDraft?: (threadId: string) => void;
+  // Server threads only: the reply request in flight for this thread.
+  serverReplyAction?: ServerReplyAction | null;
   thread: BoardThread;
 };
 
@@ -2099,6 +2136,8 @@ function ReplyComposerPage({
   onListOpen,
   onOpenOriginalPage,
   onSubmitReply,
+  onGenerateAiDraft,
+  serverReplyAction = null,
   thread,
 }: ReplyComposerPageProps) {
   const { user } = useAuth();
@@ -2114,8 +2153,9 @@ function ReplyComposerPage({
   const isLocked = isReplyLocked(thread);
   const riskLevel = getThreadRiskLevel(thread);
   const regulationResult = useMemo(() => searchRegulations(thread), [thread]);
-  const isAiDraftAvailable =
-    canGenerateReplyDraft(thread) && regulationResult.status === 'found';
+  const isServerThread = thread.serverComplaintId !== undefined;
+  const isAiDraftAvailable = canUseAiDraftTab(thread);
+  const serverBlockReason = getServerReplyBlockReason(thread);
   const isOfficialTemplateAvailable = canUseOfficialReplyTemplate(thread);
   const replyTemplate = isOfficialTemplateAvailable
     ? findReplyTemplate(thread)
@@ -2140,23 +2180,34 @@ function ReplyComposerPage({
     ? (bufferedSummaryText ?? '완충 요약을 확인할 수 없습니다. 필요한 경우 원문 보기를 이용해 주세요.')
     : getPrimaryParentMessage(thread);
   const shouldShowOriginalButton = riskLevel !== 'low' && canInspectOriginal;
-  const assistButtonLabel = thread.officialTemplateApplied
-    ? '템플릿 다시 적용'
-    : '공식 템플릿 적용';
-  const assistButtonDisabled = isLocked || !replyTemplate;
+  // Server threads: the AI tab offers the draft again once it is empty (failed, reset).
+  const canRequestAiDraft = isServerThread && isAiDraftAvailable && !hasDraft && !serverBlockReason &&
+    Boolean(onGenerateAiDraft);
+  const assistButtonLabel = canRequestAiDraft
+    ? 'AI 초안 생성'
+    : thread.officialTemplateApplied
+      ? '템플릿 다시 적용'
+      : '공식 템플릿 적용';
+  const assistButtonDisabled = canRequestAiDraft ? false : isLocked || !replyTemplate;
   const stageNotice = isLocked
     ? getReplyLockNotice(thread).lockDescription
+    : serverBlockReason
+      ? serverBlockReason
     : riskLevel === 'high'
       ? replyTemplate
         ? `위험 단계: 개별 AI 초안 대신 답장 예시(${replyTemplate.title})를 사용합니다.${replyTemplate.approved ? '' : ' 예시 문구는 확정 전입니다.'}`
         : '이 메시지에 맞는 공식 템플릿이 없습니다. 내용을 검토한 뒤 직접 작성해 주세요.'
-      : regulationResult.status === 'not_found'
+      : !isServerThread && regulationResult.status === 'not_found'
         ? '관련 규정이 등록된 자료에 없어 AI 초안을 생성하지 않습니다. 직접 작성해 주세요.'
         : riskLevel === 'low'
           ? '일반 단계: 원문과 RAG 기반 참고자료로 답변 초안을 생성할 수 있습니다.'
           : '주의 단계: 완충 요약과 원문을 확인한 뒤 AI 초안을 교사가 검토하고 수정하는 것을 권고합니다.';
   const draftStatusText = isLocked
     ? '안전 잠금 · 전송 불가'
+    : serverReplyAction
+      ? serverReplyStatusText[serverReplyAction]
+    : serverBlockReason
+      ? '전송 불가'
     : isTemplateInactive
       ? '적용한 템플릿을 더 이상 사용할 수 없습니다. 템플릿을 다시 적용해 주세요.'
       : draftErrors.length > 0
@@ -2171,6 +2222,10 @@ function ReplyComposerPage({
                 ? '작성 중'
                 : '작성 중인 답변 없음';
   const handleAssistAction = () => {
+    if (canRequestAiDraft) {
+      onGenerateAiDraft?.(thread.id);
+      return;
+    }
     if (replyTemplate) {
       const selected = matchingTemplates.find((template) => template.templateId === thread.appliedTemplate?.templateId);
       onApplyOfficialTemplate(thread.id, selected?.templateId ?? replyTemplate.templateId);
@@ -2184,12 +2239,13 @@ function ReplyComposerPage({
     setIsOriginalConfirmOpen(true);
   };
 
+  // Waits for the lock to clear, so a server thread whose analysis is still loading initializes once it is ready.
   useEffect(() => {
-    if (initializedThreadRef.current !== thread.id) {
+    if (!isLocked && initializedThreadRef.current !== thread.id) {
       initializedThreadRef.current = thread.id;
       onInitializeDraft(thread.id);
     }
-  }, [onInitializeDraft, thread.id]);
+  }, [isLocked, onInitializeDraft, thread.id]);
 
   useEffect(() => {
     setIsConfirmOpen(false);
@@ -2250,6 +2306,7 @@ function ReplyComposerPage({
 
       <div className="board-reply-composer">
         <ReplyCheckPanel
+          isAiDraftFromServer={isServerThread}
           isOpen={isCheckPanelOpen}
           onOpenReference={setReferenceSource}
           onToggle={() => setIsCheckPanelOpen((isOpen) => !isOpen)}
@@ -2283,10 +2340,11 @@ function ReplyComposerPage({
           draftText={thread.draftText}
           hasDraft={hasDraft}
           isLocked={isLocked}
-          isDraftInputDisabled={isDraftInputDisabled}
+          isBusy={serverReplyAction !== null}
+          isDraftInputDisabled={isDraftInputDisabled || Boolean(serverBlockReason)}
           isManualTabDisabled={isManualTabDisabled}
-          isOfficialTemplateAvailable={isOfficialTemplateAvailable}
           lockNoticeId={lockNoticeId}
+          maxLength={TEACHER_RESPONSE_MAX_LENGTH}
           onAssist={handleAssistAction}
           onDraftChange={(value) => onDraftChange(thread.id, value)}
           onDraftTabChange={(tab) => onDraftTabChange(thread.id, tab)}
@@ -2294,15 +2352,18 @@ function ReplyComposerPage({
           onDraftSave={() => onDraftSave(thread.id)}
           onSubmit={() => setIsConfirmOpen(true)}
           onOpenProcedure={() => openGuidePostFromMessages(thread.id, 'reply', emergencyOfficialProcedurePostId)}
+          saveDisabled={Boolean(serverBlockReason) || draftErrors.length > 0}
+          showAssistButton={isOfficialTemplateAvailable || canRequestAiDraft}
           stageNotice={stageNotice}
-          submitDisabled={isTemplateInactive || draftErrors.length > 0 || isDraftInputDisabled}
+          submitDisabled={isTemplateInactive || draftErrors.length > 0 || isDraftInputDisabled ||
+            Boolean(serverBlockReason)}
           templateEditor={!isLocked && (thread.appliedTemplate || replyTemplate) ? (
             <>
               {isTemplateInactive ? (
                 <p className="board-reply-lock-notice" role="alert">이 예시는 더 이상 사용할 수 없습니다. 최신 예시를 다시 적용하면 입력한 빈칸과 직접 고친 문장은 유지됩니다.</p>
               ) : null}
               <TemplateReplyEditor
-                disabled={isTemplateInactive}
+                disabled={isTemplateInactive || serverReplyAction !== null || Boolean(serverBlockReason)}
                 draft={thread.appliedTemplate}
                 onApply={(templateId) => onApplyOfficialTemplate(thread.id, templateId)}
                 onChange={(change) => onTemplateChange(thread.id, change)}
@@ -2389,6 +2450,11 @@ export function TeacherMessages({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const serverInbox = useServerTeacherInbox({ enabled: isServerInbox, filters, setThreads });
   const { loadDetail: loadServerDetail, viewOriginal: viewServerOriginal } = serverInbox;
+  const serverReply = useServerReply({
+    setThreads,
+    reloadDetail: loadServerDetail,
+    onMessage: setToastMessage,
+  });
   // The sidebar badge follows the inbox's default "진행 중 상담" filter (the server's OPEN count over HTTP).
   const serverActiveMessageCount = useActiveMessageCount(user?.userId ?? 0);
   const activeMessageCount = isServerInbox
@@ -2397,6 +2463,11 @@ export function TeacherMessages({
   const dismissToast = useCallback(() => setToastMessage(null), []);
   // Submission keys already handled, so a double click or retry stores the reply only once.
   const sentReplyKeysRef = useRef(new Set<string>());
+  // The composer on screen, read when a server send finishes after the teacher may have moved on.
+  const replyComposerThreadIdRef = useRef(replyComposerThreadId);
+  useEffect(() => {
+    replyComposerThreadIdRef.current = replyComposerThreadId;
+  }, [replyComposerThreadId]);
 
   useEffect(() => {
     if (isServerInbox) return;
@@ -2492,10 +2563,10 @@ export function TeacherMessages({
     return () => controller.abort();
   }, [loadServerDetail, selectedThreadId]);
 
-  // Replies and closing are a later step (D); until then a server thread must not look answered locally.
-  const blockServerOnlyAction = (thread: BoardThread | undefined) => {
+  // The backend has no API to close a consultation yet, so a server thread must not look closed locally.
+  const blockServerConsultationComplete = (thread: BoardThread | undefined) => {
     if (!thread?.serverComplaintId) return false;
-    setToastMessage('서버 메시지의 답변 전송·상담 완료는 아직 연동되지 않았습니다.');
+    setToastMessage('서버 메시지의 상담 완료는 아직 연동되지 않았습니다.');
     return true;
   };
 
@@ -2588,7 +2659,7 @@ export function TeacherMessages({
   const handleDraftChange = (threadId: string, value: string) => {
     updateThread(threadId, (thread) => {
       if (isReplyLocked(thread) || thread.appliedTemplate || (canUseOfficialReplyTemplate(thread) && findReplyTemplate(thread))) return thread;
-      if (getReplyDraftTab(thread) === 'ai' && (!canGenerateReplyDraft(thread) || searchRegulations(thread).status === 'not_found')) return thread;
+      if (getReplyDraftTab(thread) === 'ai' && !canUseAiDraftTab(thread)) return thread;
       return {
         ...thread,
         aiDraftGenerated: value.trim() ? thread.aiDraftGenerated : false,
@@ -2603,6 +2674,11 @@ export function TeacherMessages({
   };
 
   const handleInitializeDraft = (threadId: string) => {
+    const target = threads.find((thread) => thread.id === threadId);
+    if (target?.serverComplaintId !== undefined) {
+      void serverReply.initialize(target);
+      return;
+    }
     updateThread(threadId, (thread) => {
       if (isReplyLocked(thread)) return thread;
       // An existing AI tab still counts after its contents have been cleared.
@@ -2647,6 +2723,11 @@ export function TeacherMessages({
   };
 
   const handleDraftSave = (threadId: string) => {
+    const target = threads.find((thread) => thread.id === threadId);
+    if (target?.serverComplaintId !== undefined) {
+      if (getReplyDraftErrors(target, user?.name ?? '담임').length === 0) void serverReply.saveDraft(target);
+      return;
+    }
     updateThread(threadId, (thread) => {
       if (isReplyLocked(thread) || !thread.draftText.trim()) {
         return thread;
@@ -2990,7 +3071,7 @@ export function TeacherMessages({
   const handleSubmitReply = (threadId: string) => {
     const thread = threads.find((currentThread) => currentThread.id === threadId);
 
-    if (!thread || blockServerOnlyAction(thread)) {
+    if (!thread) {
       return;
     }
 
@@ -3007,8 +3088,8 @@ export function TeacherMessages({
 
     if (
       !nextReply ||
-      (getReplyDraftTab(thread) === 'ai' && !thread.appliedTemplate &&
-        (!canGenerateReplyDraft(thread) || searchRegulations(thread).status === 'not_found')) ||
+      (getReplyDraftTab(thread) === 'ai' && !thread.appliedTemplate && !canUseAiDraftTab(thread)) ||
+      getServerReplyBlockReason(thread) ||
       isAppliedTemplateInactive(thread) ||
       getReplyDraftErrors(thread, user?.name ?? '담임').length > 0
     ) {
@@ -3023,6 +3104,30 @@ export function TeacherMessages({
     }
 
     sentReplyKeysRef.current.add(submissionKey);
+
+    const showSentReply = () => {
+      setInitialDetailTabRequest(null);
+      setInitialOriginalViewerRequest(null);
+      setReplyComposerThreadId(null);
+      setSelectedThreadId(threadId);
+      setSendCompleteThreadId(threadId);
+      pushTeacherMessageRoute(threadId, 'detail');
+    };
+
+    // The server stores the reply and its history (MESSAGE_SENT); a failure keeps the draft for a retry.
+    if (thread.serverComplaintId !== undefined) {
+      void serverReply.submit(thread, user?.name ?? '선생님').then((sent) => {
+        if (!sent) {
+          sentReplyKeysRef.current.delete(submissionKey);
+        } else if (replyComposerThreadIdRef.current === threadId) {
+          showSentReply();
+        } else {
+          // The teacher left this composer while sending; stay where they are.
+          setToastMessage(`${thread.parentName}님에게 답변을 전송했습니다.`);
+        }
+      });
+      return;
+    }
 
     const templateLabel = getAppliedTemplateLabel(thread);
     const replySource = templateLabel
@@ -3087,12 +3192,7 @@ export function TeacherMessages({
       sentReplyKeysRef.current.delete(submissionKey);
       return;
     }
-    setInitialDetailTabRequest(null);
-    setInitialOriginalViewerRequest(null);
-    setReplyComposerThreadId(null);
-    setSelectedThreadId(threadId);
-    setSendCompleteThreadId(threadId);
-    pushTeacherMessageRoute(threadId, 'detail');
+    showSentReply();
   };
 
   const workspaceProps = {
@@ -3194,6 +3294,13 @@ export function TeacherMessages({
             }}
             onOpenOriginalPage={handleOpenOriginalPageFromComposer}
             onSubmitReply={handleSubmitReply}
+            onGenerateAiDraft={(threadId) => {
+              const target = threads.find((thread) => thread.id === threadId);
+              if (target) void serverReply.generateAiDraft(target);
+            }}
+            serverReplyAction={serverReply.pending?.threadId === replyComposerThread.id
+              ? serverReply.pending.action
+              : null}
             thread={replyComposerThread}
           />
           {toastMessage ? <Toast message={toastMessage} onClose={dismissToast} /> : null}
@@ -3217,7 +3324,7 @@ export function TeacherMessages({
         <main className="board-detail-page">
           <ThreadDetail
             onConsultationComplete={(threadId) => {
-              if (blockServerOnlyAction(threads.find((thread) => thread.id === threadId))) return;
+              if (blockServerConsultationComplete(threads.find((thread) => thread.id === threadId))) return;
               updateThread(threadId, (thread) => ({ ...thread, status: 'complete', needsTeacherReview: false }));
             }}
             initialOriginalViewer={

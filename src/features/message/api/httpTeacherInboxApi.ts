@@ -5,7 +5,10 @@ import type {
   ComplaintPageResponse,
   TeacherComplaintDetailResponse,
   TeacherConversationResponse,
+  TeacherAiDraftResponse,
   TeacherOriginalViewResponse,
+  TeacherResponseDraftResponse,
+  TeacherResponseSubmissionResponse,
 } from './teacherInboxTypes';
 
 // Paths follow the backend TeacherComplaintController.
@@ -38,4 +41,16 @@ export const httpTeacherInboxApi: TeacherInboxApi = {
     apiClient.post<TeacherOriginalViewResponse>(`/teacher/complaints/${complaintId}/original-views`, undefined, {
       signal,
     }),
+
+  generateAiDraft: (complaintId) =>
+    apiClient.post<TeacherAiDraftResponse>(`/teacher/complaints/${complaintId}/response/ai-draft`),
+
+  getResponseDraft: (complaintId, signal) =>
+    apiClient.get<TeacherResponseDraftResponse>(`/teacher/complaints/${complaintId}/response-draft`, { signal }),
+
+  saveResponseDraft: (complaintId, request) =>
+    apiClient.put<TeacherResponseDraftResponse>(`/teacher/complaints/${complaintId}/response-draft`, request),
+
+  submitResponse: (complaintId, request) =>
+    apiClient.post<TeacherResponseSubmissionResponse>(`/teacher/complaints/${complaintId}/responses`, request),
 };
