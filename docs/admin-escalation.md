@@ -43,6 +43,13 @@
 
 처리 메모(검토 시작·처리 완료)는 필수입니다(백엔드 `@NotBlank`). 재검토 결정 사유는 백엔드에서 선택이지만 기록을 남기도록 UI에서 필수로 받습니다.
 
+### 관리자 상세 응답 표시
+
+- 공유 메시지의 `status`(작성 중·전송됨·읽음), `readAt`(읽은 시각)을 표시합니다. 이전 서버에서 필드가 생략되면 표시하지 않습니다.
+- 위험 요소는 `state`의 탐지·미탐지·경계·미확인 상태와 `evidenceSpans[].text`의 근거 구간을 표시합니다. 이전 서버의 단일 `evidence`도 지원하며, 명시적으로 빈 `evidenceSpans`가 오면 이전 근거로 대체하지 않습니다. 같은 응답을 사용하는 교사 화면에도 상태를 반영하며, 원문 하이라이트가 정확한 텍스트 일치로 동작하므로 교사 화면에는 첫 번째 근거 구간만 표시합니다.
+- 처리 이력의 `logComplete: false` 또는 비어 있지 않은 `missingLogs`가 있으면 누락 안내와 해당 항목을 표시합니다. 이력이 비어 있어도 누락 안내를 유지하며, 이벤트의 민원 상태 변경과 `referenceType`·`referenceId`에 따른 관련 항목을 함께 표시합니다.
+- 시간대가 없는 서버 시각은 KST로 해석합니다.
+
 ## API
 
 | 기능 | Method | Endpoint |
@@ -82,10 +89,12 @@
 
 ```bash
 npx playwright test admin-escalation escalation-http-api
+npx playwright test --config=playwright.admin-http.config.ts
 ```
 
 - `admin-escalation`: mock 어댑터로 교사 공유 → 관리자 검토 시작·처리 완료, 긴급 하향 승인 대기(중복 요청 차단) → 결정 전 완료 불가 → 승인 후에도 잠금 유지 → 잠금 해제, 미공유 하향의 승인 대기, HIGH 공유 버튼 비활성, 권한 차단을 확인합니다.
 - `escalation-http-api`: fetch를 대체해 HTTP 어댑터의 경로·본문·`current` 404 → `null`·409 메시지 노출을 확인합니다. **실제 서버 호출은 아닙니다.**
+- `playwright.admin-http.config.ts`: HTTP 어댑터를 켜고 실제 관리자 화면에서 7개 API 호출, 검토 시작→완료, 새 응답 필드·이전 응답 호환성·로그 누락을 확인합니다. 데스크톱·모바일과 UTC 브라우저에서 실행하며, 백엔드 응답은 명세 기반 fixture로 대체합니다.
 
 Mock 공유 내역 초기화:
 

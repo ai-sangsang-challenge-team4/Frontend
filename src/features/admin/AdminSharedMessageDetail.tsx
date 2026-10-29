@@ -2,15 +2,15 @@ import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ApiError } from '../../shared/api';
 import { AsyncContent } from '../../shared/components';
-import { Accordion, EmptyState } from '../../shared/components/ui';
-import type { RiskLevel } from '../../shared/types';
+import { Accordion, Badge, EmptyState, type BadgeVariant } from '../../shared/components/ui';
+import type { ComplaintStatus, MessageStatus, RiskFactorStatus, RiskLevel } from '../../shared/types';
 import {
   getAdminEscalation,
   getAdminEscalationHistory,
   getAdminEscalationMessages,
   getAdminEscalationRisk,
 } from '../escalation/api';
-import { apiRiskTone, formatEscalationTime, historyEventLabel } from '../escalation/escalationRules';
+import { apiRiskTone, formatEscalationTime, getDetectedFactorEvidence, getDetectedFactorState, historyEventLabel } from '../escalation/escalationRules';
 import type {
   AdminEscalationSummaryResponse,
   ConversationMessage,
@@ -21,9 +21,8 @@ import { useEscalationRequest } from '../escalation/useEscalationRequest';
 import { BreadcrumbSeparator, FileSearchIcon, RiskSectionIcon } from '../message/components/MessageIcons';
 import { ProfileAvatar } from '../message/components/ProfileAvatar';
 import { RiskBadge } from '../message/components/RiskBadge';
-import { RiskFactorDetail, RiskFactorTitle } from '../message/components/RiskFactorDisplay';
 import { riskLabel } from '../message/messageRules';
-import type { RiskFactor } from '../message/types';
+import { classificationStatusLabel } from '../risk-analysis';
 import { AdminProcessPanel } from './components/AdminProcessPanel';
 
 type DetailTab = 'shared' | 'risk' | 'history';
@@ -35,6 +34,21 @@ const detailTabLabel: Record<DetailTab, string> = {
 };
 
 const detailTabs: DetailTab[] = ['shared', 'risk', 'history'];
+
+const messageStatusLabel: Record<MessageStatus, string> = { DRAFT: '작성 중', SENT: '전송됨', READ: '읽음' };
+const complaintStatusLabel: Record<ComplaintStatus, string> = { DRAFT: '작성 중', OPEN: '진행 중', CLOSED: '종료' };
+const factorStateVariant: Record<RiskFactorStatus, BadgeVariant> = {
+  PRESENT: 'danger', ABSENT: 'neutral', BOUNDARY: 'warning', UNKNOWN: 'neutral',
+};
+const historyReferenceLabel: Record<string, string> = {
+  COMPLAINT: '민원', MESSAGE: '메시지', COMPLAINT_MESSAGE: '메시지', RISK_ANALYSIS: '위험 분석',
+  RISK_REVIEW: '위험도 검토', ESCALATION: '관리자 공유', EMERGENCY_REVIEW: '긴급 재검토',
+  EMERGENCY_REVIEW_REQUEST: '긴급 재검토',
+};
+
+function historyReference(type: string | null | undefined, id: number | null | undefined) {
+  return id == null ? null : `${historyReferenceLabel[type ?? ''] ?? '관련 항목'} #${id}`;
+}
 
 type AdminSharedMessageDetailProps = {
   escalationId: number;
@@ -214,6 +228,12 @@ function SharedMessages({ label, messages, notice }: SharedMessagesProps) {
           <p className="admin-message-notice">
             {message.senderName} · <time dateTime={message.sentAt}>{formatEscalationTime(message.sentAt)}</time>
           </p>
+          {message.status || message.readAt ? (
+            <p className="admin-message-notice">
+              {message.status ? <span>{messageStatusLabel[message.status] ?? message.status}</span> : null}
+              {message.readAt ? <> · 읽은 시각 <time dateTime={message.readAt}>{formatEscalationTime(message.readAt)}</time></> : null}
+            </p>
+          ) : null}
           <p className="admin-message-text">{message.content}</p>
         </div>
       ))}
@@ -221,14 +241,31 @@ function SharedMessages({ label, messages, notice }: SharedMessagesProps) {
   );
 }
 
-function toRiskFactor(factor: DetectedFactor, index: number): RiskFactor {
+function toRiskFactorItem(factor: DetectedFactor, index: number) {
+  const state = getDetectedFactorState(factor);
+  const evidence = getDetectedFactorEvidence(factor);
   return {
-    description: factor.name,
-    evidence: factor.evidence,
     id: `${factor.code}-${index}`,
-    name: factor.name,
-    rationale: factor.reason,
-    status: 'detected',
+    title: (
+      <span className="board-classification-title">
+        <strong>{factor.name}</strong>
+        <Badge size="sm" variant={factorStateVariant[state]}>{classificationStatusLabel[state]}</Badge>
+      </span>
+    ),
+    content: (
+      <div className="board-risk-factor-detail">
+        <p>{factor.reason || (state === 'UNKNOWN'
+          ? '이 항목의 분류 결과를 확인하지 못했습니다.'
+          : state === 'ABSENT' ? '이 위험 요소는 탐지되지 않았습니다.' : '판단 이유가 제공되지 않았습니다.')}</p>
+        {state === 'PRESENT' || state === 'BOUNDARY' ? (
+          evidence.length > 0 ? evidence.map((text, evidenceIndex) => (
+            <blockquote className="board-factor-evidence" key={evidenceIndex}>
+              <strong>근거 구간</strong><p>{text}</p>
+            </blockquote>
+          )) : <p>제공된 근거 구간이 없습니다.</p>
+        ) : null}
+      </div>
+    ),
   };
 }
 
@@ -238,11 +275,7 @@ function RiskAnalysisPanel({ escalationId }: { escalationId: number }) {
     [escalationId],
   );
   const { data, error, isInitialLoading, retry } = useEscalationRequest(request);
-  const items = (data?.detectedFactors ?? []).map(toRiskFactor).map((factor) => ({
-    id: factor.id,
-    title: <RiskFactorTitle factor={factor} />,
-    content: <RiskFactorDetail factor={factor} />,
-  }));
+  const items = (data?.detectedFactors ?? []).map(toRiskFactorItem);
 
   return (
     <AsyncContent
@@ -325,6 +358,9 @@ function HistoryPanel({ escalationId }: { escalationId: number }) {
   );
   const { data, error, isInitialLoading, retry } = useEscalationRequest(request);
 
+  const missingLogs = data?.missingLogs ?? [];
+  const hasMissingLogs = data?.logComplete === false || missingLogs.length > 0;
+
   return (
     <AsyncContent
       error={data ? null : error}
@@ -339,25 +375,55 @@ function HistoryPanel({ escalationId }: { escalationId: number }) {
             <h2 className="board-risk-section-title">처리 기록</h2>
           </div>
         </div>
+        {data && hasMissingLogs ? (
+          <div className="admin-history-warning" role="alert">
+            <p><strong>일부 처리 기록이 누락되었습니다.</strong></p>
+            <p>아래 목록에 모든 처리 내역이 포함되어 있지 않을 수 있습니다.</p>
+            {missingLogs.length > 0 ? (
+              <ul>
+                {missingLogs.map((log, index) => {
+                  const reference = historyReference(log.referenceType, log.referenceId);
+                  return (
+                    <li key={`${log.expectedType}-${log.referenceType ?? ''}-${log.referenceId ?? ''}-${index}`}>
+                      <strong>{historyEventLabel[log.expectedType] ?? log.expectedType}</strong>
+                      {reference ? <span>{reference}</span> : null}
+                      <p>{log.description}</p>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
         {data && data.events.length > 0 ? (
           <ol className="board-activity-list">
             {[...data.events].reverse().map((event) => {
               const riskChange = riskChangeText(event);
+              const reference = historyReference(event.referenceType, event.referenceId);
+              const statusChange = event.newStatus
+                ? `${event.previousStatus ? `${complaintStatusLabel[event.previousStatus] ?? event.previousStatus} → ` : ''}${complaintStatusLabel[event.newStatus] ?? event.newStatus}`
+                : null;
               return (
                 <li key={event.eventId}>
                   <time dateTime={event.occurredAt}>{formatEscalationTime(event.occurredAt)}</time>
                   <div>
-                    <strong>{historyEventLabel[event.type]}</strong>
+                    <strong>{historyEventLabel[event.type] ?? event.type}</strong>
                     <span>{event.actorName}</span>
+                    {statusChange ? <p>{statusChange}</p> : null}
                     {riskChange ? <p>{riskChange}</p> : null}
                     {event.reason ? <p>{event.reason}</p> : null}
+                    {reference ? <p>{reference}</p> : null}
                   </div>
                 </li>
               );
             })}
           </ol>
         ) : (
-          <EmptyState className="board-risk-empty" description="아직 남겨진 처리 기록이 없습니다." title="기록 없음" />
+          <EmptyState
+            className="board-risk-empty"
+            description={hasMissingLogs ? '조회된 처리 기록이 없습니다.' : '아직 남겨진 처리 기록이 없습니다.'}
+            title={hasMissingLogs ? '조회된 기록 없음' : '기록 없음'}
+          />
         )}
       </section>
     </AsyncContent>

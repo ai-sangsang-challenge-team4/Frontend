@@ -5,6 +5,8 @@ import type {
   ComplaintStatus,
   EmergencyReviewDecision,
   MessageSenderRole,
+  MessageStatus,
+  RiskFactorStatus,
   RiskLevel,
   RiskReviewDirection,
   RiskReviewStatus,
@@ -136,7 +138,10 @@ export type ConversationMessage = {
   senderRole: MessageSenderRole;
   senderName: string;
   content: string;
+  // Optional for servers still returning the earlier conversation DTO.
+  status?: MessageStatus;
   sentAt: string;
+  readAt?: string | null;
   summarized: boolean;
 };
 
@@ -161,7 +166,10 @@ export type DetectedFactorCode =
 export type DetectedFactor = {
   code: DetectedFactorCode;
   name: string;
-  evidence: string;
+  state?: RiskFactorStatus;
+  evidenceSpans?: { text: string; start?: number | null; end?: number | null }[];
+  // Earlier servers return detected factors only, with a single evidence string.
+  evidence?: string;
   reason: string;
 };
 
@@ -194,6 +202,8 @@ export type HistoryEvent = {
   type: HistoryEventType;
   occurredAt: string;
   actorName?: string | null;
+  referenceType?: string | null;
+  referenceId?: number | null;
   previousStatus?: ComplaintStatus | null;
   newStatus?: ComplaintStatus | null;
   riskScore?: number | null;
@@ -206,6 +216,14 @@ export type HistoryEvent = {
 // GET /admin/escalations/{escalationId}/history
 export type TeacherHistoryResponse = {
   complaintId: number;
+  // Omitted by earlier servers. Absence does not certify that the logs are complete.
+  logComplete?: boolean;
+  missingLogs?: {
+    expectedType: HistoryEventType;
+    referenceType?: string | null;
+    referenceId?: number | null;
+    description: string;
+  }[];
   events: HistoryEvent[];
 };
 

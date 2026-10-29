@@ -566,7 +566,7 @@ export const mockEscalationApi: EscalationApi = {
     await wait(signal);
     const admin = requireUser('ADMIN');
     const item = requireAssigned(readStore(), escalationId, admin.userId);
-    return { complaintId: mockComplaintNumber(item.complaintId), events: item.events };
+    return { complaintId: mockComplaintNumber(item.complaintId), logComplete: true, missingLogs: [], events: item.events };
   },
 
   async startEscalationReview(escalationId, request, signal) {
