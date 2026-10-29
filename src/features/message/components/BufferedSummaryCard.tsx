@@ -8,6 +8,8 @@ type BufferedSummaryCardProps = {
   onOpenRiskEvidence: () => void;
   summaryText: string;
   unavailable?: boolean;
+  // Server inbox: one card per summarized parent message, each with its own time.
+  sentAt?: string;
   thread: BoardThread;
 };
 
@@ -34,6 +36,7 @@ export function BufferedSummaryCard({
   onOpenRiskEvidence,
   summaryText,
   unavailable = false,
+  sentAt,
   thread,
 }: BufferedSummaryCardProps) {
   return (
@@ -64,10 +67,12 @@ export function BufferedSummaryCard({
             </button>
           </div>
         </div>
-        <time dateTime={thread.replies[0]?.sentAt}>
-          {thread.replies[0]?.sentAt
-            ? formatConversationTime(thread.replies[0].sentAt)
-            : thread.replies[0]?.time ?? formatConversationTime(thread.latestAt)}
+        <time dateTime={sentAt ?? thread.replies[0]?.sentAt}>
+          {sentAt
+            ? formatConversationTime(sentAt)
+            : thread.replies[0]?.sentAt
+              ? formatConversationTime(thread.replies[0].sentAt)
+              : thread.replies[0]?.time ?? formatConversationTime(thread.latestAt)}
         </time>
       </div>
     </article>

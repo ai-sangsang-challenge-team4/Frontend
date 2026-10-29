@@ -5,6 +5,9 @@ import { httpTeacherInboxApi } from '../../src/features/message/api/httpTeacherI
 import type { ComplaintListItem, TeacherConversationResponse } from '../../src/features/message/api/teacherInboxTypes';
 import type { HistoryEvent, TeacherRiskResponse } from '../../src/features/escalation/escalationTypes';
 import {
+  markServerDetailFailed,
+  markServerDetailLoading,
+  mergeListFields,
   mergeServerDetail,
   toActivityLogs,
   toComplaintListQuery,
@@ -216,4 +219,59 @@ test('서버 이력은 오래된 순으로 바꾸고 생략된 필드를 비어 
     expect.objectContaining({ id: 'complaint-event:2', action: '민원 상태 변경', actor: 'Demo Parent', detail: '작성 중' }),
     expect.objectContaining({ id: 'complaint-event:3', action: '위험 분석', actor: '시스템', detail: '긴급(30점)' }),
   ]);
+});
+
+test('학부모 메시지마다 완충 요약 여부를 유지하고, 최신 문의가 요약이 아니면 이전 요약을 현재 요약으로 쓰지 않는다', () => {
+  const thread = mergeServerDetail(toListThread(listItem), bundle({
+    conversation: {
+      ...conversation,
+      messages: [
+        ...conversation.messages,
+        { messageId: 'message:2', senderRole: 'TEACHER', senderName: 'Demo Teacher', content: '답변', sentAt: '2026-10-29T11:10:00', summarized: false },
+        { messageId: 'message:3', senderRole: 'PARENT', senderName: 'Demo Parent', content: '두 번째 문의 원문', sentAt: '2026-10-29T11:20:00', summarized: false },
+      ],
+    },
+  }));
+  expect(thread.replies.map((reply) => reply.summarized)).toEqual([true, undefined, false]);
+  expect(thread.analysis?.summary.text).toBe('');
+});
+
+test('처리 기록 조회가 실패하면 기존 기록을 유지하고 실패 상태를 남긴다', () => {
+  const loaded = mergeServerDetail(toListThread(listItem), bundle());
+  const reloaded = mergeServerDetail(loaded, bundle({ history: null }));
+  expect(reloaded.analysis?.activityLogs).toEqual(loaded.analysis?.activityLogs);
+  expect(reloaded.analysis?.activityLogsUnavailable).toBe(true);
+  expect(mergeServerDetail(toListThread(listItem), bundle({ history: null })).analysis?.activityLogs).toEqual([]);
+});
+
+test('목록 재조회는 서버 필드만 갱신하고 별표·상세·교사 답변 여부를 유지한다', () => {
+  const opened = {
+    ...mergeServerDetail(toListThread(listItem), bundle({
+      conversation: {
+        ...conversation,
+        messages: [
+          ...conversation.messages,
+          { messageId: 'message:2', senderRole: 'TEACHER', senderName: 'Demo Teacher', content: '답변', sentAt: '2026-10-29T11:10:00', summarized: false },
+        ],
+      },
+    })),
+    isPinned: true,
+  };
+  const merged = mergeListFields(opened, toListThread({ ...listItem, title: '제목 변경', riskLevel: 'HIGH', waitingFor: 'TEACHER' }));
+  expect(merged).toMatchObject({ title: '제목 변경', risk: 'danger', isPinned: true, status: 'inProgress', needsTeacherReview: true });
+  expect(merged.analysis).toBe(opened.analysis);
+  expect(merged.replies).toBe(opened.replies);
+  expect(mergeListFields({ ...toListThread(listItem), isPinned: true }, toListThread(listItem)).isPinned).toBe(true);
+});
+
+test('상세 조회 실패는 로딩을 실패로 바꾸고, 다시 불러오면 로딩으로 돌아간다', () => {
+  const loading = markServerDetailLoading(toListThread(listItem));
+  expect(loading.analysis?.status).toBe('loading');
+  const failed = markServerDetailFailed(loading);
+  expect(failed.analysis?.status).toBe('failed');
+  expect(markServerDetailLoading(failed).analysis?.status).toBe('loading');
+  // A loaded analysis stays as it is during a background refresh.
+  const ready = mergeServerDetail(toListThread(listItem), bundle());
+  expect(markServerDetailLoading(ready)).toBe(ready);
+  expect(markServerDetailFailed(ready)).toBe(ready);
 });

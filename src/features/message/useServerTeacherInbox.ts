@@ -3,7 +3,9 @@ import { isAbortError, isApiError, toApiError, type ApiError } from '../../share
 import type { HistoryEvent, TeacherRiskResponse } from '../escalation/escalationTypes';
 import { teacherInboxApi, type TeacherComplaintDetailResponse } from './api/teacherInboxApi';
 import {
+  markServerDetailFailed,
   markServerDetailLoading,
+  mergeListFields,
   mergeServerDetail,
   toComplaintListQuery,
   toListThread,
@@ -33,12 +35,13 @@ type UseServerTeacherInboxOptions = {
   setThreads: Dispatch<SetStateAction<BoardThread[]>>;
 };
 
-// Inserts or replaces threads by id. A thread whose detail is already loaded keeps it.
+// Inserts new rows and refreshes known threads with the row's server fields, keeping their loaded
+// detail and browser-local state (pin, drafts).
 function upsertListThreads(current: BoardThread[], incoming: BoardThread[]) {
   const byId = new Map(current.map((thread) => [thread.id, thread]));
   for (const thread of incoming) {
     const existing = byId.get(thread.id);
-    byId.set(thread.id, existing?.analysis ? existing : thread);
+    byId.set(thread.id, existing ? mergeListFields(existing, thread) : thread);
   }
   return [...byId.values()];
 }
@@ -72,6 +75,10 @@ export function useServerTeacherInbox({ enabled, filters, setThreads }: UseServe
   const [attempt, setAttempt] = useState(0);
   const [debouncedQuery, setDebouncedQuery] = useState(filters.query);
   const listController = useRef<AbortController | null>(null);
+  // The page whose "더 보기" request failed; retry asks for it again instead of reloading from page 0.
+  const failedPage = useRef<number | null>(null);
+  // Latest detail request per thread, so an older response cannot overwrite a newer one.
+  const detailRequests = useRef(new Map<string, number>());
   const { risk, sort, status } = filters;
 
   useEffect(() => {
@@ -91,6 +98,7 @@ export function useServerTeacherInbox({ enabled, filters, setThreads }: UseServe
         controller.signal,
       );
       if (controller.signal.aborted) return;
+      failedPage.current = null;
       const threads = response.content.map(toListThread);
       setThreads((current) => upsertListThreads(current, threads));
       setListIds((current) => {
@@ -107,6 +115,9 @@ export function useServerTeacherInbox({ enabled, filters, setThreads }: UseServe
       });
     } catch (error) {
       if (controller.signal.aborted || isAbortError(error)) return;
+      // A failed first page must not leave the previous filter's rows looking like this filter's result.
+      if (page === 0) setListIds([]);
+      failedPage.current = page > 0 ? page : null;
       setListState((current) => ({ ...current, error: toApiError(error), isLoading: false, isLoadingMore: false }));
     }
   }, [debouncedQuery, risk, setThreads, sort, status]);
@@ -121,24 +132,40 @@ export function useServerTeacherInbox({ enabled, filters, setThreads }: UseServe
     if (listState.hasNext && !listState.isLoadingMore) void loadPage(listState.page + 1);
   }, [listState.hasNext, listState.isLoadingMore, listState.page, loadPage]);
 
-  const retry = useCallback(() => setAttempt((value) => value + 1), []);
+  const retry = useCallback(() => {
+    if (failedPage.current !== null) void loadPage(failedPage.current);
+    else setAttempt((value) => value + 1);
+  }, [loadPage]);
 
   // Loads detail, conversation, risk, and history together. A missing analysis (404) shows as a failed
   // analysis instead of failing the whole thread; other errors reject so the caller can say so.
   const loadDetail = useCallback(async (threadId: string, signal?: AbortSignal) => {
     const complaintId = toServerComplaintNumber(threadId);
     if (complaintId === null) return;
+    const requestNumber = (detailRequests.current.get(threadId) ?? 0) + 1;
+    detailRequests.current.set(threadId, requestNumber);
+    const isLatest = () => !signal?.aborted && detailRequests.current.get(threadId) === requestNumber;
     setThreads((current) => current.map((thread) => thread.id === threadId ? markServerDetailLoading(thread) : thread));
-    const [detail, conversation, risk, history] = await Promise.all([
-      teacherInboxApi.getComplaint(complaintId, signal),
-      teacherInboxApi.getConversation(complaintId, signal),
-      teacherInboxApi.getRisk(complaintId, signal).catch((error: unknown): TeacherRiskResponse | null => {
-        if (isApiError(error) && error.status === 404) return null;
-        throw error;
-      }),
-      teacherInboxApi.getHistory(complaintId, signal).then((response) => response.events, (): HistoryEvent[] => []),
-    ]);
-    if (signal?.aborted) return;
+    let bundle;
+    try {
+      bundle = await Promise.all([
+        teacherInboxApi.getComplaint(complaintId, signal),
+        teacherInboxApi.getConversation(complaintId, signal),
+        teacherInboxApi.getRisk(complaintId, signal).catch((error: unknown): TeacherRiskResponse | null => {
+          if (isApiError(error) && error.status === 404) return null;
+          throw error;
+        }),
+        teacherInboxApi.getHistory(complaintId, signal).then((response) => response.events, (): HistoryEvent[] | null => null),
+      ]);
+    } catch (error) {
+      // Leave no endless loading notice behind; the risk tab offers a retry.
+      if (isLatest()) {
+        setThreads((current) => current.map((thread) => thread.id === threadId ? markServerDetailFailed(thread) : thread));
+      }
+      throw error;
+    }
+    if (!isLatest()) return;
+    const [detail, conversation, risk, history] = bundle;
     setThreads((current) => {
       const existing = current.find((thread) => thread.id === threadId);
       const merged = mergeServerDetail(existing ?? detailToListThread(detail), { detail, conversation, risk, history });

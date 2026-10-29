@@ -67,6 +67,8 @@ export type ThreadAnalysis = {
   activityLogs: ActivityLog[];
   canReviewRisk: boolean;
   canViewActivityLog: boolean;
+  // Server inbox: GET /history failed, so activityLogs are the last ones loaded (possibly none).
+  activityLogsUnavailable?: boolean;
   canViewOriginal: boolean;
   originalMessageAvailable: boolean;
   packageAvailable: boolean;
@@ -92,6 +94,8 @@ export type BoardReply = {
   label: string;
   // Set once the reply is stored as the final answer delivered to the parent.
   deliveryStatus?: 'SENT_TO_PARENT';
+  // Server inbox: a parent message above LOW arrives as its buffered summary instead of the original.
+  summarized?: boolean;
   readByParent?: boolean;
   time: string;
   sentAt?: string;

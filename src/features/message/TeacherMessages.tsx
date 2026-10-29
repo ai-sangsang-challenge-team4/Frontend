@@ -599,6 +599,8 @@ function BoardWorkspace({
           containerClassName="board-search-field"
           leadingIcon={<SearchIcon />}
           onChange={(event) => onFiltersChange({ query: event.currentTarget.value })}
+          // The server rejects a keyword over 100 characters (400 VALIDATION_FAILED).
+          maxLength={serverList ? 100 : undefined}
           placeholder="이름 또는 메시지 내용으로 검색"
           type="search"
           value={filters.query}
@@ -1086,6 +1088,8 @@ type RiskAnalysisPanelProps = {
   onReviewRequest: (threadId: string) => void;
   // Receives every server escalation state so the thread can pick up the admin's decision.
   onServerStateLoaded: (threadId: string, state: EscalationStateResponse) => void;
+  // Server inbox only: reloads the thread's detail after a failed request.
+  onReloadServerDetail?: (threadId: string) => void;
   thread: BoardThread;
 };
 
@@ -1097,6 +1101,7 @@ function RiskAnalysisPanel({
   onOriginalOpen,
   onReviewRequest,
   onServerStateLoaded,
+  onReloadServerDetail,
   thread,
 }: RiskAnalysisPanelProps) {
   const [isProcedureOpen, setIsProcedureOpen] = useState(false);
@@ -1143,7 +1148,13 @@ function RiskAnalysisPanel({
   }, [analysis?.teacherReviewReason, initialReviewScore, thread.id]);
 
   if (!analysis || getAnalysisStatus(thread) !== 'ready') {
-    return <AnalysisStateNotice thread={thread} onOriginalOpen={() => onOriginalOpen()} />;
+    return (
+      <AnalysisStateNotice
+        onOriginalOpen={() => onOriginalOpen()}
+        onRetry={onReloadServerDetail ? () => onReloadServerDetail(thread.id) : undefined}
+        thread={thread}
+      />
+    );
   }
 
   const canInspectOriginal = Boolean(
@@ -1480,11 +1491,23 @@ function RiskAnalysisPanel({
 }
 
 type ActivityLogPanelProps = {
+  onReload?: () => void;
   thread: BoardThread;
 };
 
-function ActivityLogPanel({ thread }: ActivityLogPanelProps) {
+function ActivityLogPanel({ onReload, thread }: ActivityLogPanelProps) {
   const logs = getActivityLogs(thread);
+  // A failed GET /history keeps the last loaded logs rather than claiming there are none.
+  const unavailableNotice = thread.analysis?.activityLogsUnavailable ? (
+    <p className="board-admin-share-error" role="alert">
+      처리 기록을 불러오지 못했습니다.{logs.length > 0 ? ' 마지막으로 불러온 기록을 표시합니다.' : ''}{' '}
+      {onReload ? <button className="board-admin-share-retry" onClick={onReload} type="button">다시 시도</button> : null}
+    </p>
+  ) : null;
+
+  if (logs.length === 0 && unavailableNotice) {
+    return <section className="board-activity-panel" aria-label="처리 기록">{unavailableNotice}</section>;
+  }
 
   if (logs.length === 0) {
     return (
@@ -1504,6 +1527,7 @@ function ActivityLogPanel({ thread }: ActivityLogPanelProps) {
           <h2 className="board-risk-section-title">처리 기록</h2>
         </div>
       </div>
+      {unavailableNotice}
       <ol className="board-activity-list">
         {logs.map((log) => (
           <li key={log.id}>
@@ -1529,6 +1553,8 @@ function isAcknowledgedByParent(thread: BoardThread) {
 
 type DetailProps = {
   onConsultationComplete: (threadId: string) => void;
+  // Server inbox only: reloads the thread's detail after a failed request.
+  onReloadServerDetail?: (threadId: string) => void;
   initialOriginalViewer?: OriginalMessageRequest;
   initialTab?: DetailTab;
   onBack: () => void;
@@ -1560,6 +1586,7 @@ function ThreadDetail({
   onReviewComplete,
   onReviewRequest,
   onServerStateLoaded,
+  onReloadServerDetail,
   thread,
 }: DetailProps) {
   const [activeDetailTab, setActiveDetailTab] =
@@ -1575,14 +1602,18 @@ function ThreadDetail({
   const bufferedSummaryText = getBufferedSummaryText(thread);
   const needsBufferedSummary = effectiveRiskLevel !== 'low' ||
     Boolean(thread.analysis && getAnalysisStatus(thread) !== 'ready');
-  const visibleConversationReplies = needsBufferedSummary
+  // A server thread carries a summary per parent message, so every message stays in the conversation and
+  // each summarized one shows as its own summary card.
+  const usesMessageSummaries = Boolean(thread.serverComplaintId);
+  const firstParentReplyId = thread.replies.find((reply) => reply.authorRole === 'parent')?.id;
+  const visibleConversationReplies = needsBufferedSummary && !usesMessageSummaries
     ? thread.replies.filter((reply) => reply.authorRole !== 'parent')
     : thread.replies;
   const initialConversationDate = thread.messageDateLabel ?? formatConversationDate(
     thread.replies[0]?.sentAt ?? thread.latestAt,
   );
   const showBufferedSummaryOnly =
-    needsBufferedSummary && visibleConversationReplies.length === 0;
+    needsBufferedSummary && !usesMessageSummaries && visibleConversationReplies.length === 0;
   const canInspectOriginal = Boolean(
     thread.analysis?.canViewOriginal &&
       thread.analysis.originalMessageAvailable &&
@@ -1600,7 +1631,11 @@ function ThreadDetail({
           </>
         );
 
+  // The thread on screen, so a slow original request for a thread left behind does not open its viewer here.
+  const activeThreadIdRef = useRef(thread.id);
+
   useEffect(() => {
+    activeThreadIdRef.current = thread.id;
     setActiveDetailTab(initialTab ?? 'conversation');
     setOriginalRequest(null);
     setOriginalViewer(initialOriginalViewer ?? null);
@@ -1620,8 +1655,10 @@ function ThreadDetail({
     }
 
     const request = originalRequest;
+    const requestedThreadId = thread.id;
     setOriginalRequest(null);
-    if (await onOriginalViewed(thread.id, request.evidence)) setOriginalViewer(request);
+    if (!(await onOriginalViewed(requestedThreadId, request.evidence))) return;
+    if (activeThreadIdRef.current === requestedThreadId) setOriginalViewer(request);
   };
   const closeOriginalViewer = () => {
     if (originalViewer?.source === 'replyComposer') {
@@ -1732,7 +1769,13 @@ function ThreadDetail({
 
       {!originalViewer && activeDetailTab === 'conversation' ? (
         <>
-          {thread.analysis ? <AnalysisStateNotice thread={thread} onOriginalOpen={() => openOriginalViewer()} /> : null}
+          {thread.analysis ? (
+            <AnalysisStateNotice
+              onOriginalOpen={() => openOriginalViewer()}
+              onRetry={onReloadServerDetail ? () => onReloadServerDetail(thread.id) : undefined}
+              thread={thread}
+            />
+          ) : null}
           <div className="board-info-box">
             <span aria-hidden="true">i</span>
             <p>{conversationInfoText}</p>
@@ -1746,7 +1789,7 @@ function ThreadDetail({
           >
         <ConversationDateChip label={initialConversationDate} />
 
-        {needsBufferedSummary ? (
+        {needsBufferedSummary && !usesMessageSummaries ? (
           <BufferedSummaryCard
             canInspectOriginal={canInspectOriginal}
             onOpenOriginal={() => openOriginalViewer()}
@@ -1768,25 +1811,37 @@ function ThreadDetail({
           return (
             <Fragment key={reply.id}>
               {dateLabel !== previousDateLabel ? <ConversationDateChip label={dateLabel} /> : null}
-              <article className={`board-reply board-reply-${reply.authorRole}`}>
-                <div className="board-reply-author">
-                  <ProfileAvatar className="board-mini-avatar" />
-                  <strong>{reply.authorName}</strong>
-                </div>
-                <div className="board-reply-row">
-                  {reply.authorRole === 'teacher' ? (
-                    <div className="board-reply-time">
-                      {reply.readByParent ? <span>1</span> : null}
-                      <time dateTime={reply.sentAt}>{time}</time>
-                    </div>
-                  ) : null}
-                  <div className="board-reply-bubble">
-                    <span>{reply.label}</span>
-                    <p>{reply.content}</p>
+              {reply.summarized ? (
+                <BufferedSummaryCard
+                  // POST /original-views returns only the first inquiry's original.
+                  canInspectOriginal={canInspectOriginal && reply.id === firstParentReplyId}
+                  onOpenOriginal={() => openOriginalViewer()}
+                  onOpenRiskEvidence={() => setActiveDetailTab('risk')}
+                  sentAt={reply.sentAt}
+                  summaryText={reply.content}
+                  thread={thread}
+                />
+              ) : (
+                <article className={`board-reply board-reply-${reply.authorRole}`}>
+                  <div className="board-reply-author">
+                    <ProfileAvatar className="board-mini-avatar" />
+                    <strong>{reply.authorName}</strong>
                   </div>
-                  {reply.authorRole === 'parent' ? <time dateTime={reply.sentAt}>{time}</time> : null}
-                </div>
-              </article>
+                  <div className="board-reply-row">
+                    {reply.authorRole === 'teacher' ? (
+                      <div className="board-reply-time">
+                        {reply.readByParent ? <span>1</span> : null}
+                        <time dateTime={reply.sentAt}>{time}</time>
+                      </div>
+                    ) : null}
+                    <div className="board-reply-bubble">
+                      <span>{reply.label}</span>
+                      <p>{reply.content}</p>
+                    </div>
+                    {reply.authorRole === 'parent' ? <time dateTime={reply.sentAt}>{time}</time> : null}
+                  </div>
+                </article>
+              )}
             </Fragment>
           );
         })}
@@ -1873,12 +1928,16 @@ function ThreadDetail({
           onOriginalOpen={openOriginalViewer}
           onReviewRequest={onReviewRequest}
           onServerStateLoaded={onServerStateLoaded}
+          onReloadServerDetail={onReloadServerDetail}
           thread={thread}
         />
       ) : null}
 
       {!originalViewer && activeDetailTab === 'activity' ? (
-        <ActivityLogPanel thread={thread} />
+        <ActivityLogPanel
+          onReload={onReloadServerDetail ? () => onReloadServerDetail(thread.id) : undefined}
+          thread={thread}
+        />
       ) : null}
 
       <OriginalMessageConfirmDialog
@@ -2438,6 +2497,12 @@ export function TeacherMessages({
     if (!thread?.serverComplaintId) return false;
     setToastMessage('서버 메시지의 답변 전송·상담 완료는 아직 연동되지 않았습니다.');
     return true;
+  };
+
+  const retryServerDetail = (threadId: string) => {
+    loadServerDetail(threadId).catch((error: unknown) => {
+      setToastMessage(getApiErrorMessage(error, '메시지 상세 정보를 불러오지 못했습니다.'));
+    });
   };
 
   const refreshServerThread = (threadId: string) => {
@@ -3178,6 +3243,7 @@ export function TeacherMessages({
             onReviewComplete={handleReviewComplete}
             onReviewRequest={handleReviewRequest}
             onServerStateLoaded={handleServerStateLoaded}
+            onReloadServerDetail={isServerInbox ? retryServerDetail : undefined}
             onAdminShared={handleAdminShared}
             onAiObjection={handleAiObjection}
             thread={selectedThread}

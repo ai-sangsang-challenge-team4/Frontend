@@ -97,7 +97,8 @@ export type ServerThreadDetail = {
   conversation: TeacherConversationResponse;
   // null when the risk request failed (e.g. 404 RISK_ANALYSIS_NOT_FOUND); the thread shows the analysis as failed.
   risk: TeacherRiskResponse | null;
-  history: HistoryEvent[];
+  // null when the history request failed; the last loaded logs are kept instead of an empty history.
+  history: HistoryEvent[] | null;
 };
 
 function toReplies(conversation: TeacherConversationResponse): BoardReply[] {
@@ -112,7 +113,7 @@ function toReplies(conversation: TeacherConversationResponse): BoardReply[] {
       label: isParent ? '학부모 문의' : '선생님 답변',
       time: formatConversationTime(sentAt),
       sentAt,
-      ...(isParent ? {} : { deliveryStatus: 'SENT_TO_PARENT' as const }),
+      ...(isParent ? { summarized: message.summarized } : { deliveryStatus: 'SENT_TO_PARENT' as const }),
     };
   });
 }
@@ -162,14 +163,16 @@ function toAnalysis(
   { conversation, detail, history, risk }: ServerThreadDetail,
   local: ThreadAnalysis | undefined,
 ): ThreadAnalysis {
-  // Above LOW the server sends the latest parent message as a buffered summary.
-  const summarized = [...conversation.messages].reverse().find((message) => message.senderRole === 'PARENT' && message.summarized);
+  // The summary belongs to the latest parent message only; an older summary must not stand in for a newer,
+  // unsummarized message. The conversation shows each message's own summary.
+  const latestParent = [...conversation.messages].reverse().find((message) => message.senderRole === 'PARENT');
   const base: ThreadAnalysis = {
     // Kept from the browser: the server has no AI objections or reviewer re-check requests.
     aiObjections: local?.aiObjections,
     riskReviewRequestedAt: local?.riskReviewRequestedAt,
     emergencyReview: local?.emergencyReview,
-    activityLogs: toActivityLogs(history),
+    activityLogs: history ? toActivityLogs(history) : local?.activityLogs ?? [],
+    activityLogsUnavailable: history === null,
     canReviewRisk: detail.status === 'OPEN' && detail.waitingFor === 'TEACHER',
     canViewActivityLog: true,
     canViewOriginal: true,
@@ -179,7 +182,7 @@ function toAnalysis(
     riskFactors: [],
     safetyLock: risk?.safetyLock ?? false,
     studentSafetySignal: 'NONE',
-    summary: { status: 'ready', text: summarized?.content ?? '' },
+    summary: { status: 'ready', text: latestParent?.summarized ? latestParent.content : '' },
     systemRiskLevel: systemRiskLevelFromApi[risk?.riskLevel ?? detail.riskLevel ?? 'LOW'],
   };
   if (!risk) return { ...base, status: 'failed' };
@@ -226,8 +229,38 @@ export function mergeServerDetail(thread: BoardThread, bundle: ServerThreadDetai
   };
 }
 
+// Applies a newer list row to a thread that is already known. Server-owned list fields are updated;
+// the loaded detail (analysis, replies) and browser-local fields (pin, drafts) are kept.
+export function mergeListFields(existing: BoardThread, row: BoardThread): BoardThread {
+  const hasTeacherReply = existing.replies.some((reply) => reply.authorRole === 'teacher');
+  const { status, waitingFor } = row.serverStatus ?? existing.serverStatus ?? { status: 'OPEN', waitingFor: 'TEACHER' };
+  return {
+    ...existing,
+    serverStatus: row.serverStatus,
+    title: row.title,
+    parentName: row.parentName,
+    studentName: row.studentName,
+    className: row.className,
+    latestAt: row.latestAt,
+    latestAtLabel: row.latestAtLabel,
+    latestMessage: row.latestMessage,
+    conversationSummary: row.conversationSummary,
+    risk: row.risk,
+    status: threadStatus(status, waitingFor, hasTeacherReply),
+    needsTeacherReview: waitingFor === 'TEACHER' && hasTeacherReply,
+  };
+}
+
+// A detail request that failed leaves its loading shell as a failed analysis, so the risk tab can retry.
+export function markServerDetailFailed(thread: BoardThread): BoardThread {
+  if (thread.analysis?.status !== 'loading') return thread;
+  return { ...thread, analysis: { ...thread.analysis, status: 'failed' } };
+}
+
 // The thread shell while its detail is loading, so the risk tab shows the loading notice.
+// A loaded analysis stays visible during a background refresh; a failed one shows loading again on retry.
 export function markServerDetailLoading(thread: BoardThread): BoardThread {
+  if (thread.analysis?.status === 'failed') return { ...thread, analysis: { ...thread.analysis, status: 'loading' } };
   if (thread.analysis) return thread;
   return {
     ...thread,
