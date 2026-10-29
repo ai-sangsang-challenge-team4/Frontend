@@ -26,8 +26,8 @@ import type {
 } from './types';
 
 // Converts the backend teacher complaint responses into the inbox's BoardThread model.
-// Fields the backend has no data for (student safety signal, AI objections, evidence package, pin, reply
-// drafts) keep their local defaults and stay browser-local.
+// Fields the backend has no data for (student safety signal, AI objections, evidence package, pin, per-tab
+// reply drafts) keep their local defaults and stay browser-local. The single server draft is in serverReplies.ts.
 
 // Backend tag codes and the inbox's classification codes describe the same eight risks.
 const classificationCodeByTag: Record<DetectedFactorCode, RiskClassification['code']> = {
@@ -57,7 +57,7 @@ function className(grade: number | null, classNo: number | null) {
 }
 
 // The inbox has 상담 전·상담 중·상담 완료; the server has complaint status plus whose turn it is.
-function threadStatus(status: ComplaintStatus, waitingFor: WaitingFor, hasTeacherReply?: boolean): ThreadStatus {
+export function threadStatus(status: ComplaintStatus, waitingFor: WaitingFor, hasTeacherReply?: boolean): ThreadStatus {
   if (status === 'CLOSED' || waitingFor === 'NONE') return 'complete';
   if (waitingFor === 'PARENT' || hasTeacherReply) return 'inProgress';
   return 'before';

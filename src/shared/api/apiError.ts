@@ -112,8 +112,9 @@ export const API_ERROR_CODE_MESSAGES: Record<string, string> = {
   MESSAGE_DRAFT_NOT_FOUND: '작성 중인 메시지를 찾을 수 없어요.',
   MESSAGE_NOT_EDITABLE: '이미 전송된 메시지는 수정할 수 없어요.',
   // Teacher reply and risk review
-  RESPONSE_DRAFT_NOT_FOUND: '작성 중인 답변을 찾을 수 없어요.',
-  RESPONSE_NOT_EDITABLE: '이미 전송된 답변은 수정할 수 없어요.',
+  RESPONSE_DRAFT_NOT_FOUND: '임시저장한 답변을 찾을 수 없어요.',
+  // The server answers this whenever the complaint is not OPEN and waiting for the teacher.
+  RESPONSE_NOT_EDITABLE: '지금은 답변할 수 없는 문의예요. 이미 답변했거나 상담이 끝났는지 확인해 주세요.',
   RISK_REVIEW_REASON_REQUIRED: '위험도를 낮출 때는 검토 사유를 입력해 주세요.',
   RISK_REVIEW_NOT_ALLOWED: '현재 상태에서는 위험도를 검토할 수 없어요.',
   // Admin share and emergency review

@@ -111,6 +111,8 @@ export type BoardThread = {
   // Set for threads read from GET /teacher/complaints (VITE_MESSAGE_API=http); the id is this number as a string.
   serverComplaintId?: number;
   serverStatus?: { status: ComplaintStatus; waitingFor: WaitingFor };
+  // Server inbox: GET /response-draft was checked once this session, so a cleared tab is not refilled.
+  serverDraftChecked?: boolean;
   conversationSummary?: ConversationSummary;
   parentUserId?: number;
   needsTeacherReview?: boolean;

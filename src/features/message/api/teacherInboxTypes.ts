@@ -101,3 +101,43 @@ export type TeacherOriginalViewResponse = {
   content: string;
   viewedAt: string;
 };
+
+// Teacher reply DTOs (complaint/teacher/dto/reply). The server keeps one draft per complaint and teacher,
+// and accepts a reply only while the complaint is OPEN and waiting for the teacher (else 409 RESPONSE_NOT_EDITABLE).
+
+// Body of PUT /response-draft and POST /responses. @NotBlank, @Size(max = 1500).
+export type TeacherResponseRequest = {
+  content: string;
+};
+
+export const TEACHER_RESPONSE_MAX_LENGTH = 1500;
+
+// POST /teacher/complaints/{complaintId}/response/ai-draft. Not stored as a draft; the server records
+// an AI_DRAFT_GENERATED event. The generator is still a mock.
+export type TeacherAiDraftResponse = {
+  complaintId: number;
+  content: string;
+  modelName: string;
+  generatedAt: string;
+};
+
+// GET and PUT /teacher/complaints/{complaintId}/response-draft. GET answers 404 RESPONSE_DRAFT_NOT_FOUND
+// when nothing was saved.
+export type TeacherResponseDraftResponse = {
+  responseDraftId: number;
+  complaintId: number;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+// POST /teacher/complaints/{complaintId}/responses. Sends the reply (the saved draft becomes it) and
+// hands the turn to the parent (waitingFor PARENT).
+export type TeacherResponseSubmissionResponse = {
+  responseId: number;
+  complaintId: number;
+  content: string;
+  complaintStatus: ComplaintStatus;
+  waitingFor: WaitingFor;
+  sentAt: string;
+};
