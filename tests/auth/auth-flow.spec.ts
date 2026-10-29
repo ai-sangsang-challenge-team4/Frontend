@@ -119,6 +119,9 @@ for (const role of ['PARENT', 'TEACHER'] as const) {
     await expect(page.getByRole('radio')).toHaveCount(2);
     if (role === 'TEACHER') {
       await page.locator('input[name="name"]').fill('테스트 사용자');
+      await page.getByRole('combobox', { name: '소속학교', exact: true }).fill('상상중');
+      await page.getByRole('option', { name: '상상중학교 예시 학교' }).click();
+      await page.getByLabel('교번', { exact: true }).fill('  00123  ');
     } else {
       await expect(page.locator('input[name="name"]')).toHaveCount(0);
     }
@@ -139,12 +142,15 @@ for (const role of ['PARENT', 'TEACHER'] as const) {
       return accounts.find((account: { email: string }) => account.email === email);
     }, email);
     if (role === 'PARENT') {
+      expect(account).not.toHaveProperty('schoolId');
+      expect(account).not.toHaveProperty('employeeNo');
       expect(account.name).toBe('학부모');
       expect(account.child).toEqual({
         schoolId: 'mock-elementary', grade: 6, classNumber: 2, studentNumber: 17, name: '김상상',
       });
     } else {
       expect(account).not.toHaveProperty('child');
+      expect(account).toMatchObject({ schoolId: 'mock-middle', employeeNo: '00123' });
     }
     await page.locator('input[name="password"]').fill('newpassword123');
     await page.getByRole('button', { name: '로그인', exact: true }).click();
@@ -173,6 +179,8 @@ test('회원가입 필수값, 이메일 형식, 비밀번호 불일치를 표시
   await page.goto('/signup?role=TEACHER');
   await page.getByRole('button', { name: '회원가입', exact: true }).click();
   await expect(page.getByText('이름을 입력해 주세요.', { exact: true })).toBeVisible();
+  await expect(page.getByText('검색 결과에서 소속학교를 선택해 주세요.', { exact: true })).toBeVisible();
+  await expect(page.getByText('교번을 입력해 주세요.', { exact: true })).toBeVisible();
   await expect(page.getByText('비밀번호는 8자 이상 20자 이하로 입력해 주세요.', { exact: true })).toBeVisible();
   await page.locator('input[name="email"]').fill('invalid-email');
   await page.getByRole('button', { name: '인증번호 받기', exact: true }).click();

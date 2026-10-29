@@ -20,16 +20,22 @@ test('학부모에게만 자녀 정보를 표시하고 계정 유형을 바꿔�
   await page.getByText('교사', { exact: true }).click();
   await expect(page.getByRole('group', { name: '기본 정보' })).toHaveCount(0);
   await page.getByLabel('이름 *', { exact: true }).fill('교사 이름');
+  await page.getByRole('combobox', { name: '소속학교', exact: true }).fill('상상고');
+  await page.getByRole('option', { name: '상상고등학교 예시 학교' }).click();
+  await page.getByLabel('교번', { exact: true }).fill('T-001');
   await expect(page.getByLabel('아이디')).toHaveValue('role-change@example.com');
   await expect(page.getByLabel('비밀번호 *', { exact: true })).toHaveValue('password123');
   await page.getByText('학부모', { exact: true }).click();
   await expect(page.getByLabel('이름 *', { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('교번', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('combobox', { name: '학교', exact: true })).toHaveValue('상상초등학교');
   await expect(page.getByLabel('학년', { exact: true })).toHaveValue('6');
   await expect(page.getByLabel('번호', { exact: true })).toHaveValue('17');
   await expect(page.getByLabel('자녀 이름')).toHaveValue('  김상상  ');
   await page.getByText('교사', { exact: true }).click();
   await expect(page.getByLabel('이름 *', { exact: true })).toHaveValue('교사 이름');
+  await expect(page.getByRole('combobox', { name: '소속학교', exact: true })).toHaveValue('상상고등학교');
+  await expect(page.getByLabel('교번', { exact: true })).toHaveValue('T-001');
 });
 
 test('학교 → 학년 → 반 → 번호 순서로 활성화하며 상위 항목 변경 시 하위 항목을 초기화한다', async ({ page }) => {
@@ -150,6 +156,9 @@ test('교사로 전환해 가입하면 입력했던 자녀 정보를 저장하�
   await page.getByRole('button', { name: '회원가입', exact: true }).click();
   await page.getByText('교사', { exact: true }).click();
   await page.getByLabel('이름 *', { exact: true }).fill('교사');
+  await page.getByRole('combobox', { name: '소속학교', exact: true }).fill('상상중');
+  await page.getByRole('option', { name: '상상중학교 예시 학교' }).click();
+  await page.getByLabel('교번', { exact: true }).fill('00123');
   await page.getByLabel('아이디').fill('teacher-switch@example.com');
   await page.getByRole('button', { name: '인증번호 받기', exact: true }).click();
   await page.getByLabel('인증 *', { exact: true }).fill('123456');

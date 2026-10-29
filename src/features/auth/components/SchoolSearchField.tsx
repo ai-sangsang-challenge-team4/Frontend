@@ -6,11 +6,22 @@ import { getSignupSchool, searchSignupSchools, type SignupSchool } from '../api/
 type SchoolSearchFieldProps = {
   disabled?: boolean;
   error?: string;
+  label?: string;
+  name?: string;
+  placeholder?: string;
   schoolId: string;
   onSelect: (schoolId: string) => void;
 };
 
-export function SchoolSearchField({ disabled, error, schoolId, onSelect }: SchoolSearchFieldProps) {
+export function SchoolSearchField({
+  disabled,
+  error,
+  label = '학교',
+  name = 'childSchool',
+  placeholder = '자녀가 재학 중인 학교를 검색해 주세요.',
+  schoolId,
+  onSelect,
+}: SchoolSearchFieldProps) {
   const listId = useId();
   const [query, setQuery] = useState(() => getSignupSchool(schoolId)?.name ?? '');
   const [isOpen, setIsOpen] = useState(false);
@@ -47,8 +58,8 @@ export function SchoolSearchField({ disabled, error, schoolId, onSelect }: Schoo
         disabled={disabled}
         error={error}
         fieldSize="lg"
-        label="학교"
-        name="childSchool"
+        label={label}
+        name={name}
         onChange={(event) => {
           setQuery(event.target.value);
           setIsOpen(true);
@@ -78,7 +89,7 @@ export function SchoolSearchField({ disabled, error, schoolId, onSelect }: Schoo
             setActiveIndex(-1);
           }
         }}
-        placeholder="자녀가 재학 중인 학교를 검색해 주세요."
+        placeholder={placeholder}
         role="combobox"
         trailingIcon={<Search size={18} />}
         value={query}
