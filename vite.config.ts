@@ -10,13 +10,18 @@ export default defineConfig(({ mode }) => {
     server: {
       host: '0.0.0.0',
       port: 5173,
-      // The backend has no CORS config and its paths (/teacher, /auth) overlap app routes,
-      // so dev requests go through /api and the prefix is stripped before forwarding.
+      // The backend paths (/teacher, /auth) overlap app routes, so dev requests go through /api
+      // and the prefix is stripped before forwarding.
       proxy: apiProxyTarget ? {
         '/api': {
           target: apiProxyTarget,
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api/, ''),
+          // Backend CORS allows only the Vercel origin and answers 403 to any other Origin header,
+          // so the proxied request is sent as a same-origin (server-to-server) call.
+          configure: (proxy) => {
+            proxy.on('proxyReq', (proxyRequest) => proxyRequest.removeHeader('origin'));
+          },
         },
       } : undefined,
     },
