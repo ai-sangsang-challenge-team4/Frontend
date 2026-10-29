@@ -188,16 +188,20 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
         ? await submitServerDraft(userId, draft, review, controller.signal, user?.name)
         : await sendParentMessage(userId, draft, review, controller.signal, user?.name);
       if (controller.signal.aborted) return;
-      try {
-        clearMessageDraft(userId, draft.messageId);
-      } catch {
-        // The sent record remains authoritative if draft cleanup fails.
-      }
       let stored = true;
       try {
         stored = findSentMessage(userId, sent.messageId) !== null;
       } catch {
         stored = false;
+      }
+      // Without the local copy the draft stays: sending it again finds the complaint already submitted
+      // (COMPLAINT_NOT_DRAFT and a non-DRAFT status) and stores the copy without a second submission.
+      if (stored) {
+        try {
+          clearMessageDraft(userId, draft.messageId);
+        } catch {
+          // The sent record remains authoritative if draft cleanup fails.
+        }
       }
       // A server submission whose local copy could not be saved has no receipt to show.
       navigate(stored ? `/parent/messages/${sent.messageId}` : '/parent/messages', { replace: true, state: { justSent: true } });
