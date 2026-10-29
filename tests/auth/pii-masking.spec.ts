@@ -39,6 +39,13 @@ test('일반·인터넷 전화와 붙어 쓴 번호도 서버처럼 마스킹한
   expect(maskContactInfo('tel010-1234-5678입니다')).toEqual({ text: 'tel[전화번호]입니다', count: 1 });
 });
 
+// The server does not mask these yet; the front masks more than the server, never less.
+test('050 개인 가상번호도 마스킹한다', () => {
+  for (const phone of ['0505-123-4567', '0504-1234-5678', '050412345678', '050-1234-5678', '0508.123.4567', '+82 505-123-4567']) {
+    expect(maskContactInfo(`안심번호: ${phone}`), phone).toEqual({ text: '안심번호: [전화번호]', count: 1 });
+  }
+});
+
 test('서버처럼 이메일을 전화번호보다 먼저 마스킹한다', () => {
   expect(maskContactInfo('01012345678@mail.com')).toEqual({ text: '[이메일]', count: 1 });
 });

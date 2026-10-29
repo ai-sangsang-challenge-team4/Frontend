@@ -11,12 +11,13 @@ export class MaskingError extends Error {
 
 // Covers at least what the backend PiiMaskingServiceImpl masks, in the same order (resident number, email,
 // phone), because the server stores the text it receives and shows it to the teacher; its own masking only
-// covers the copy sent to the LLM. The phone pattern also accepts "." separators and +82 mobile prefixes other
-// than 10, which the server does not.
+// covers the copy sent to the LLM. The phone pattern also accepts "." separators, +82 mobile prefixes other
+// than 10, and 050 personal virtual numbers, which the server does not.
 const RESIDENT_ID = /(?<!\d)\d{6}[-\s]?[1-8]\d{6}(?!\d)/g;
 const EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
-// Mobile (01x), Seoul (02), regional (031~065), and internet (070) numbers, domestic or +82.
-const PHONE = /(?<!\d)(?:\+82[-.\s]?(?:1[016789]|2|[3-6][1-5]|70)|0(?:1[016789]|2|[3-6][1-5]|70))[-.\s]?\d{3,4}[-.\s]?\d{4}(?!\d)/g;
+// Mobile (01x), Seoul (02), regional (031~065), personal virtual (050, 0502~0508), and internet (070) numbers,
+// domestic or +82.
+const PHONE = /(?<!\d)(?:\+82[-.\s]?(?:1[016789]|2|[3-6][1-5]|50[2-8]?|70)|0(?:1[016789]|2|[3-6][1-5]|50[2-8]?|70))[-.\s]?\d{3,4}[-.\s]?\d{4}(?!\d)/g;
 
 export function maskContactInfo(text: string) {
   let count = 0;
