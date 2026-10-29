@@ -67,7 +67,8 @@ export function useEmailVerification() {
   };
 
   const requestVerification = async () => {
-    if (requestStatus === 'loading') return;
+    // The HTTP adapter has no verification API; the form hides this step.
+    if (requestStatus === 'loading' || !sendEmailVerificationCode) return;
     if (!isValidEmail(email)) {
       setEmailError('이메일 형식으로 입력해 주세요.');
       return;
@@ -102,7 +103,7 @@ export function useEmailVerification() {
   };
 
   const verify = async () => {
-    if (verificationStatus === 'loading') return;
+    if (verificationStatus === 'loading' || !verifyEmailCode) return;
     if (!hasRequestedVerification) {
       setVerificationError('인증번호를 먼저 요청해 주세요.');
       return;

@@ -83,21 +83,54 @@ export const LOADING_MESSAGES = {
 } as const;
 
 // Copy for backend error codes. Codes not listed fall back to the status copy.
+// Codes are the ones GlobalExceptionHandler and the security handlers return (backend dev branch).
 export const API_ERROR_CODE_MESSAGES: Record<string, string> = {
-  // Backend GlobalExceptionHandler
+  // Common
+  VALIDATION_FAILED: '입력하신 정보를 확인한 후 다시 시도해 주세요.',
+  INVALID_REQUEST_BODY: '요청 내용을 확인한 후 다시 시도해 주세요.',
+  INVALID_REQUEST_PARAMETER: '요청 정보를 확인한 후 다시 시도해 주세요.',
+  INVALID_REQUEST: '요청 값이 올바르지 않아요. 입력하신 정보를 확인해 주세요.',
+  INVALID_STATE: '현재 상태에서는 요청을 처리할 수 없어요. 최신 정보를 확인해 주세요.',
+  DATA_CONFLICT: '이미 처리되었거나 현재 상태와 맞지 않는 요청이에요. 최신 정보를 확인해 주세요.',
+  API_NOT_FOUND: '요청한 기능을 찾을 수 없어요.',
+  ACCESS_DENIED: '접근 권한이 없어요.',
+  // Signup
+  SIGNUP_VALIDATION_FAILED: '입력하신 가입 정보를 확인해 주세요.',
+  SIGNUP_REFERENCE_NOT_FOUND: '입력하신 학교·학급·학생 또는 교직원 정보를 찾을 수 없어요.',
+  SIGNUP_CONFLICT: '이미 가입된 이메일이거나 이미 가입된 교직원이에요.',
+  // Complaint (parent)
   EMPTY_COMPLAINT_CONTENT: '문의 내용을 입력해 주세요.',
   COMPLAINT_ACCESS_DENIED: '해당 문의를 확인할 권한이 없어요.',
   COMPLAINT_NOT_FOUND: '문의 내역을 찾을 수 없어요.',
+  STUDENT_NOT_FOUND: '학생 정보를 찾을 수 없어요.',
+  INVALID_COMPLAINT_RECIPIENT: '문의를 보낼 수 있는 선생님이 아니에요. 받는 선생님을 다시 선택해 주세요.',
   RISK_ANALYSIS_NOT_FOUND: '분석 결과를 찾을 수 없어요.',
   ANALYSIS_REQUIRED: 'AI 분석과 수정안 확인을 마친 후 제출해 주세요.',
   FINAL_ANALYSIS_ON_SUBMIT: '수정한 내용은 제출할 때 다시 분석돼요. 제출하기를 눌러 주세요.',
   REANALYSIS_LIMIT_REACHED: '재분석은 한 번만 할 수 있어요. 재분석 후에는 내용을 수정할 수 없어요.',
-  COMPLAINT_EDIT_LIMIT_REACHED: '문의 내용은 한 번만 수정할 수 있어요.',
   COMPLAINT_NOT_DRAFT: '이미 제출된 문의는 수정하거나 다시 제출할 수 없어요.',
-  // API 명세서에 정의되었지만 아직 백엔드에서 반환하지 않는 코드
+  MESSAGE_DRAFT_NOT_FOUND: '작성 중인 메시지를 찾을 수 없어요.',
+  MESSAGE_NOT_EDITABLE: '이미 전송된 메시지는 수정할 수 없어요.',
+  // Teacher reply and risk review
+  RESPONSE_DRAFT_NOT_FOUND: '작성 중인 답변을 찾을 수 없어요.',
+  RESPONSE_NOT_EDITABLE: '이미 전송된 답변은 수정할 수 없어요.',
+  RISK_REVIEW_REASON_REQUIRED: '위험도를 낮출 때는 검토 사유를 입력해 주세요.',
+  RISK_REVIEW_NOT_ALLOWED: '현재 상태에서는 위험도를 검토할 수 없어요.',
+  // Admin share and emergency review
+  ADMIN_NOT_FOUND: '공유할 관리자를 찾을 수 없어요.',
+  ESCALATION_NOT_FOUND: '공유 건을 찾을 수 없어요.',
+  ESCALATION_ACCESS_DENIED: '공유받지 않은 메시지는 확인할 수 없어요.',
+  ESCALATION_REASON_REQUIRED: '공유 사유를 입력해 주세요.',
+  ESCALATION_NOT_ALLOWED: '관리자에게 공유할 수 없는 메시지예요.',
+  ESCALATION_STATE_INVALID: '현재 처리 상태에서는 요청을 처리할 수 없어요. 최신 정보를 확인해 주세요.',
+  ESCALATION_VERSION_CONFLICT: '다른 요청에서 데이터가 변경되었어요. 최신 상태를 다시 확인해 주세요.',
+  EMERGENCY_REVIEW_DUPLICATE: '이미 처리 중이거나 안전 잠금이 유지 중인 재검토 요청이 있어요.',
+  EMERGENCY_REVIEW_NOT_FOUND: '재검토 요청을 찾을 수 없어요.',
+  EMERGENCY_REVIEW_ACCESS_DENIED: '지정된 검토자만 재검토 요청을 처리할 수 있어요.',
+  // API 명세서에 있었지만 백엔드(dev)에서 반환하지 않는 코드. 백엔드 코드에서 사용처를 찾지 못했습니다.
+  // COMPLAINT_EDIT_LIMIT_REACHED는 docs/risk-api.md에서 "직접 수정 횟수 제한 없음"으로 바뀌었습니다.
   USER_NOT_FOUND: '회원 정보를 찾을 수 없어요.',
   EMAIL_ALREADY_EXISTS: '이미 가입된 이메일이에요.',
-  STUDENT_NOT_FOUND: '학생 정보를 찾을 수 없어요.',
   TEACHER_NOT_FOUND: '선생님 정보를 찾을 수 없어요.',
   INVALID_COMPLAINT_STATUS: '이미 처리되었거나 현재 상태에서는 처리할 수 없는 문의예요.',
   ANALYSIS_IN_PROGRESS: 'AI가 문의 내용을 분석하고 있어요. 잠시 후 다시 확인해 주세요.',
@@ -107,8 +140,26 @@ export const API_ERROR_CODE_MESSAGES: Record<string, string> = {
   RESPONSE_ALREADY_EXISTS: '이미 전송된 답변이에요.',
   RESPONSE_ACCESS_DENIED: '해당 답변을 확인할 권한이 없어요.',
   INVALID_STATUS_TRANSITION: '문의 상태가 변경되어 요청을 처리할 수 없어요. 최신 정보를 확인해 주세요.',
-  // 관리자 공유·위험도 검토 409는 백엔드 ErrorResponse.message를 그대로 노출합니다.
+  COMPLAINT_EDIT_LIMIT_REACHED: '문의 내용은 한 번만 수정할 수 있어요.',
 };
+
+// The server's message names the exact reason for these codes (which field failed, which state blocks
+// the action), so it is shown as-is and the copy above is only the fallback.
+// e.g. SIGNUP_VALIDATION_FAILED "학생 번호와 자녀 이름이 일치하지 않습니다."
+const SERVER_MESSAGE_FIRST_CODES = new Set([
+  'VALIDATION_FAILED',
+  'SIGNUP_VALIDATION_FAILED',
+  'SIGNUP_REFERENCE_NOT_FOUND',
+  'SIGNUP_CONFLICT',
+  'RISK_REVIEW_REASON_REQUIRED',
+  'RISK_REVIEW_NOT_ALLOWED',
+  'ESCALATION_NOT_ALLOWED',
+  'ESCALATION_STATE_INVALID',
+  'ESCALATION_ACCESS_DENIED',
+  'EMERGENCY_REVIEW_DUPLICATE',
+  'EMERGENCY_REVIEW_ACCESS_DENIED',
+  'ADMIN_NOT_FOUND',
+]);
 
 export const REPLY_SEND_FAILED_MESSAGE = '답변을 전송하지 못했어요. 내용을 확인한 후 다시 시도해 주세요.';
 
@@ -167,14 +218,21 @@ export function toApiError(error: unknown): ApiError {
 
 // 400/409 carry the rejection reason, and 401 carries the login failure reason
 // ("이메일 또는 비밀번호가 올바르지 않습니다."), so the server's wording is worth showing.
+// 404/403 stay on the fixed copy unless the code is in SERVER_MESSAGE_FIRST_CODES
+// (e.g. SIGNUP_REFERENCE_NOT_FOUND), so a page-level 404 still reads as "not found".
 function getServerReason(error: ApiError) {
   return ['BAD_REQUEST', 'UNAUTHORIZED', 'CONFLICT'].includes(error.kind) ? error.serverMessage : null;
+}
+
+function getCodeMessage(error: ApiError) {
+  if (SERVER_MESSAGE_FIRST_CODES.has(error.code) && error.serverMessage) return error.serverMessage;
+  return API_ERROR_CODE_MESSAGES[error.code];
 }
 
 export function getApiErrorCopy(error: unknown): ApiErrorCopy {
   const apiError = toApiError(error);
   const copy = API_ERROR_COPY[apiError.kind];
-  const description = API_ERROR_CODE_MESSAGES[apiError.code] ?? getServerReason(apiError) ?? copy.description;
+  const description = getCodeMessage(apiError) ?? getServerReason(apiError) ?? copy.description;
   return { ...copy, description };
 }
 
@@ -182,5 +240,5 @@ export function getApiErrorCopy(error: unknown): ApiErrorCopy {
 export function getApiErrorMessage(error: unknown, fallbackMessage = API_ERROR_COPY.UNKNOWN.title) {
   if (!isApiError(error)) return fallbackMessage;
   const copy = API_ERROR_COPY[error.kind];
-  return API_ERROR_CODE_MESSAGES[error.code] ?? getServerReason(error) ?? `${copy.title} ${copy.description}`;
+  return getCodeMessage(error) ?? getServerReason(error) ?? `${copy.title} ${copy.description}`;
 }

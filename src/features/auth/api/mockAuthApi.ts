@@ -1,6 +1,6 @@
 import type { User } from '../../../shared/types';
-import { isUser, type LoginInput, type SignupInput } from '../authState';
-import { validateChildSignupInfo, type ChildSignupInfo } from '../childSignup';
+import { isUser, toSignupRequest, type LoginInput, type SignupInput } from '../authState';
+import { validateChildSignupInfo } from '../childSignup';
 import { validateTeacherSignupInfo, type TeacherSignupInfo } from '../teacherSignup';
 import {
   AuthApiError,
@@ -14,8 +14,12 @@ import {
   removeStoredValue,
   writeStoredJson,
 } from './authStorage';
+import type { SignupRequest } from './authTypes';
+import { hasMockSchool, hasMockStudentPlacement } from './mockSignupOptionsApi';
 
-type AuthAccount = User & { password: string; child?: ChildSignupInfo } & Partial<TeacherSignupInfo>;
+// What the server links on signup: the parent's student, or the teacher's roster entry.
+type MockChildLink = Pick<SignupRequest, 'schoolId' | 'schoolClassId' | 'studentId' | 'studentName'>;
+type AuthAccount = User & { password: string; child?: MockChildLink } & Partial<TeacherSignupInfo>;
 type IssuedSession = Omit<AuthSession, 'user'> & { userId: number };
 type StoredVerification = VerificationCodeResult & { email: string; verified: boolean };
 type MockSettings = {
@@ -96,21 +100,35 @@ async function signup(input: SignupInput): Promise<User> {
   assertValidEmail(input.email);
   assertValidPassword(input.password);
 
-  if (input.role === 'TEACHER' && !input.name?.trim()) {
-    throw new AuthApiError({ code: 'NAME_REQUIRED', message: '이름을 입력해 주세요.' });
-  }
   if (input.role !== 'PARENT' && input.role !== 'TEACHER') {
     throw new AuthApiError({ code: 'INVALID_ROLE', message: '학부모 또는 교사를 선택해 주세요.' });
+  }
+  // Same order and wording as the backend SignupRequest validation and AuthService.
+  if (!input.name?.trim()) {
+    throw new AuthApiError({ code: 'VALIDATION_FAILED', message: '이름은 필수입니다.' });
   }
 
   if (input.role === 'PARENT') {
     const errors = validateChildSignupInfo(input.child);
     const message = Object.values(errors)[0];
-    if (message) throw new AuthApiError({ code: 'INVALID_CHILD_INFO', message });
+    if (message) throw new AuthApiError({ code: 'SIGNUP_VALIDATION_FAILED', message });
   } else {
     const errors = validateTeacherSignupInfo(input);
     const message = Object.values(errors)[0];
-    if (message) throw new AuthApiError({ code: 'INVALID_TEACHER_INFO', message });
+    if (message) throw new AuthApiError({ code: 'SIGNUP_VALIDATION_FAILED', message });
+    if (!hasMockSchool(input.schoolId)) {
+      throw new AuthApiError({ code: 'SIGNUP_REFERENCE_NOT_FOUND', message: '학교를 찾을 수 없습니다.', status: 404 });
+    }
+  }
+
+  const request = toSignupRequest(input);
+  if (request.role === 'PARENT' &&
+    !hasMockStudentPlacement(request.schoolId, request.schoolClassId ?? 0, request.studentId ?? 0)) {
+    throw new AuthApiError({
+      code: 'SIGNUP_REFERENCE_NOT_FOUND',
+      message: '선택한 학교와 학급에서 학생 정보를 찾을 수 없습니다.',
+      status: 404,
+    });
   }
 
   const email = normalizeEmail(input.email);
@@ -121,16 +139,16 @@ async function signup(input: SignupInput): Promise<User> {
     throw new AuthApiError({ code: 'EMAIL_NOT_VERIFIED', message: '이메일 인증을 완료해 주세요.' });
   }
 
+  const { schoolId, schoolClassId, studentId, studentName, employeeNo } = request;
   const account: AuthAccount = {
     userId: Math.max(300, ...accounts.map((entry) => entry.userId)) + 1,
     email,
-    // Parents do not provide a personal name; retain the existing User display-name shape.
-    name: input.role === 'TEACHER' ? input.name.trim() : '학부모',
+    name: request.name,
     password: input.password,
-    role: input.role,
-    ...(input.role === 'PARENT'
-      ? { child: { ...input.child, name: input.child.name.trim() } }
-      : { schoolId: input.schoolId, employeeNo: input.employeeNo.trim() }),
+    role: request.role,
+    ...(request.role === 'PARENT'
+      ? { child: { schoolId, schoolClassId, studentId, studentName } }
+      : { schoolId, employeeNo: employeeNo ?? '' }),
   };
   writeStoredJson(ACCOUNT_STORAGE_KEY, [...accounts, account]);
   removeStoredValue(SIGNUP_VERIFICATION_STORAGE_KEY);

@@ -1,4 +1,5 @@
 import type { User, UserRole } from '../../shared/types';
+import type { SignupRequest } from './api/authTypes';
 import type { ChildSignupInfo } from './childSignup';
 import type { TeacherSignupInfo } from './teacherSignup';
 
@@ -9,13 +10,40 @@ export type LoginInput = {
 
 export type SignupRole = Exclude<UserRole, 'ADMIN'>;
 
+// Signup form state. toSignupRequest maps it onto the backend SignupRequest.
 export type SignupInput = {
   email: string;
   password: string;
+  // The account holder's own name, required for every role.
+  name: string;
 } & (
-  | { role: 'PARENT'; child: ChildSignupInfo; name?: never }
-  | ({ role: 'TEACHER'; name: string; child?: never } & TeacherSignupInfo)
+  | { role: 'PARENT'; child: ChildSignupInfo; schoolId?: never; employeeNo?: never }
+  | ({ role: 'TEACHER'; child?: never } & TeacherSignupInfo)
 );
+
+export function toSignupRequest(input: SignupInput): SignupRequest {
+  const base = { email: input.email.trim(), password: input.password, name: input.name.trim() };
+  if (input.role === 'PARENT') {
+    return {
+      ...base,
+      role: 'PARENT',
+      schoolId: input.child.schoolId,
+      schoolClassId: input.child.schoolClassId,
+      studentId: input.child.studentId,
+      studentName: input.child.name.trim(),
+      employeeNo: null,
+    };
+  }
+  return {
+    ...base,
+    role: 'TEACHER',
+    schoolId: input.schoolId,
+    employeeNo: input.employeeNo.trim(),
+    schoolClassId: null,
+    studentId: null,
+    studentName: null,
+  };
+}
 
 export type AuthContextValue = {
   user: User | null;

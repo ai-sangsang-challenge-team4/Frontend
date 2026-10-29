@@ -9,7 +9,7 @@ export function readAuthSession(): AuthSession | null {
   if (
     !value ||
     typeof value.accessToken !== 'string' || !value.accessToken.trim() ||
-    typeof value.refreshToken !== 'string' || !value.refreshToken.trim() ||
+    (value.refreshToken !== undefined && (typeof value.refreshToken !== 'string' || !value.refreshToken.trim())) ||
     typeof value.expiresAt !== 'number' || !Number.isFinite(value.expiresAt) ||
     !isUser(value.user)
   ) {

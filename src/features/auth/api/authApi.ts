@@ -1,8 +1,12 @@
 import type { AuthApi } from './authApiContract';
+import { httpAuthApi } from './httpAuthApi';
 import { mockAuthApi } from './mockAuthApi';
 
-// Replace this adapter when the backend API contract is available.
-const api: AuthApi = mockAuthApi;
+// VITE_AUTH_API=http calls the backend (login, signup, signup options). Anything else uses the mock.
+export const authApiMode: 'mock' | 'http' =
+  import.meta.env?.VITE_AUTH_API === 'http' ? 'http' : 'mock';
+
+const api: AuthApi = authApiMode === 'http' ? httpAuthApi : mockAuthApi;
 
 export const {
   login,
@@ -12,6 +16,8 @@ export const {
   sendEmailVerificationCode,
   verifyEmailCode,
 } = api;
+
+export const isEmailVerificationSupported = Boolean(sendEmailVerificationCode && verifyEmailCode);
 
 export {
   AuthApiError,
@@ -31,3 +37,6 @@ export {
   persistAuthSession,
   readAuthSession,
 } from './authStorage';
+export { httpAuthApi } from './httpAuthApi';
+export * from './signupOptionsApi';
+export type { SignupOptionResponse } from './authTypes';
