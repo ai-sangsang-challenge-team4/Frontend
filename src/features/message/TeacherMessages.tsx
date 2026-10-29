@@ -26,7 +26,8 @@ import {
 import {
   emergencyOfficialProcedurePostId,
 } from '../safety/guidePostIds';
-import { getApiErrorMessage } from '../../shared/api';
+import { getApiErrorMessage, type ApiError } from '../../shared/api';
+import { AsyncContent } from '../../shared/components/feedback';
 import { useAuth } from '../auth';
 import { canSendEscalationRequest, getEscalationState, submitRiskReview } from '../escalation/api';
 import { canRequestEmergencyReview } from '../escalation/escalationRules';
@@ -71,6 +72,7 @@ import {
   getReplyLockNotice,
   getThreadRiskLevel,
   getVisibleRiskFactors,
+  hasOriginalMessage,
   isReplyLocked,
   matchesStatusFilter,
   needsTeacherReviewBeforeRequest,
@@ -79,6 +81,7 @@ import {
   riskScores,
   riskScoreToLevel,
   riskStageGuides,
+  serverSortOptions,
   sortOptions,
   statusChipStatus,
   statusLabel,
@@ -123,8 +126,13 @@ import {
   syncThreadWithEmergencyReview,
   systemRiskLevelFromApi,
 } from './escalationSnapshot';
+import { messageApiMode } from './api/teacherInboxApi';
 import { initialTeacherThreads } from './mockThreads';
 import { persistTeacherParentThread, readTeacherParentThreads } from './teacherParentMessages';
+import { useActiveMessageCount } from './useActiveMessageCount';
+import { useServerTeacherInbox } from './useServerTeacherInbox';
+
+const isServerInbox = messageApiMode === 'http';
 
 type TeacherMessagesProps = {
   initialThreadId?: string | null;
@@ -532,10 +540,21 @@ type BoardFilters = {
 
 const defaultBoardFilters: BoardFilters = { query: '', risk: 'all', sort: 'latest', status: 'active' };
 
+// Server inbox only: the page request state below the list.
+type ServerListStatus = {
+  error: ApiError | null;
+  hasNext: boolean;
+  isLoading: boolean;
+  isLoadingMore: boolean;
+  onLoadMore: () => void;
+  onRetry: () => void;
+};
+
 type BoardWorkspaceProps = {
   emptyDescription: string;
   emptyTitle: string;
   filters: BoardFilters;
+  serverList?: ServerListStatus;
   isDetailFilterOpen: boolean;
   onDetailFilterToggle: () => void;
   onFiltersChange: (filters: Partial<BoardFilters>) => void;
@@ -555,6 +574,7 @@ function BoardWorkspace({
   onSelect,
   onToggleStar,
   selectedThreadId,
+  serverList,
   threads,
 }: BoardWorkspaceProps) {
   const detailFilterId = useId();
@@ -622,7 +642,7 @@ function BoardWorkspace({
               className="board-filter-select board-detail-filter-select"
               menuLabel="정렬 기준"
               onValueChange={(nextValue) => onFiltersChange({ sort: nextValue as SortValue })}
-              options={sortOptions}
+              options={serverList ? serverSortOptions : sortOptions}
               value={filters.sort}
             />
           </div>
@@ -637,14 +657,37 @@ function BoardWorkspace({
         </div>
       ) : null}
 
-      <ThreadList
-        emptyDescription={emptyDescription}
-        emptyTitle={emptyTitle}
-        onSelect={onSelect}
-        onToggleStar={onToggleStar}
-        selectedThreadId={selectedThreadId}
-        threads={threads}
-      />
+      <AsyncContent
+        error={serverList?.error && threads.length === 0 ? serverList.error : null}
+        isLoading={Boolean(serverList?.isLoading)}
+        loadingMessage="메시지 목록을 불러오고 있어요."
+        onRetry={serverList?.onRetry}
+      >
+        <ThreadList
+          emptyDescription={emptyDescription}
+          emptyTitle={emptyTitle}
+          onSelect={onSelect}
+          onToggleStar={onToggleStar}
+          selectedThreadId={selectedThreadId}
+          threads={threads}
+        />
+        {serverList?.error && threads.length > 0 ? (
+          <p className="board-admin-share-error" role="alert">
+            {getApiErrorMessage(serverList.error, '메시지를 더 불러오지 못했습니다.')}{' '}
+            <button className="board-admin-share-retry" onClick={serverList.onRetry} type="button">다시 시도</button>
+          </p>
+        ) : null}
+        {serverList?.hasNext ? (
+          <button
+            className="board-outline-button board-thread-load-more"
+            disabled={serverList.isLoadingMore}
+            onClick={serverList.onLoadMore}
+            type="button"
+          >
+            {serverList.isLoadingMore ? '불러오는 중…' : '메시지 더 보기'}
+          </button>
+        ) : null}
+      </AsyncContent>
     </>
   );
 }
@@ -1106,7 +1149,7 @@ function RiskAnalysisPanel({
   const canInspectOriginal = Boolean(
     analysis.canViewOriginal &&
       analysis.originalMessageAvailable &&
-      thread.originalMessage,
+      hasOriginalMessage(thread),
   );
   const effectiveRiskLevel = getThreadRiskLevel(thread);
   const currentTone = systemRiskTone[effectiveRiskLevel];
@@ -1491,7 +1534,8 @@ type DetailProps = {
   onBack: () => void;
   onEvidencePackageCreate: (threadId: string) => void;
   onOpenReplyComposer: (threadId: string) => void;
-  onOriginalViewed: (threadId: string, evidence?: string) => void;
+  // Resolves once the original can be shown; a server thread fetches it first (POST /original-views).
+  onOriginalViewed: (threadId: string, evidence?: string) => Promise<boolean>;
   onReturnToReplyComposer: (threadId: string) => void;
   // Rejects with the API error so the panel can show it.
   onReviewComplete: (threadId: string, review: RiskReviewSubmission) => Promise<void>;
@@ -1542,7 +1586,7 @@ function ThreadDetail({
   const canInspectOriginal = Boolean(
     thread.analysis?.canViewOriginal &&
       thread.analysis.originalMessageAvailable &&
-      thread.originalMessage,
+      hasOriginalMessage(thread),
   );
   const conversationInfoText =
     effectiveRiskLevel === 'low'
@@ -1570,14 +1614,14 @@ function ThreadDetail({
     setOriginalRequest({ evidence, source: 'detail' });
   };
 
-  const confirmOriginalViewer = () => {
+  const confirmOriginalViewer = async () => {
     if (!originalRequest) {
       return;
     }
 
-    setOriginalViewer(originalRequest);
+    const request = originalRequest;
     setOriginalRequest(null);
-    onOriginalViewed(thread.id, originalRequest.evidence);
+    if (await onOriginalViewed(thread.id, request.evidence)) setOriginalViewer(request);
   };
   const closeOriginalViewer = () => {
     if (originalViewer?.source === 'replyComposer') {
@@ -2029,7 +2073,7 @@ function ReplyComposerPage({
   const canInspectOriginal = Boolean(
     thread.analysis?.canViewOriginal &&
       thread.analysis.originalMessageAvailable &&
-      thread.originalMessage,
+      hasOriginalMessage(thread),
   );
   const isBufferedContext = riskLevel !== 'low' ||
     Boolean(thread.analysis && getAnalysisStatus(thread) !== 'ready');
@@ -2280,15 +2324,23 @@ export function TeacherMessages({
     null,
   );
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [threads, setThreads] = useState(() => [...readTeacherParentThreads(user?.userId ?? 0), ...initialTeacherThreads]);
+  const [threads, setThreads] = useState<BoardThread[]>(() => isServerInbox
+    ? []
+    : [...readTeacherParentThreads(user?.userId ?? 0), ...initialTeacherThreads]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  // The sidebar badge follows the inbox's default "진행 중 상담" filter.
-  const activeMessageCount = threads.filter((thread) => thread.status !== 'complete').length;
+  const serverInbox = useServerTeacherInbox({ enabled: isServerInbox, filters, setThreads });
+  const { loadDetail: loadServerDetail, viewOriginal: viewServerOriginal } = serverInbox;
+  // The sidebar badge follows the inbox's default "진행 중 상담" filter (the server's OPEN count over HTTP).
+  const serverActiveMessageCount = useActiveMessageCount(user?.userId ?? 0);
+  const activeMessageCount = isServerInbox
+    ? serverActiveMessageCount
+    : threads.filter((thread) => thread.status !== 'complete').length;
   const dismissToast = useCallback(() => setToastMessage(null), []);
   // Submission keys already handled, so a double click or retry stores the reply only once.
   const sentReplyKeysRef = useRef(new Set<string>());
 
   useEffect(() => {
+    if (isServerInbox) return;
     const refresh = () => setThreads((current) => [
       ...readTeacherParentThreads(user?.userId ?? 0), ...current.filter((thread) => thread.parentUserId === undefined),
     ]);
@@ -2339,6 +2391,12 @@ export function TeacherMessages({
   }, [syncRouteState]);
 
   const filteredThreads = useMemo(() => {
+    // The server already filtered and sorted the list.
+    if (isServerInbox) {
+      return serverInbox.listIds
+        .map((id) => threads.find((thread) => thread.id === id))
+        .filter((thread): thread is BoardThread => Boolean(thread));
+    }
     const normalizedQuery = filters.query.trim().toLowerCase();
 
     return threads.filter((thread) => {
@@ -2362,7 +2420,30 @@ export function TeacherMessages({
         matchesQuery
       );
     }).sort((left, right) => compareThreads(left, right, filters.sort));
-  }, [filters, threads]);
+  }, [filters, serverInbox.listIds, threads]);
+
+  // Opening a server thread loads its detail, conversation, risk, and history.
+  useEffect(() => {
+    if (!isServerInbox || !selectedThreadId) return;
+    const controller = new AbortController();
+    loadServerDetail(selectedThreadId, controller.signal).catch((error: unknown) => {
+      if (controller.signal.aborted) return;
+      setToastMessage(getApiErrorMessage(error, '메시지 상세 정보를 불러오지 못했습니다.'));
+    });
+    return () => controller.abort();
+  }, [loadServerDetail, selectedThreadId]);
+
+  // Replies and closing are a later step (D); until then a server thread must not look answered locally.
+  const blockServerOnlyAction = (thread: BoardThread | undefined) => {
+    if (!thread?.serverComplaintId) return false;
+    setToastMessage('서버 메시지의 답변 전송·상담 완료는 아직 연동되지 않았습니다.');
+    return true;
+  };
+
+  const refreshServerThread = (threadId: string) => {
+    if (!isServerInbox) return;
+    loadServerDetail(threadId).catch(() => undefined);
+  };
 
   const starredThreads = filteredThreads.filter((thread) => thread.isPinned);
   const draftThreads = filteredThreads.filter(
@@ -2593,6 +2674,7 @@ export function TeacherMessages({
         },
       ]),
     );
+    refreshServerThread(threadId);
   };
 
   const logReplyBlocked = (threadId: string) => {
@@ -2721,6 +2803,8 @@ export function TeacherMessages({
         riskReviewRequired: false,
       };
     });
+    // The server holds the resulting level, lock, and RISK_REVIEWED history.
+    refreshServerThread(threadId);
   };
 
   const handleServerStateLoaded: RiskAnalysisPanelProps['onServerStateLoaded'] = (threadId, state) => {
@@ -2793,7 +2877,17 @@ export function TeacherMessages({
     });
   };
 
-  const handleOriginalViewed = (threadId: string, evidence?: string) => {
+  const handleOriginalViewed = async (threadId: string, evidence?: string) => {
+    // The server records the view itself (ORIGINAL_VIEWED) and its history replaces the local log.
+    if (threads.find((thread) => thread.id === threadId)?.serverComplaintId) {
+      try {
+        await viewServerOriginal(threadId);
+        return true;
+      } catch (error) {
+        setToastMessage(getApiErrorMessage(error, '원문을 불러오지 못했습니다. 다시 시도해 주세요.'));
+        return false;
+      }
+    }
     updateThread(threadId, (thread) =>
       appendActivityLogs(thread, [
         {
@@ -2805,10 +2899,11 @@ export function TeacherMessages({
         },
       ]),
     );
+    return true;
   };
 
-  const handleOpenOriginalPageFromComposer = (threadId: string) => {
-    handleOriginalViewed(threadId);
+  const handleOpenOriginalPageFromComposer = async (threadId: string) => {
+    if (!(await handleOriginalViewed(threadId))) return;
     setInitialDetailTabRequest({ tab: 'conversation', threadId });
     setInitialOriginalViewerRequest({
       request: { source: 'replyComposer' },
@@ -2830,7 +2925,7 @@ export function TeacherMessages({
   const handleSubmitReply = (threadId: string) => {
     const thread = threads.find((currentThread) => currentThread.id === threadId);
 
-    if (!thread) {
+    if (!thread || blockServerOnlyAction(thread)) {
       return;
     }
 
@@ -2937,6 +3032,11 @@ export function TeacherMessages({
 
   const workspaceProps = {
     filters,
+    serverList: isServerInbox ? {
+      ...serverInbox.listState,
+      onLoadMore: serverInbox.loadMore,
+      onRetry: serverInbox.retry,
+    } : undefined,
     isDetailFilterOpen,
     onDetailFilterToggle: () => setIsDetailFilterOpen((isOpen) => !isOpen),
     onFiltersChange: (nextFilters: Partial<BoardFilters>) =>
@@ -3051,7 +3151,10 @@ export function TeacherMessages({
         />
         <main className="board-detail-page">
           <ThreadDetail
-            onConsultationComplete={(threadId) => updateThread(threadId, (thread) => ({ ...thread, status: 'complete', needsTeacherReview: false }))}
+            onConsultationComplete={(threadId) => {
+              if (blockServerOnlyAction(threads.find((thread) => thread.id === threadId))) return;
+              updateThread(threadId, (thread) => ({ ...thread, status: 'complete', needsTeacherReview: false }));
+            }}
             initialOriginalViewer={
               initialOriginalViewerRequest?.threadId === selectedThread.id
                 ? initialOriginalViewerRequest.request

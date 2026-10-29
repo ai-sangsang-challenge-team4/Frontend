@@ -5,6 +5,8 @@ interface ImportMetaEnv {
   readonly VITE_API_TIMEOUT_MS?: string;
   // 'http' calls the backend auth and signup option endpoints; anything else uses the mock.
   readonly VITE_AUTH_API?: string;
+  // 'http' reads the teacher inbox from the backend; anything else keeps the browser-local inbox.
+  readonly VITE_MESSAGE_API?: string;
   // 'http' calls the backend escalation endpoints; anything else uses the mock.
   readonly VITE_ESCALATION_API?: string;
   readonly VITE_MOCK_AUTH_DELAY_MS?: string;
