@@ -370,7 +370,9 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
     <ParentMessageHeader title={threadId ? '추가 문의하기' : '새 문의 작성'} />
     <main className="layout-main"><EmptyState
       title={localOnlyFollowUp ? '서버에 등록되지 않은 문의입니다. 새 문의로 작성해 주세요.' : '작성할 문의를 찾을 수 없습니다.'}
-      action={<Button onClick={() => navigate('/parent/messages')}>문의 내역</Button>} /></main>
+      action={localOnlyFollowUp
+        ? <Button onClick={() => navigate('/parent/messages/new?fresh=1')}>새 문의 작성</Button>
+        : <Button onClick={() => navigate('/parent/messages')}>문의 내역</Button>} /></main>
   </>;
 
   const childHelper = serverLocked ? 'AI 분석을 시작한 문의는 자녀를 바꿀 수 없습니다.'

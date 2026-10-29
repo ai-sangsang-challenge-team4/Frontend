@@ -120,6 +120,8 @@ test('HTTP 모드에서 서버 ID가 없는 로컬 문의는 mock 분석으로 �
   await expect(page.getByText('서버에 등록되지 않은 문의입니다. 새 문의로 작성해 주세요.', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'AI 분석 시작', exact: true })).toHaveCount(0);
   expect(calls.some((call) => call.includes('/risk-analysis'))).toBe(false);
+  await page.getByRole('button', { name: '새 문의 작성', exact: true }).click();
+  await expect(page).toHaveURL(/\/parent\/messages\/new\?fresh=1$/);
 });
 
 test('추가 문의는 서버 메시지 초안부터 분석·전송까지 연결되고 기존 대화에 한 번만 추가된다', async ({ page }) => {
