@@ -95,6 +95,12 @@ export const sortOptions: { label: string; value: SortValue }[] = [
   { label: '상담 상태순', value: 'status' },
 ];
 
+// GET /teacher/complaints sorts only by latest activity.
+export const serverSortOptions: { label: string; value: SortValue }[] = [
+  { label: '최신순', value: 'latest' },
+  { label: '오래된순', value: 'oldest' },
+];
+
 export function matchesStatusFilter(status: ThreadStatus, filter: FilterValue) {
   if (filter === 'all') return true;
   return filter === 'active' ? status !== 'complete' : status === 'complete';
@@ -109,6 +115,7 @@ export function compareThreads(left: BoardThread, right: BoardThread, sort: Sort
       systemRiskReviewLevels.indexOf(getThreadRiskLevel(left)) || byLatest;
   }
   if (sort === 'status') return statusSortOrder[left.status] - statusSortOrder[right.status] || byLatest;
+  if (sort === 'oldest') return -byLatest;
   return byLatest;
 }
 
@@ -295,6 +302,12 @@ export function getBufferedSummaryText(thread: BoardThread) {
       ? thread.analysis.summary.text?.trim() || undefined : undefined;
   }
   return thread.moderatedSummary?.trim() || undefined;
+}
+
+// A server thread's original comes from POST /original-views when opened, so it counts as available
+// before it is loaded.
+export function hasOriginalMessage(thread: BoardThread) {
+  return Boolean(thread.originalMessage?.trim() || thread.serverComplaintId);
 }
 
 export function getPrimaryParentMessage(thread: BoardThread) {
