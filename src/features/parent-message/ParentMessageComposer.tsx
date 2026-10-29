@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import analysisIllustration from '../../shared/assets/parent/message-analysis.svg';
 import { getApiErrorMessage, isApiError } from '../../shared/api';
 import { Button, EmptyState, Select, TextareaField, TextField, Toast } from '../../shared/components/ui';
-import { COMPLAINT_TITLE_MAX_LENGTH, parentMessageApiMode } from './api/parentComplaintApi';
+import { COMPLAINT_TITLE_MAX_LENGTH, parentComplaintApi, parentMessageApiMode } from './api/parentComplaintApi';
 import {
   findSentMessage, mockConnectedTeachers, readMessageDraft, readMessageDrafts, saveMessageDraft,
   type MessageDraft, type ServerComplaintDraft,
@@ -13,7 +13,7 @@ import { ParentMessageHeader } from './ParentMessageHeader';
 import { analyzeParentMessage } from './parentMessageApi';
 import { createMessageReview, MESSAGE_MAX_LENGTH, type ParentMessageAnalysis } from './parentMessageTypes';
 import { getDraftPath } from './conversation';
-import { analyzeServerDraft, createServerDraft, type ServerDraftTarget } from './serverComplaint';
+import { analyzeServerDraft, createServerDraft, toFollowUpServerDraft, type ServerDraftTarget } from './serverComplaint';
 import { useServerRecipients } from './useServerRecipients';
 import { checkPersonalInfo, maskContactInfo, MaskingError, PrivacyMaskingNotice } from '../pii';
 import './ParentMessageComposer.css';
@@ -44,8 +44,8 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
       return { thread: null, saved: null, unavailable: true };
     }
   });
-  // Follow-ups stay on the local flow; the message-draft API is not connected yet.
-  const isServer = parentMessageApiMode === 'http' && !threadId;
+  const isServer = parentMessageApiMode === 'http';
+  const isServerFollowUp = isServer && Boolean(threadId);
   const [draft, setDraft] = useState<MessageDraft>(() => {
     const saved = initial.saved;
     // A review made without a server draft (in mock mode) cannot be submitted to the server, so it is analyzed again.
@@ -59,8 +59,12 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
   const [errors, setErrors] = useState<FieldErrors>({});
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [maskingFailed, setMaskingFailed] = useState(false);
+  const [canReloadServerDraft, setCanReloadServerDraft] = useState(false);
   const [notice, setNotice] = useState<string | null>(location.state?.draftSaved ? '문의가 임시저장되었습니다.' : null);
   const analysisPending = useRef(false);
+  const draftEdits = useRef(0);
+  const reloadAttempt = useRef(0);
+  useEffect(() => () => { reloadAttempt.current += 1; }, []);
   const analysisTarget = useRef<ServerDraftTarget | null>(null);
   const creationKey = `${userId}:${draft.messageId}`;
   const [isCreatingServerDraft, setIsCreatingServerDraft] = useState(() => pendingCreations.has(creationKey));
@@ -68,17 +72,35 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
   const dismissNotice = useCallback(() => setNotice(null), []);
   // Title, child, and teacher cannot change once the server draft exists (PATCH only takes the content),
   // nor while its creation is still running after the parent left the analysis.
-  const serverLocked = isServer && (Boolean(draft.server) || isCreatingServerDraft);
+  const serverLocked = isServer && (isServerFollowUp || Boolean(draft.server) || isCreatingServerDraft);
   const studentId = draft.server?.studentId ?? draft.studentId;
-  const { children, recipients } = useServerRecipients(isServer && !draft.server, studentId);
+  const { children, recipients } = useServerRecipients(isServer && !isServerFollowUp && !draft.server, studentId);
   const retryRecipients = recipients.retry;
-  const teacherOptions = !isServer ? mockConnectedTeachers
+  const teacherOptions = isServerFollowUp && initial.thread ? [{ value: initial.thread.teacherId, label: initial.thread.teacherName }]
+    : !isServer ? mockConnectedTeachers
     : draft.server ? [{ value: String(draft.server.teacherId), label: `${draft.server.teacherName} 선생님` }]
       : (recipients.data ?? []).map((teacher) => ({ value: String(teacher.teacherId), label: teacher.label }));
   const childOptions = (children.data ?? []).map((child) => ({ value: String(child.studentId), label: child.studentName }));
-  if (draft.server && !childOptions.some((option) => option.value === String(draft.server?.studentId))) {
+  if (draft.server?.studentId && !childOptions.some((option) => option.value === String(draft.server?.studentId))) {
     childOptions.unshift({ value: String(draft.server.studentId), label: '선택한 자녀' });
   }
+
+  // Recover a saved server follow-up when there is no browser draft (e.g. after changing devices).
+  useEffect(() => {
+    const thread = initial.thread;
+    if (!isServerFollowUp || initial.saved || !thread?.serverComplaintId) return;
+    const controller = new AbortController();
+    void parentComplaintApi.getFollowUpDraft(thread.serverComplaintId, controller.signal).then((saved) => {
+      if (!saved || controller.signal.aborted) return;
+      setDraft((previous) => previous.body || previous.server ? previous : {
+        ...previous, body: saved.content,
+        server: toFollowUpServerDraft(previous, { teacherId: Number(thread.teacherId), teacherName: thread.teacherName }, saved),
+      });
+    }).catch((failure: unknown) => {
+      if (!controller.signal.aborted) setNotice(getApiErrorMessage(failure, '추가 문의 초안을 불러오지 못했습니다.'));
+    });
+    return () => controller.abort();
+  }, [initial.saved, initial.thread, isServerFollowUp]);
 
   // Preselect the only or first child, then the homeroom teacher (the server lists them first).
   const firstChildId = children.data?.[0]?.studentId;
@@ -198,6 +220,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
             setErrors({ studentId: CHILD_LINK_MESSAGE });
             window.requestAnimationFrame(() => document.getElementById('parent-message-studentId')?.focus());
           } else {
+            setCanReloadServerDraft(isServerFollowUp && isApiError(failure) && failure.code === 'PARENT_DRAFT_CONFLICT');
             setNotice(getApiErrorMessage(failure, ANALYSIS_FAILED_MESSAGE));
           }
           return;
@@ -218,9 +241,33 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
     void analyze();
 
     return () => controller.abort();
-  }, [creationKey, draft, isAnalyzing, isServer, navigate, retryRecipients, userId]);
+  }, [creationKey, draft, isAnalyzing, isServer, isServerFollowUp, navigate, retryRecipients, userId]);
+
+  async function reloadServerFollowUp() {
+    const thread = initial.thread;
+    if (!thread?.serverComplaintId) return;
+    const attempt = ++reloadAttempt.current;
+    const edits = draftEdits.current;
+    try {
+      const saved = await parentComplaintApi.getFollowUpDraft(thread.serverComplaintId);
+      if (attempt !== reloadAttempt.current) return;
+      if (edits !== draftEdits.current || analysisPending.current) {
+        setNotice('불러오는 동안 내용이 변경되어 현재 입력한 내용을 유지했습니다.');
+        return;
+      }
+      setDraft((previous) => ({
+        ...previous, body: saved?.content ?? previous.body, review: undefined, status: 'DRAFT',
+        server: saved ? toFollowUpServerDraft(previous, { teacherId: Number(thread.teacherId), teacherName: thread.teacherName }, saved) : undefined,
+      }));
+      setCanReloadServerDraft(false);
+      setNotice(saved ? '서버 초안을 불러왔습니다.' : '저장된 서버 초안이 없습니다. 현재 내용으로 다시 분석해 주세요.');
+    } catch (failure) {
+      if (attempt === reloadAttempt.current) setNotice(getApiErrorMessage(failure, '서버 초안을 불러오지 못했습니다.'));
+    }
+  }
 
   function updateField(field: Exclude<FieldName, 'studentId'>, value: string) {
+    draftEdits.current += 1;
     setDraft((previous) => ({ ...previous, [field]: value, status: 'DRAFT', review: undefined }));
     setErrors((previous) => ({ ...previous, [field]: undefined }));
     setMaskingFailed(false);
@@ -256,7 +303,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
     event?.preventDefault();
     if (analysisPending.current) return;
     const nextErrors: FieldErrors = {};
-    if (isServer && !studentId) nextErrors.studentId = '문의할 자녀를 선택해 주세요.';
+    if (isServer && !isServerFollowUp && !studentId) nextErrors.studentId = '문의할 자녀를 선택해 주세요.';
     const teacher = teacherOptions.find((option) => option.value === draft.teacherId);
     if (!teacher) {
       nextErrors.teacherId = '연결된 선생님을 선택해 주세요.';
@@ -294,7 +341,9 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
       });
       saveMessageDraft(userId, nextDraft);
       const recipient = recipients.data?.find((item) => String(item.teacherId) === draft.teacherId);
-      analysisTarget.current = draft.server ?? (studentId && recipient
+      analysisTarget.current = draft.server ?? (isServerFollowUp && initial.thread?.serverComplaintId
+        ? { complaintId: initial.thread.serverComplaintId, teacherId: Number(initial.thread.teacherId), teacherName: initial.thread.teacherName }
+        : studentId && recipient
         ? { studentId, teacherId: recipient.teacherId, teacherName: recipient.teacherName } : null);
       analysisPending.current = true;
       setMaskingFailed(false);
@@ -316,12 +365,11 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
     }
   }
 
-  // A follow-up on an inquiry submitted to the server needs the message-draft API, which is not connected yet.
-  const serverFollowUp = parentMessageApiMode === 'http' && initial.thread?.serverComplaintId !== undefined;
-  if (initial.unavailable || serverFollowUp) return <>
+  const localOnlyFollowUp = isServerFollowUp && initial.thread?.serverComplaintId === undefined;
+  if (initial.unavailable || localOnlyFollowUp) return <>
     <ParentMessageHeader title={threadId ? '추가 문의하기' : '새 문의 작성'} />
     <main className="layout-main"><EmptyState
-      title={serverFollowUp ? '추가 문의는 아직 준비 중입니다.' : '작성할 문의를 찾을 수 없습니다.'}
+      title={localOnlyFollowUp ? '서버에 등록되지 않은 문의입니다. 새 문의로 작성해 주세요.' : '작성할 문의를 찾을 수 없습니다.'}
       action={<Button onClick={() => navigate('/parent/messages')}>문의 내역</Button>} /></main>
   </>;
 
@@ -370,7 +418,11 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
             </section>
 
             <form className="parent-write-form" noValidate onSubmit={handleAnalyze}>
-              {isServer ? <Select containerClassName="parent-write-field" disabled={serverLocked || childOptions.length === 0}
+              {canReloadServerDraft ? <div role="alert">
+                <p>다른 곳에서 저장한 초안과 내용이 다릅니다. 서버 초안을 불러오면 현재 입력한 내용이 서버의 내용으로 바뀝니다.</p>
+                <Button onClick={() => { void reloadServerFollowUp(); }} variant="outline">서버 초안 불러오기</Button>
+              </div> : null}
+              {isServer && !isServerFollowUp ? <Select containerClassName="parent-write-field" disabled={serverLocked || childOptions.length === 0}
                 error={errors.studentId} helperText={childHelper} id="parent-message-studentId" label="자녀" name="studentId"
                 onChange={(event) => selectChild(event.target.value)} options={childOptions}
                 placeholder="자녀를 선택해 주세요." required value={studentId ? String(studentId) : ''} /> : null}

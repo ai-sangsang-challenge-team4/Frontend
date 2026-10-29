@@ -1,5 +1,6 @@
 import type { ReplyTemplateDraft } from '../message/replyTemplates';
 import type { ReplyDraftState, ReplyDraftTab } from '../message/types';
+import type { RiskSummaryResponse } from './api/parentComplaintTypes';
 
 export const MESSAGE_MAX_LENGTH = 1500;
 
@@ -29,6 +30,10 @@ export type ParentMessageAnalysis = {
   // The server already reviewed an earlier version of this message, so the edited content gets no new
   // suggestions and is analyzed again on submit.
   analyzeOnSubmit?: boolean;
+  riskSummary?: Pick<RiskSummaryResponse, 'riskScore' | 'riskLevel'>;
+  revisionReason?: string | null;
+  maskedContent?: string;
+  maskingContentVersion?: number;
 };
 
 export type MessageReview = {
@@ -42,6 +47,7 @@ export type ConsultationStatus = 'before' | 'inProgress' | 'complete';
 
 export type ConversationMessage = {
   id: string;
+  serverMessageId?: number;
   authorRole: 'parent' | 'teacher';
   body: string;
   deliveryStatus?: 'SENT_TO_PARENT';
@@ -61,6 +67,7 @@ export type SentParentMessage = {
   messageId: string;
   // Set when the inquiry was submitted to the backend; the local record is a copy for the receipt and history.
   serverComplaintId?: number;
+  serverMessageId?: number;
   teacherId: string;
   teacherName: string;
   title: string;
@@ -97,8 +104,9 @@ export function createMessageReview(analysis: ParentMessageAnalysis): MessageRev
 }
 
 export function getSelectedMessage(original: string, review: MessageReview) {
-  const text = review.source === 'AI' ? review.aiText : review.originalEdit ?? original;
-  const baseline = review.source === 'AI' ? review.analysis.revisedText : original;
+  const originalText = review.analysis.maskedContent ?? original;
+  const text = review.source === 'AI' ? review.aiText : review.originalEdit ?? originalText;
+  const baseline = review.source === 'AI' ? review.analysis.revisedText : originalText;
   const selectionType: MessageSelectionType = text === baseline ? review.source : 'CUSTOM';
   return { text, selectionType };
 }
