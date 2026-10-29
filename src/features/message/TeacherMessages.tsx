@@ -1618,6 +1618,8 @@ function ThreadDetail({
   const isLocked = isReplyLocked(thread);
   const effectiveRiskLevel = getThreadRiskLevel(thread);
   const hasDraft = hasReplyDraft(thread);
+  // Server threads: after the reply the turn is the parent's, so there is nothing to write yet.
+  const serverReplyBlockReason = getServerReplyBlockReason(thread);
   const lockedGuide = getReplyLockNotice(thread);
   const bufferedSummaryText = getBufferedSummaryText(thread);
   const needsBufferedSummary = effectiveRiskLevel !== 'low' ||
@@ -1909,11 +1911,20 @@ function ThreadDetail({
           ) : (
             <>
               <div className="board-answer-cta-copy">
-                <strong>답변 작성이 필요합니다.</strong>
-                <p>
-                  학부모 메시지와 위험 요소를 확인한 뒤 답변 작성 도우미에서
-                  초안을 다듬을 수 있습니다.
-                </p>
+                {serverReplyBlockReason ? (
+                  <>
+                    <strong>지금은 답변할 차례가 아닙니다.</strong>
+                    <p>{serverReplyBlockReason}</p>
+                  </>
+                ) : (
+                  <>
+                    <strong>답변 작성이 필요합니다.</strong>
+                    <p>
+                      학부모 메시지와 위험 요소를 확인한 뒤 답변 작성 도우미에서
+                      초안을 다듬을 수 있습니다.
+                    </p>
+                  </>
+                )}
               </div>
               <div className="board-answer-actions">
                 <button
@@ -1924,13 +1935,15 @@ function ThreadDetail({
                 >
                   {thread.status === 'complete' ? '상담 완료됨' : '상담 완료 처리'}
                 </button>
-                <button
-                  className="board-primary-button board-reply-compose-button"
-                  onClick={() => onOpenReplyComposer(thread.id)}
-                  type="button"
-                >
-                  {hasDraft ? '답변 이어서 작성하기' : '답변 작성하러 가기'}
-                </button>
+                {serverReplyBlockReason ? null : (
+                  <button
+                    className="board-primary-button board-reply-compose-button"
+                    onClick={() => onOpenReplyComposer(thread.id)}
+                    type="button"
+                  >
+                    {hasDraft ? '답변 이어서 작성하기' : '답변 작성하러 가기'}
+                  </button>
+                )}
               </div>
             </>
           )}
@@ -2293,6 +2306,7 @@ function ReplyComposerPage({
 
       <div className="board-reply-composer">
         <ReplyCheckPanel
+          isAiDraftFromServer={isServerThread}
           isOpen={isCheckPanelOpen}
           onOpenReference={setReferenceSource}
           onToggle={() => setIsCheckPanelOpen((isOpen) => !isOpen)}

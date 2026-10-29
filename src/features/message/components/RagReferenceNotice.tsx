@@ -2,11 +2,13 @@ import { formatRegulationSource, type RegulationSearchResult, type RegulationSou
 import { ExternalLinkIcon, ReferenceBookIcon } from './MessageIcons';
 
 type RagReferenceNoticeProps = {
+  // Server threads: the backend writes the AI draft without this search, so a miss does not stop it.
+  isAiDraftFromServer?: boolean;
   onOpenReference: (source: RegulationSource) => void;
   result: RegulationSearchResult;
 };
 
-export function RagReferenceNotice({ onOpenReference, result }: RagReferenceNoticeProps) {
+export function RagReferenceNotice({ isAiDraftFromServer = false, onOpenReference, result }: RagReferenceNoticeProps) {
   return (
     <article>
       <span>
@@ -27,7 +29,9 @@ export function RagReferenceNotice({ onOpenReference, result }: RagReferenceNoti
               </div>
             ))
           ) : result.status === 'not_found' ? (
-            <p>관련 규정이 등록된 자료에 없어 AI 초안을 생성하지 않습니다. 직접 작성해 주세요.</p>
+            <p>{isAiDraftFromServer
+              ? '관련 규정이 등록된 자료에 없습니다. 답변 내용을 직접 확인해 주세요.'
+              : '관련 규정이 등록된 자료에 없어 AI 초안을 생성하지 않습니다. 직접 작성해 주세요.'}</p>
           ) : (
             <p>규정 검색이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.</p>
           )}
