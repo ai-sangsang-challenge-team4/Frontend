@@ -3,28 +3,34 @@ import type {
   EscalationStatus,
   HistoryEventType,
   ComplaintStatus,
+  EmergencyReviewDecision,
   MessageSenderRole,
-  RiskChangeDecision,
   RiskLevel,
   RiskReviewDirection,
   RiskReviewStatus,
 } from '../../shared/types';
 
-// Shapes in this file follow the backend OpenAPI spec (/v3/api-docs).
-// Do not add fields the spec does not define.
+// Shapes in this file follow the backend DTOs (escalation/dto, risk/dto, complaint/teacher/dto).
+// Where /v3/api-docs and the code disagree, the code wins. Do not add fields the backend does not define.
+// Dates are LocalDateTime strings without a time zone (e.g. 2026-10-28T12:18:23.227).
 
 // Thread IDs are strings in the mock inbox; the server only knows numeric complaintId.
 export type ComplaintId = number | string;
 
 // GET /teacher/complaints/{complaintId}/escalation and every admin action response.
 export type EscalationStateResponse = {
-  // TODO(backend): nullability is not stated in the spec; assumed null while NOT_SHARED.
+  // null while NOT_SHARED.
   escalationId: number | null;
+  // The latest emergency review request, or null when none was made.
+  emergencyReviewRequestId: number | null;
   escalationStatus: EscalationStatus;
-  // TODO(backend): nullability is not stated in the spec; assumed null when no risk change was requested.
+  // Status of that emergency review request; null when none was made.
   riskReviewStatus: RiskReviewStatus | null;
-  currentRiskScore: number;
-  currentRiskLevel: RiskLevel;
+  // null only when the complaint has no completed analysis (NOT_SHARED).
+  currentRiskScore: number | null;
+  currentRiskLevel: RiskLevel | null;
+  // True while the emergency policy holds, even after the reviewer applied a lower score.
+  safetyLock: boolean;
 };
 
 // POST /teacher/complaints/{complaintId}/escalation (201, body is a plain string)
@@ -42,8 +48,11 @@ export type TeacherRiskReviewRequest = {
   reason: string | null;
 };
 
+// @JsonInclude(NON_NULL): a review applied right away has riskReviewId; lowering an EMERGENCY score
+// instead opens an emergency review and returns emergencyReviewRequestId with PENDING_ADMIN_APPROVAL.
 export type TeacherRiskReviewResponse = {
-  riskReviewId: number;
+  riskReviewId?: number;
+  emergencyReviewRequestId?: number;
   complaintId: number;
   riskAnalysisId: number;
   previousScore: number;
@@ -51,21 +60,26 @@ export type TeacherRiskReviewResponse = {
   riskScore: number;
   riskLevel: RiskLevel;
   direction: RiskReviewDirection;
-  reason: string;
+  // Omitted when no reason was given.
+  reason?: string;
   reviewedBy: string;
   reviewedAt: string;
   status: RiskReviewStatus;
+  safetyLock: boolean;
 };
 
 // GET /admin/escalations, GET /admin/escalations/{escalationId}
-// TODO(backend): riskReviewStatus is missing, so the admin screen cannot tell a pending risk change on load.
 export type AdminEscalationSummaryResponse = {
   escalationId: number;
+  // The complaint's latest emergency review request, or null when none was made.
+  emergencyReviewRequestId: number | null;
   complaintId: number;
   sharedBy: string;
   reason: string;
   currentRiskLevel: RiskLevel;
   escalationStatus: EscalationStatus;
+  riskReviewStatus: RiskReviewStatus | null;
+  safetyLock: boolean;
   sharedAt: string;
 };
 
@@ -79,10 +93,42 @@ export type EscalationMessageRequest = {
   message: string;
 };
 
-// POST /admin/escalations/{escalationId}/risk-change-decision
-export type RiskChangeDecisionRequest = {
-  status: RiskChangeDecision;
-  message: string;
+// POST /teacher/complaints/{complaintId}/emergency-review (201)
+export type EmergencyReviewCreateRequest = {
+  // 1~6, below the current EMERGENCY score.
+  riskScore: number;
+  // Required, up to 300 characters.
+  reason: string;
+  // Omitted: the shared admin, or else the first admin.
+  reviewerId?: number;
+};
+
+// PATCH /admin/emergency-review/{requestId}. status or safetyLock is required.
+// Applying does not lift the lock; that takes { safetyLock: false }.
+export type EmergencyReviewUpdateRequest = {
+  status?: EmergencyReviewDecision;
+  safetyLock?: boolean;
+  // Optional, up to 500 characters.
+  message?: string;
+};
+
+// Every emergency review endpoint.
+export type EmergencyReviewResponse = {
+  requestId: number;
+  complaintId: number;
+  riskAnalysisId: number;
+  previousRiskScore: number;
+  previousRiskLevel: RiskLevel;
+  requestedRiskScore: number;
+  requestedRiskLevel: RiskLevel;
+  reason: string;
+  status: RiskReviewStatus;
+  safetyLock: boolean;
+  reviewerId: number;
+  reviewerName: string;
+  requestedAt: string;
+  decidedAt: string | null;
+  safetyLockUpdatedAt: string | null;
 };
 
 export type ConversationMessage = {
@@ -133,25 +179,28 @@ export type TeacherRiskResponse = {
   riskAnalysisId: number;
   riskScore: number;
   riskLevel: RiskLevel;
-  reviewScore: number | null;
-  reviewLevel: RiskLevel | null;
+  // The server always fills these: the latest review, or the initial score for the analysed level.
+  reviewScore: number;
+  reviewLevel: RiskLevel;
+  safetyLock: boolean;
   analyzedAt: string;
   latestReview: LatestReview | null;
   detectedFactors: DetectedFactor[];
 };
 
+// @JsonInclude(NON_NULL): empty fields are omitted, not null. Compare with == null.
 export type HistoryEvent = {
   eventId: string;
   type: HistoryEventType;
   occurredAt: string;
-  actorName: string;
-  previousStatus: ComplaintStatus | null;
-  newStatus: ComplaintStatus | null;
-  riskScore: number | null;
-  riskLevel: RiskLevel | null;
-  previousRiskScore: number | null;
-  previousRiskLevel: RiskLevel | null;
-  reason: string | null;
+  actorName?: string | null;
+  previousStatus?: ComplaintStatus | null;
+  newStatus?: ComplaintStatus | null;
+  riskScore?: number | null;
+  riskLevel?: RiskLevel | null;
+  previousRiskScore?: number | null;
+  previousRiskLevel?: RiskLevel | null;
+  reason?: string | null;
 };
 
 // GET /admin/escalations/{escalationId}/history

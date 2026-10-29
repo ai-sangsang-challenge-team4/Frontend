@@ -1,6 +1,7 @@
 import type { ThreadActivityLog } from '../parent-message/parentMessageTypes';
 import type { ReplyTemplateDraft } from './replyTemplates';
 import type { RiskClassification } from '../risk-analysis';
+import type { RiskReviewStatus } from '../../shared/types';
 
 export type ThreadStatus = 'before' | 'inProgress' | 'complete';
 export type RiskLevel = 'normal' | 'attention' | 'danger' | 'urgent';
@@ -71,6 +72,9 @@ export type ThreadAnalysis = {
   riskFactors: RiskFactor[];
   riskReviewRequestedAt?: string;
   safetyLock: boolean;
+  // Last known server state of the teacher's own emergency review request. The admin decides on the
+  // server, so the thread syncs from GET /escalation once the status or lock changes.
+  emergencyReview?: { requestId: number; status: RiskReviewStatus; safetyLock: boolean };
   studentSafetySignal: StudentSafetySignal;
   summary: BufferedSummary;
   systemRiskLevel: SystemRiskLevel;

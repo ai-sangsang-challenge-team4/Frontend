@@ -3,7 +3,7 @@ import { toServerComplaintId, type EscalationApi } from './escalationApiContract
 import { httpEscalationApi } from './httpEscalationApi';
 import { mockEscalationApi } from './mockEscalationApi';
 
-// VITE_ESCALATION_API=http calls the backend. Mock stays the default until login issues real JWTs.
+// VITE_ESCALATION_API=http calls the backend. It needs real JWTs, so turn on VITE_AUTH_API=http with it.
 export const escalationApiMode: 'mock' | 'http' =
   import.meta.env?.VITE_ESCALATION_API === 'http' ? 'http' : 'mock';
 
@@ -26,7 +26,11 @@ export const {
   getAdminEscalationHistory,
   startEscalationReview,
   completeEscalation,
-  decideRiskChange,
+  requestEmergencyReview,
+  getCurrentEmergencyReview,
+  listAdminEmergencyReviews,
+  getAdminEmergencyReview,
+  updateEmergencyReview,
 } = api;
 
 export { ESCALATIONS_CHANGED_EVENT } from './escalationApiContract';

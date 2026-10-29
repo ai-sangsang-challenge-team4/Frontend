@@ -40,8 +40,9 @@ type AdminSharedMessageDetailProps = {
   escalationId: number;
 };
 
-function riskText(level: RiskLevel, score: number | null) {
-  return score === null ? riskLabel[apiRiskTone[level]] : `${riskLabel[apiRiskTone[level]]}(${score}점)`;
+// History events omit empty fields (@JsonInclude(NON_NULL)), so a score may be undefined as well as null.
+function riskText(level: RiskLevel, score: number | null | undefined) {
+  return score == null ? riskLabel[apiRiskTone[level]] : `${riskLabel[apiRiskTone[level]]}(${score}점)`;
 }
 
 export function AdminSharedMessageDetail({ escalationId }: AdminSharedMessageDetailProps) {
@@ -263,7 +264,8 @@ function RiskAnalysisPanel({ escalationId }: { escalationId: number }) {
                 <dt>시스템 분석</dt>
                 <dd>{riskText(data.riskLevel, data.riskScore)}</dd>
               </div>
-              {data.reviewLevel ? (
+              {/* reviewLevel falls back to the analysed level, so it only means a review once one exists. */}
+              {data.latestReview ? (
                 <div>
                   <dt>교사 검토</dt>
                   <dd>{riskText(data.reviewLevel, data.reviewScore)}</dd>
@@ -276,6 +278,12 @@ function RiskAnalysisPanel({ escalationId }: { escalationId: number }) {
                     {data.latestReview.reviewedBy} · {formatEscalationTime(data.latestReview.reviewedAt)}
                     {data.latestReview.reason ? ` · ${data.latestReview.reason}` : ''}
                   </dd>
+                </div>
+              ) : null}
+              {data.safetyLock ? (
+                <div>
+                  <dt>안전 잠금</dt>
+                  <dd>유지 중 · 담당 교사 화면에 긴급 단계 정책이 적용됩니다.</dd>
                 </div>
               ) : null}
             </dl>

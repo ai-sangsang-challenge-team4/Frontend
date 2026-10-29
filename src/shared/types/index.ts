@@ -1,8 +1,8 @@
 export type {
+  EmergencyReviewDecision,
   EscalationScope,
   EscalationStatus,
   HistoryEventType,
-  RiskChangeDecision,
   RiskReviewDirection,
   RiskReviewStatus,
 } from './escalation';

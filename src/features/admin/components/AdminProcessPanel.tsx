@@ -1,26 +1,44 @@
-import { useId, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import { getApiErrorMessage, isApiError } from '../../../shared/api';
 import { StatusChip } from '../../../shared/components/ui';
-import type { EscalationStatus, RiskChangeDecision } from '../../../shared/types';
-import { completeEscalation, decideRiskChange, startEscalationReview } from '../../escalation/api';
+import type { EmergencyReviewDecision, EscalationStatus, RiskLevel } from '../../../shared/types';
+import {
+  completeEscalation,
+  getAdminEmergencyReview,
+  startEscalationReview,
+  updateEmergencyReview,
+} from '../../escalation/api';
 import {
   ADMIN_MESSAGE_MAX_LENGTH,
+  apiRiskTone,
   canCompleteEscalation,
-  canDecideRiskChange,
+  canDecideEmergencyReview,
+  canReleaseSafetyLock,
   canStartEscalationReview,
   escalationStatusChip,
   escalationStatusLabel,
+  formatEscalationTime,
   riskReviewStatusChip,
   riskReviewStatusLabel,
 } from '../../escalation/escalationRules';
-import type { AdminEscalationSummaryResponse, EscalationStateResponse } from '../../escalation/escalationTypes';
+import type {
+  AdminEscalationSummaryResponse,
+  EmergencyReviewResponse,
+  EscalationStateResponse,
+} from '../../escalation/escalationTypes';
+import { useEscalationRequest } from '../../escalation/useEscalationRequest';
 import { BoardConfirmDialog } from '../../message/components/BoardConfirmDialog';
+import { riskLabel } from '../../message/messageRules';
 
 const steps: EscalationStatus[] = ['SHARED', 'UNDER_REVIEW', 'COMPLETED'];
 
-type PanelAction = 'review' | 'complete' | RiskChangeDecision;
+type PanelAction = 'review' | 'complete' | 'release-lock' | EmergencyReviewDecision;
 
-const decisionCopy: Record<RiskChangeDecision, string> = {
+function riskText(level: RiskLevel, score: number) {
+  return `${riskLabel[apiRiskTone[level]]}(${score}점)`;
+}
+
+const decisionCopy: Record<EmergencyReviewDecision, string> = {
   APPLIED: '승인',
   REJECTED: '거부',
 };
@@ -37,34 +55,51 @@ export function AdminProcessPanel({ summary, onConflict }: AdminProcessPanelProp
   const [memo, setMemo] = useState('');
   const [decisionMessage, setDecisionMessage] = useState('');
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [isReleaseConfirmOpen, setIsReleaseConfirmOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<PanelAction | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   // The latest action response wins until the summary refetch catches up.
   const [actionState, setActionState] = useState<EscalationStateResponse | null>(null);
+  const [reviewResult, setReviewResult] = useState<EmergencyReviewResponse | null>(null);
+  // Every action refetches the summary (ESCALATIONS_CHANGED_EVENT); once it lands it is the source of truth.
+  useEffect(() => {
+    setActionState(null);
+    setReviewResult(null);
+  }, [summary]);
   const escalationStatus = actionState?.escalationStatus ?? summary.escalationStatus;
-  // TODO(backend): AdminEscalationSummaryResponse has no riskReviewStatus, so a pending risk change
-  // is only known after an action response. The approve/reject buttons stay hidden until then.
-  const riskReviewStatus = actionState?.riskReviewStatus ?? null;
+  const emergencyReviewRequestId = actionState?.emergencyReviewRequestId ?? summary.emergencyReviewRequestId;
+  const riskReviewStatus = reviewResult?.status ?? actionState?.riskReviewStatus ?? summary.riskReviewStatus;
+  const safetyLock = reviewResult?.safetyLock ?? actionState?.safetyLock ?? summary.safetyLock;
+  const loadReview = useCallback(
+    (signal: AbortSignal) => emergencyReviewRequestId === null
+      ? Promise.resolve(null)
+      : getAdminEmergencyReview(emergencyReviewRequestId, signal),
+    [emergencyReviewRequestId],
+  );
+  const { data: emergencyReview, error: emergencyReviewError } = useEscalationRequest(loadReview);
   const currentStep = steps.indexOf(escalationStatus);
   const isSubmitting = pendingAction !== null;
   // The backend rejects a blank message on every action (@NotBlank), despite minLength 0 in the spec.
   const trimmedMemo = memo.trim();
   const trimmedDecision = decisionMessage.trim();
 
-  const run = async (action: PanelAction, call: () => Promise<EscalationStateResponse>) => {
+  const run = async (action: PanelAction, call: () => Promise<void>) => {
     if (isSubmitting) return;
     setPendingAction(action);
     setErrorMessage(null);
     try {
-      setActionState(await call());
+      await call();
       setMemo('');
       setDecisionMessage('');
       setIsConfirmOpen(false);
+      setIsReleaseConfirmOpen(false);
     } catch (error) {
       setIsConfirmOpen(false);
+      setIsReleaseConfirmOpen(false);
       setErrorMessage(getApiErrorMessage(error, '처리 상태를 변경하지 못했습니다. 다시 시도해 주세요.'));
       if (isApiError(error) && error.kind === 'CONFLICT') {
         setActionState(null);
+        setReviewResult(null);
         onConflict();
       }
     } finally {
@@ -72,16 +107,26 @@ export function AdminProcessPanel({ summary, onConflict }: AdminProcessPanelProp
     }
   };
 
-  const startReview = () =>
-    run('review', () => startEscalationReview(summary.escalationId, { message: trimmedMemo }));
-  const complete = () =>
-    run('complete', () => completeEscalation(summary.escalationId, { message: trimmedMemo }));
-  const decide = (status: RiskChangeDecision) =>
-    run(status, () => decideRiskChange(summary.escalationId, { message: trimmedDecision, status }));
+  const startReview = () => run('review', async () => {
+    setActionState(await startEscalationReview(summary.escalationId, { message: trimmedMemo }));
+  });
+  const complete = () => run('complete', async () => {
+    setActionState(await completeEscalation(summary.escalationId, { message: trimmedMemo }));
+  });
+  // The request ID comes from the summary; the decision is PATCHed on the emergency review itself.
+  const decide = (status: EmergencyReviewDecision) => run(status, async () => {
+    if (emergencyReviewRequestId === null) return;
+    setReviewResult(await updateEmergencyReview(emergencyReviewRequestId, { message: trimmedDecision, status }));
+  });
+  const releaseLock = () => run('release-lock', async () => {
+    if (emergencyReviewRequestId === null) return;
+    setReviewResult(await updateEmergencyReview(emergencyReviewRequestId, { safetyLock: false }));
+  });
 
   const canStart = canStartEscalationReview(escalationStatus);
   const canComplete = canCompleteEscalation(escalationStatus, riskReviewStatus);
-  const canDecide = canDecideRiskChange(riskReviewStatus);
+  const canDecide = canDecideEmergencyReview(emergencyReviewRequestId, riskReviewStatus);
+  const canRelease = canReleaseSafetyLock(emergencyReviewRequestId, riskReviewStatus, safetyLock);
 
   return (
     <section className="board-risk-workflow-panel admin-process-panel" aria-labelledby="admin-process-title">
@@ -98,6 +143,7 @@ export function AdminProcessPanel({ summary, onConflict }: AdminProcessPanelProp
               status={riskReviewStatusChip[riskReviewStatus]}
             />
           ) : null}
+          {safetyLock ? <StatusChip label="안전 잠금 유지 중" status="urgent" /> : null}
         </div>
       </div>
 
@@ -113,6 +159,30 @@ export function AdminProcessPanel({ summary, onConflict }: AdminProcessPanelProp
           </li>
         ))}
       </ol>
+
+      {emergencyReviewRequestId !== null ? (
+        <div className="admin-process-result" aria-label="긴급 위험도 재검토 요청">
+          {emergencyReview ? (
+            <>
+              <p>
+                <strong>요청 위험도</strong>
+                {riskText(emergencyReview.previousRiskLevel, emergencyReview.previousRiskScore)} →{' '}
+                {riskText(emergencyReview.requestedRiskLevel, emergencyReview.requestedRiskScore)}
+              </p>
+              <p><strong>요청 사유</strong>{emergencyReview.reason}</p>
+              <p><strong>요청 시각</strong>{formatEscalationTime(emergencyReview.requestedAt)}</p>
+            </>
+          ) : emergencyReviewError ? (
+            <p role="alert">{getApiErrorMessage(emergencyReviewError, '재검토 요청 내용을 불러오지 못했습니다.')}</p>
+          ) : null}
+          {safetyLock ? (
+            <p>
+              안전 잠금이 유지되는 동안 담당 교사 화면에는 위험도와 관계없이 긴급 단계 정책(개별 답변 작성 차단)이
+              적용됩니다. 승인해도 잠금은 자동으로 해제되지 않습니다.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {canDecide ? (
         <div className="admin-process-form">
@@ -143,6 +213,19 @@ export function AdminProcessPanel({ summary, onConflict }: AdminProcessPanelProp
               </button>
             ))}
           </div>
+        </div>
+      ) : null}
+
+      {canRelease ? (
+        <div className="admin-process-actions">
+          <button
+            className="board-outline-button admin-process-button"
+            disabled={isSubmitting}
+            onClick={() => setIsReleaseConfirmOpen(true)}
+            type="button"
+          >
+            {pendingAction === 'release-lock' ? '처리 중…' : '안전 잠금 해제'}
+          </button>
         </div>
       ) : null}
 
@@ -203,6 +286,27 @@ export function AdminProcessPanel({ summary, onConflict }: AdminProcessPanelProp
       >
         <p className="board-confirm-modal-copy" id="admin-complete-description">
           완료 후에는 담당 교사에게 처리 완료 상태가 표시됩니다.
+        </p>
+      </BoardConfirmDialog>
+
+      <BoardConfirmDialog
+        actions={[
+          { label: '취소', onClick: () => setIsReleaseConfirmOpen(false) },
+          {
+            disabled: isSubmitting,
+            label: pendingAction === 'release-lock' ? '처리 중…' : '잠금 해제',
+            onClick: () => void releaseLock(),
+            tone: 'primary',
+          },
+        ]}
+        descriptionId="admin-release-lock-description"
+        onClose={() => setIsReleaseConfirmOpen(false)}
+        open={isReleaseConfirmOpen}
+        title="안전 잠금을 해제할까요?"
+        titleId="admin-release-lock-title"
+      >
+        <p className="board-confirm-modal-copy" id="admin-release-lock-description">
+          해제하면 담당 교사 화면의 긴급 단계 정책이 현재 위험도 기준으로 바뀝니다.
         </p>
       </BoardConfirmDialog>
     </section>
