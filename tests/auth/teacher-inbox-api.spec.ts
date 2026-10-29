@@ -214,6 +214,33 @@ test('위험 분석이 없으면 분석 실패로 표시하고 답변 차례가 
   expect(thread.analysis).toMatchObject({ status: 'failed', canReviewRisk: false });
 });
 
+test('새 위험 응답의 상태를 유지하고, 원문 하이라이트가 가능하도록 첫 근거 구간만 교사 화면에 쓴다', () => {
+  const thread = mergeServerDetail(toListThread(listItem), bundle({
+    risk: {
+      ...risk,
+      detectedFactors: [
+        { code: 'THREAT', name: '위협', state: 'BOUNDARY', reason: '맥락 확인 필요', evidenceSpans: [{ text: '첫 근거', start: 0, end: 4 }, { text: '둘째 근거', start: 5, end: 10 }] },
+        { code: 'INSULT', name: '인신공격', state: 'ABSENT', reason: '없음', evidenceSpans: [] },
+        { code: 'PRIVACY', name: '개인정보', state: 'UNKNOWN', reason: '', evidenceSpans: [] },
+      ],
+    },
+  }));
+  expect(thread.analysis?.riskClassifications).toEqual(expect.arrayContaining([
+    expect.objectContaining({ code: 'THREAT', status: 'BOUNDARY', evidenceSpan: '첫 근거' }),
+    expect.objectContaining({ code: 'PERSONAL_ATTACK', status: 'ABSENT' }),
+    expect.objectContaining({ code: 'PERSONAL_INFORMATION_RISK', status: 'UNKNOWN' }),
+  ]));
+});
+
+test('명시적으로 빈 근거 구간이 오면 이전 evidence 문자열을 다시 표시하지 않는다', () => {
+  const thread = mergeServerDetail(toListThread(listItem), bundle({
+    risk: { ...risk, detectedFactors: [{ code: 'THREAT', name: '위협', state: 'PRESENT', reason: '확인 필요', evidenceSpans: [], evidence: '이전 근거' }] },
+  }));
+  expect(thread.analysis?.riskClassifications).toEqual(expect.arrayContaining([
+    expect.objectContaining({ code: 'THREAT', evidenceSpan: '' }),
+  ]));
+});
+
 test('서버 이력은 오래된 순으로 바꾸고 생략된 필드를 비어 있는 값으로 처리한다', () => {
   expect(toActivityLogs(history)).toEqual([
     expect.objectContaining({ id: 'complaint-event:2', action: '민원 상태 변경', actor: 'Demo Parent', detail: '작성 중' }),
