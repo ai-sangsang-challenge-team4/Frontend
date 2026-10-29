@@ -135,8 +135,9 @@ async function readPayload(response: Response): Promise<unknown> {
   }
 }
 
-// GlobalExceptionHandler body: { status: "ERROR", code, message, timestamp, path }.
-// Unhandled exceptions use Spring's default body without code/message, so the status copy applies.
+// ErrorResponse body from GlobalExceptionHandler and the security entry point / access denied handler:
+// { code, message, timestamp, path }. A body without code/message (e.g. a proxy error page) falls back
+// to the status copy.
 function createErrorFromPayload(status: number, payload: unknown) {
   if (!isRecord(payload)) return new ApiError({ status });
 
