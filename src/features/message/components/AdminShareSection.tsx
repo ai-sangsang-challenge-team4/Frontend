@@ -1,8 +1,8 @@
-import { useCallback, useId, useState } from 'react';
-import { getApiErrorMessage } from '../../../shared/api';
+import { useId, useState } from 'react';
+import { getApiErrorMessage, type ApiError } from '../../../shared/api';
 import { StatusChip } from '../../../shared/components/ui';
 import type { EscalationScope } from '../../../shared/types';
-import { canSendEscalationRequest, getEscalationState, shareEscalation } from '../../escalation/api';
+import { canSendEscalationRequest, shareEscalation } from '../../escalation/api';
 import {
   apiRiskTone,
   escalationStatusChip,
@@ -12,30 +12,31 @@ import {
   teacherEscalationStatusLabel,
 } from '../../escalation/escalationRules';
 import type { EscalationStateResponse } from '../../escalation/escalationTypes';
-import { useEscalationRequest } from '../../escalation/useEscalationRequest';
 import { createEscalationSnapshot } from '../escalationSnapshot';
 import { riskLabel } from '../messageRules';
 import type { BoardThread } from '../types';
 import { BoardConfirmDialog } from './BoardConfirmDialog';
 import { ExternalLinkIcon } from './MessageIcons';
 
+// GET /teacher/complaints/{complaintId}/escalation, fetched once by the risk tab and shared with the review panel.
+export type EscalationStateRequest = {
+  data: EscalationStateResponse | null;
+  error: ApiError | null;
+  isInitialLoading: boolean;
+  retry: () => void;
+};
+
 type AdminShareSectionProps = {
+  escalation: EscalationStateRequest;
   onShared: (threadId: string, escalation: { reason: string }) => void;
   thread: BoardThread;
 };
 
-export function AdminShareSection({ onShared, thread }: AdminShareSectionProps) {
+export function AdminShareSection({ escalation, onShared, thread }: AdminShareSectionProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   // Over HTTP a mock thread has no numeric complaintId, so nothing is requested.
   const isLinked = canSendEscalationRequest(thread.id);
-  // Depends on the whole thread so a saved risk review refetches the server's current level.
-  const request = useCallback(
-    (signal: AbortSignal) => isLinked
-      ? getEscalationState(thread.id, { signal, snapshot: createEscalationSnapshot(thread) })
-      : Promise.resolve(null),
-    [isLinked, thread],
-  );
-  const { data: state, error, isInitialLoading, retry } = useEscalationRequest(request);
+  const { data: state, error, isInitialLoading, retry } = escalation;
   const isShared = Boolean(state && state.escalationStatus !== 'NOT_SHARED');
   const isShareable = state?.currentRiskLevel === SHAREABLE_RISK_LEVEL;
 
@@ -71,7 +72,7 @@ export function AdminShareSection({ onShared, thread }: AdminShareSectionProps) 
           {getApiErrorMessage(error, '공유 상태를 확인하지 못했습니다.')}{' '}
           <button className="board-admin-share-retry" onClick={retry} type="button">다시 시도</button>
         </p>
-      ) : state && isShared ? (
+      ) : state && (isShared || state.riskReviewStatus || state.safetyLock) ? (
         <SharedSummary state={state} />
       ) : state && !isShareable ? (
         <p>현재 긴급 단계 메시지만 관리자에게 공유할 수 있습니다.</p>
@@ -98,14 +99,25 @@ export function AdminShareSection({ onShared, thread }: AdminShareSectionProps) 
 function SharedSummary({ state }: { state: EscalationStateResponse }) {
   return (
     <dl className="board-admin-share-summary">
-      <div>
-        <dt>현재 위험도</dt>
-        <dd>{riskLabel[apiRiskTone[state.currentRiskLevel]]} ({state.currentRiskScore}점)</dd>
-      </div>
+      {state.currentRiskLevel ? (
+        <div>
+          <dt>현재 위험도</dt>
+          <dd>
+            {riskLabel[apiRiskTone[state.currentRiskLevel]]}
+            {state.currentRiskScore == null ? '' : ` (${state.currentRiskScore}점)`}
+          </dd>
+        </div>
+      ) : null}
       {state.riskReviewStatus ? (
         <div>
           <dt>위험도 변경 요청</dt>
           <dd>{riskReviewStatusLabel[state.riskReviewStatus]}</dd>
+        </div>
+      ) : null}
+      {state.safetyLock ? (
+        <div>
+          <dt>안전 잠금</dt>
+          <dd>유지 중 (관리자 해제 전까지 긴급 단계 정책 적용)</dd>
         </div>
       ) : null}
     </dl>

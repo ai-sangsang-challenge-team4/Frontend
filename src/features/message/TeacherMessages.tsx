@@ -28,7 +28,10 @@ import {
 } from '../safety/guidePostIds';
 import { getApiErrorMessage } from '../../shared/api';
 import { useAuth } from '../auth';
-import { canSendEscalationRequest, submitRiskReview } from '../escalation/api';
+import { canSendEscalationRequest, getEscalationState, submitRiskReview } from '../escalation/api';
+import { canRequestEmergencyReview } from '../escalation/escalationRules';
+import type { EscalationStateResponse } from '../escalation/escalationTypes';
+import { useEscalationRequest } from '../escalation/useEscalationRequest';
 import { AiJudgmentNotice } from '../safety/AiJudgmentNotice';
 import { AdminShareSection } from './components/AdminShareSection';
 import { BoardConfirmDialog } from './components/BoardConfirmDialog';
@@ -114,7 +117,12 @@ import type {
 } from './types';
 import './TeacherMessages.css';
 import { compareMessageTimes, formatMessageDate } from '../parent-message/conversation';
-import { canShareWithAdmin, createEscalationSnapshot, systemRiskLevelFromApi } from './escalationSnapshot';
+import {
+  canShareWithAdmin,
+  createEscalationSnapshot,
+  syncThreadWithEmergencyReview,
+  systemRiskLevelFromApi,
+} from './escalationSnapshot';
 import { initialTeacherThreads } from './mockThreads';
 import { persistTeacherParentThread, readTeacherParentThreads } from './teacherParentMessages';
 
@@ -849,7 +857,7 @@ function RiskReviewPanel({
   const isSubmitDisabledByReason =
     isReasonRequired && trimmedReason.length === 0;
   const reviewInfoText = notice ?? (isEmergencyDowngrade
-    ? '긴급 단계 하향은 관리자에게 공유한 뒤 관리자 승인 후 반영됩니다.'
+    ? '긴급 단계 하향은 관리자 승인 후 반영되며, 안전 잠금이 해제되기 전까지 긴급 단계 정책이 유지됩니다.'
     : isDownwardReview
       ? '하향 수정 사유는 오탐 원인 분석과 임계값 재조정에 활용됩니다.'
       : isUpwardReview
@@ -1033,6 +1041,8 @@ type RiskAnalysisPanelProps = {
   onReviewComplete: (threadId: string, review: RiskReviewSubmission) => Promise<void>;
   onOriginalOpen: (evidence?: string) => void;
   onReviewRequest: (threadId: string) => void;
+  // Receives every server escalation state so the thread can pick up the admin's decision.
+  onServerStateLoaded: (threadId: string, state: EscalationStateResponse) => void;
   thread: BoardThread;
 };
 
@@ -1043,6 +1053,7 @@ function RiskAnalysisPanel({
   onReviewComplete,
   onOriginalOpen,
   onReviewRequest,
+  onServerStateLoaded,
   thread,
 }: RiskAnalysisPanelProps) {
   const [isProcedureOpen, setIsProcedureOpen] = useState(false);
@@ -1057,9 +1068,30 @@ function RiskAnalysisPanel({
   );
   const [isReviewSubmitting, setIsReviewSubmitting] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
-  const reviewNotice = canSendEscalationRequest(thread.id)
-    ? null
-    : '서버에 등록된 민원이 아니어서 위험도 검토를 저장할 수 없습니다.';
+  const isLinked = canSendEscalationRequest(thread.id);
+  // Server state for the share and the emergency review (pending approval, safety lock).
+  // Depends on the whole thread so a saved risk review refetches the server's current level.
+  const loadEscalationState = useCallback(
+    (signal: AbortSignal) => isLinked && thread.analysis
+      ? getEscalationState(thread.id, { signal, snapshot: createEscalationSnapshot(thread) })
+      : Promise.resolve(null),
+    [isLinked, thread],
+  );
+  const escalation = useEscalationRequest(loadEscalationState);
+  useEffect(() => {
+    if (escalation.data) onServerStateLoaded(thread.id, escalation.data);
+  }, [escalation.data, onServerStateLoaded, thread.id]);
+  const serverReviewStatus = escalation.data?.riskReviewStatus ?? null;
+  const serverSafetyLock = escalation.data?.safetyLock ?? false;
+  const isEmergencyReference = riskScoreToLevel(initialReviewScore) === 'emergency';
+  // A pending request, or a held lock on a still-EMERGENCY score, makes the server answer 409.
+  const reviewNotice = !isLinked
+    ? '서버에 등록된 민원이 아니어서 위험도 검토를 저장할 수 없습니다.'
+    : serverReviewStatus === 'PENDING_ADMIN_APPROVAL'
+      ? '긴급 위험도 하향 요청이 관리자 승인 대기 중입니다. 관리자가 승인하거나 거부한 뒤 다시 검토할 수 있습니다.'
+      : isEmergencyReference && !canRequestEmergencyReview(serverReviewStatus, serverSafetyLock)
+        ? '안전 잠금이 유지 중이라 긴급 위험도 하향을 다시 요청할 수 없습니다. 관리자가 잠금을 해제한 뒤 요청해 주세요.'
+        : null;
 
   useEffect(() => {
     setReviewScore(initialReviewScore);
@@ -1103,8 +1135,10 @@ function RiskAnalysisPanel({
     thread.riskReviewRequired;
   const canShowStudentSafetyCard = analysis.studentSafetySignal !== 'NONE';
   const hasAiObjection = Boolean(analysis.aiObjections?.length);
-  const replyLocked = isReplyLocked(thread);
+  // The server's safety lock keeps the emergency policy even after the level was lowered.
+  const replyLocked = isReplyLocked(thread) || serverSafetyLock;
   const reviewRequested = Boolean(analysis.riskReviewRequestedAt);
+  const isAwaitingAdminApproval = serverReviewStatus === 'PENDING_ADMIN_APPROVAL';
   const needsOwnReview = needsTeacherReviewBeforeRequest(thread);
   const canShowEvidencePackage =
     effectiveRiskLevel === 'high' || effectiveRiskLevel === 'emergency';
@@ -1303,18 +1337,22 @@ function RiskAnalysisPanel({
                 <strong>{replyLocked ? '현재 답변 작성이 제한되어 있습니다.' : '위험도 재검토가 필요합니다.'}</strong>
               </div>
               <p>{replyLocked ? getReplyLockNotice(thread).lockDescription : '원문과 판단 근거를 확인한 후 담당자에게 재검토를 요청할 수 있습니다.'}</p>
-              {reviewRequested ? <p role="status">재검토 요청이 접수되었습니다. 담당자의 확인을 기다려 주세요.</p> : null}
-              {!reviewRequested && needsOwnReview ? <p>위험도 검토를 먼저 완료해야 재검토를 요청할 수 있습니다.</p> : null}
+              {isAwaitingAdminApproval ? (
+                <p role="status">관리자 승인 대기 중입니다. 승인되어도 안전 잠금이 해제되기 전까지 답변 작성이 제한됩니다.</p>
+              ) : reviewRequested ? (
+                <p role="status">재검토 요청이 접수되었습니다. 담당자의 확인을 기다려 주세요.</p>
+              ) : null}
+              {!reviewRequested && !isAwaitingAdminApproval && needsOwnReview ? <p>위험도 검토를 먼저 완료해야 재검토를 요청할 수 있습니다.</p> : null}
             </div>
           </div>
           <div className="board-risk-lock-actions">
             <button
               className="board-outline-button board-risk-recheck-button"
-              disabled={reviewRequested || needsOwnReview}
+              disabled={reviewRequested || needsOwnReview || isAwaitingAdminApproval}
               onClick={() => onReviewRequest(thread.id)}
               type="button"
             >
-              {reviewRequested ? '재검토 요청 완료' : '재검토 요청'}
+              {isAwaitingAdminApproval ? '관리자 승인 대기' : reviewRequested ? '재검토 요청 완료' : '재검토 요청'}
             </button>
           </div>
         </section>
@@ -1349,7 +1387,7 @@ function RiskAnalysisPanel({
       ) : null}
 
       {canShareWithAdmin(thread) ? (
-        <AdminShareSection onShared={onAdminShared} thread={thread} />
+        <AdminShareSection escalation={escalation} onShared={onAdminShared} thread={thread} />
       ) : null}
 
       {canShowStudentSafetyCard ? (
@@ -1460,6 +1498,7 @@ type DetailProps = {
   onReviewRequest: (threadId: string) => void;
   onAdminShared: RiskAnalysisPanelProps['onAdminShared'];
   onAiObjection: RiskAnalysisPanelProps['onAiObjection'];
+  onServerStateLoaded: RiskAnalysisPanelProps['onServerStateLoaded'];
   thread: BoardThread;
 };
 
@@ -1476,6 +1515,7 @@ function ThreadDetail({
   onReturnToReplyComposer,
   onReviewComplete,
   onReviewRequest,
+  onServerStateLoaded,
   thread,
 }: DetailProps) {
   const [activeDetailTab, setActiveDetailTab] =
@@ -1788,6 +1828,7 @@ function ThreadDetail({
           onReviewComplete={onReviewComplete}
           onOriginalOpen={openOriginalViewer}
           onReviewRequest={onReviewRequest}
+          onServerStateLoaded={onServerStateLoaded}
           thread={thread}
         />
       ) : null}
@@ -2626,7 +2667,7 @@ export function TeacherMessages({
             activityLogs: [
               ...thread.analysis.activityLogs,
               {
-                id: `${thread.id}-risk-review-${result.riskReviewId}`,
+                id: `${thread.id}-emergency-review-${result.emergencyReviewRequestId ?? result.riskReviewId}`,
                 time: modifiedAt,
                 actor: reviewer,
                 action: isPending ? '긴급 위험도 하향 승인 요청' : '위험도 변경 반려',
@@ -2635,6 +2676,15 @@ export function TeacherMessages({
                 }`,
               },
             ],
+            // A pending request holds the safety lock, so the emergency policy stays.
+            safetyLock: thread.analysis.safetyLock || result.safetyLock,
+            ...(result.emergencyReviewRequestId === undefined ? {} : {
+              emergencyReview: {
+                requestId: result.emergencyReviewRequestId,
+                status: result.status,
+                safetyLock: result.safetyLock,
+              },
+            }),
             teacherReviewReason: result.reason || undefined,
           },
         };
@@ -2660,9 +2710,9 @@ export function TeacherMessages({
               detail: `수정 전 위험도: ${beforeLabel}, 수정 후 위험도: ${afterLabel}, ${reasonDetail}, 수정자: ${reviewer}, 수정 시각: ${modifiedAt}.`,
             },
           ],
-          // Only a designated reviewer can lift the lock; raising to emergency sets it.
+          // Only a designated reviewer can lift the lock; raising to emergency or the server's lock sets it.
           safetyLock:
-            thread.analysis.safetyLock || afterLevel === 'emergency',
+            thread.analysis.safetyLock || result.safetyLock || afterLevel === 'emergency',
           teacherReviewReason: result.reason || undefined,
           teacherReviewedRiskLevel: afterLevel,
           teacherRiskScore: result.riskScore as RiskScore,
@@ -2671,6 +2721,13 @@ export function TeacherMessages({
         riskReviewRequired: false,
       };
     });
+  };
+
+  const handleServerStateLoaded: RiskAnalysisPanelProps['onServerStateLoaded'] = (threadId, state) => {
+    const target = threads.find((thread) => thread.id === threadId);
+    if (!target) return;
+    const synced = syncThreadWithEmergencyReview(target, state);
+    if (synced !== target) updateThread(threadId, () => synced);
   };
 
   const handleAiObjection: RiskAnalysisPanelProps['onAiObjection'] = (threadId, objection) => {
@@ -3017,6 +3074,7 @@ export function TeacherMessages({
             onReturnToReplyComposer={handleReturnToReplyComposer}
             onReviewComplete={handleReviewComplete}
             onReviewRequest={handleReviewRequest}
+            onServerStateLoaded={handleServerStateLoaded}
             onAdminShared={handleAdminShared}
             onAiObjection={handleAiObjection}
             thread={selectedThread}

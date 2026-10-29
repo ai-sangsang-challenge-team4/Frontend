@@ -5,7 +5,6 @@ import type {
   HistoryEventType,
   RiskLevel,
   RiskReviewDirection,
-  RiskReviewStatus,
   UserRole,
 } from '../../../shared/types';
 import { readAuthSession } from '../../auth/api/authStorage';
@@ -18,25 +17,27 @@ import {
 import type {
   AdminEscalationSummaryResponse,
   ComplaintId,
+  EmergencyReviewCreateRequest,
+  EmergencyReviewResponse,
   EscalationComplaintSnapshot,
   EscalationStateResponse,
   HistoryEvent,
+  TeacherRiskReviewResponse,
 } from '../escalationTypes';
 import { notifyEscalationsChanged, toServerComplaintId, type EscalationApi } from './escalationApiContract';
 
-// v2: the shape changed to the backend spec, so v1 entries are ignored.
-export const MOCK_ESCALATION_STORAGE_KEY = 'teacher-hub.escalations.v2';
+// v3: the in-share risk change request moved to separate emergency reviews, so v2 entries are ignored.
+export const MOCK_ESCALATION_STORAGE_KEY = 'teacher-hub.escalations.v3';
+export const MOCK_EMERGENCY_REVIEW_STORAGE_KEY = 'teacher-hub.emergency-reviews.v1';
 const MOCK_DELAY_MS = 300;
 
 // The server assigns the first admin when adminId is null. Matches the ADMIN account in mockAuthApi.
 const DEFAULT_ADMIN_ID = 301;
+const DEFAULT_ADMIN_NAME = '관리자 사용자';
+const EMERGENCY_REVIEW_MAX_SCORE = 6;
 
-type PendingRiskChange = {
-  previousLevel: RiskLevel;
-  previousScore: number;
-  riskLevel: RiskLevel;
-  riskScore: number;
-};
+// The server keeps emergency reviews per complaint, apart from the share.
+type StoredEmergencyReview = Omit<EmergencyReviewResponse, 'complaintId'> & { complaintId: string };
 
 type StoredEscalation = {
   assignedAdminId: number;
@@ -46,9 +47,7 @@ type StoredEscalation = {
   escalationId: number;
   escalationStatus: EscalationStatus;
   events: HistoryEvent[];
-  pendingRiskChange: PendingRiskChange | null;
   reason: string;
-  riskReviewStatus: RiskReviewStatus | null;
   scopes: EscalationScope[];
   sharedAt: string;
   sharedBy: number;
@@ -76,6 +75,38 @@ function writeStore(items: StoredEscalation[]) {
 
 function replaceStored(store: StoredEscalation[], next: StoredEscalation) {
   writeStore(store.map((entry) => entry.escalationId === next.escalationId ? next : entry));
+}
+
+function readReviews(): StoredEmergencyReview[] {
+  try {
+    const value = JSON.parse(localStorage.getItem(MOCK_EMERGENCY_REVIEW_STORAGE_KEY) ?? '[]');
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeReviews(items: StoredEmergencyReview[]) {
+  try {
+    localStorage.setItem(MOCK_EMERGENCY_REVIEW_STORAGE_KEY, JSON.stringify(items));
+  } catch {
+    throw new ApiError({ status: 503, message: '재검토 요청을 저장하지 못했어요. 잠시 후 다시 시도해 주세요.' });
+  }
+  notifyEscalationsChanged();
+}
+
+// findFirstByComplaintIdOrderByRequestedAtDescIdDesc
+function latestReview(reviews: StoredEmergencyReview[], complaintId: ComplaintId) {
+  return reviews.filter((review) => review.complaintId === String(complaintId)).at(-1) ?? null;
+}
+
+// TeacherRiskResponse and an applied TeacherRiskReviewResponse report any request still holding the lock.
+function isSafetyLocked(reviews: StoredEmergencyReview[], complaintId: ComplaintId) {
+  return reviews.some((review) => review.complaintId === String(complaintId) && review.safetyLock);
+}
+
+function toEmergencyReview(review: StoredEmergencyReview): EmergencyReviewResponse {
+  return { ...review, complaintId: mockComplaintNumber(review.complaintId) };
 }
 
 function wait(signal?: AbortSignal) {
@@ -139,26 +170,134 @@ function createEvent(
   };
 }
 
-function toState(item: StoredEscalation): EscalationStateResponse {
+// Like EscalationStateResponse.from: emergency review fields come from the latest request.
+function toState(item: StoredEscalation, reviews = readReviews()): EscalationStateResponse {
+  const review = latestReview(reviews, item.complaintId);
   return {
     currentRiskLevel: item.currentRiskLevel,
     currentRiskScore: item.currentRiskScore,
+    emergencyReviewRequestId: review?.requestId ?? null,
     escalationId: item.escalationId,
     escalationStatus: item.escalationStatus,
-    riskReviewStatus: item.riskReviewStatus,
+    riskReviewStatus: review?.status ?? null,
+    safetyLock: review?.safetyLock ?? false,
   };
 }
 
-function toSummary(item: StoredEscalation): AdminEscalationSummaryResponse {
+function toSummary(item: StoredEscalation, reviews = readReviews()): AdminEscalationSummaryResponse {
+  const review = latestReview(reviews, item.complaintId);
   return {
     complaintId: mockComplaintNumber(item.complaintId),
     currentRiskLevel: item.currentRiskLevel,
+    emergencyReviewRequestId: review?.requestId ?? null,
     escalationId: item.escalationId,
     escalationStatus: item.escalationStatus,
     reason: item.reason,
+    riskReviewStatus: review?.status ?? null,
+    safetyLock: review?.safetyLock ?? false,
     sharedAt: item.sharedAt,
     sharedBy: item.sharedByName,
   };
+}
+
+// The current score and level: the share's record, else an applied emergency review, else the inbox snapshot.
+function currentRisk(
+  item: StoredEscalation | undefined,
+  review: StoredEmergencyReview | null,
+  snapshot: EscalationComplaintSnapshot | undefined,
+) {
+  if (item) return { level: item.currentRiskLevel, score: item.currentRiskScore };
+  if (review?.status === 'APPLIED') return { level: review.requestedRiskLevel, score: review.requestedRiskScore };
+  return snapshot ? { level: snapshot.riskLevel, score: snapshot.riskScore } : null;
+}
+
+function appendEvent(complaintId: ComplaintId, type: HistoryEventType, actorName: string, fields: Partial<HistoryEvent>) {
+  const store = readStore();
+  const item = findByComplaint(store, complaintId);
+  // History is read through the share; an unshared complaint has nowhere to show it in the mock.
+  if (item) replaceStored(store, { ...item, events: [...item.events, createEvent(item, type, actorName, fields)] });
+}
+
+// EmergencyReviewService.request, in the same order of checks.
+function createEmergencyReview(
+  complaintId: ComplaintId,
+  request: EmergencyReviewCreateRequest,
+  teacherName: string,
+  snapshot: EscalationComplaintSnapshot | undefined,
+) {
+  const reason = request.reason?.trim() ?? '';
+  if (!reason) {
+    throw new ApiError({ status: 400, code: 'RISK_REVIEW_REASON_REQUIRED', message: 'Emergency 재검토 사유가 필요합니다.' });
+  }
+  if (reason.length > RISK_REVIEW_REASON_MAX_LENGTH) {
+    throw new ApiError({ status: 400, code: 'VALIDATION_FAILED', message: '재검토 사유는 300자 이하로 입력해주세요.' });
+  }
+  if (!Number.isInteger(request.riskScore) || request.riskScore < 1 || request.riskScore > EMERGENCY_REVIEW_MAX_SCORE) {
+    throw new ApiError({
+      status: 409,
+      code: 'RISK_REVIEW_NOT_ALLOWED',
+      message: 'Emergency 재검토 요청 점수는 1점 이상 6점 이하여야 합니다.',
+    });
+  }
+
+  const reviews = readReviews();
+  const forComplaint = reviews.filter((review) => review.complaintId === String(complaintId));
+  // An approved request that still holds the lock also blocks a new one.
+  if (forComplaint.some((review) => review.status === 'PENDING_ADMIN_APPROVAL' || review.safetyLock)) {
+    throw new ApiError({
+      status: 409,
+      code: 'EMERGENCY_REVIEW_DUPLICATE',
+      message: '이미 처리 중이거나 안전 잠금이 유지 중인 Emergency 재검토 요청이 있습니다.',
+    });
+  }
+
+  const item = findByComplaint(readStore(), complaintId);
+  const previous = currentRisk(item, forComplaint.at(-1) ?? null, snapshot);
+  if (!previous) throw new ApiError({ status: 404, code: 'COMPLAINT_NOT_FOUND', message: '민원을 찾을 수 없습니다.' });
+  if (previous.level !== 'EMERGENCY' || request.riskScore >= previous.score) {
+    throw new ApiError({
+      status: 409,
+      code: 'RISK_REVIEW_NOT_ALLOWED',
+      message: '현재 Emergency 위험도를 하향하는 경우에만 재검토를 요청할 수 있습니다.',
+    });
+  }
+
+  const requestedAt = new Date().toISOString();
+  const created: StoredEmergencyReview = {
+    complaintId: String(complaintId),
+    decidedAt: null,
+    previousRiskLevel: previous.level,
+    previousRiskScore: previous.score,
+    reason,
+    requestId: Math.max(500, ...reviews.map((review) => review.requestId)) + 1,
+    requestedAt,
+    requestedRiskLevel: mockScoreToLevel(request.riskScore),
+    requestedRiskScore: request.riskScore,
+    reviewerId: request.reviewerId ?? item?.assignedAdminId ?? DEFAULT_ADMIN_ID,
+    reviewerName: DEFAULT_ADMIN_NAME,
+    riskAnalysisId: 1,
+    safetyLock: true,
+    safetyLockUpdatedAt: requestedAt,
+    status: 'PENDING_ADMIN_APPROVAL',
+  };
+  writeReviews([...reviews, created]);
+  appendEvent(complaintId, 'EMERGENCY_REVIEW_REQUESTED', teacherName, { reason });
+  return created;
+}
+
+function requireAssignedReview(reviews: StoredEmergencyReview[], requestId: number, adminId: number) {
+  const review = reviews.find((entry) => entry.requestId === requestId);
+  if (!review) {
+    throw new ApiError({ status: 404, code: 'EMERGENCY_REVIEW_NOT_FOUND', message: 'Emergency 재검토 요청을 찾을 수 없습니다.' });
+  }
+  if (review.reviewerId !== adminId) {
+    throw new ApiError({
+      status: 403,
+      code: 'EMERGENCY_REVIEW_ACCESS_DENIED',
+      message: '지정 검토자만 Emergency 재검토 요청을 처리할 수 있습니다.',
+    });
+  }
+  return review;
 }
 
 function findByComplaint(store: StoredEscalation[], complaintId: ComplaintId) {
@@ -202,15 +341,20 @@ export const mockEscalationApi: EscalationApi = {
   async getEscalationState(complaintId, options) {
     await wait(options?.signal);
     requireUser('TEACHER');
+    const reviews = readReviews();
     const item = findByComplaint(readStore(), complaintId);
-    if (item) return toState(item);
-    if (!options?.snapshot) throw new ApiError({ status: 404, message: '민원을 찾을 수 없습니다.' });
+    if (item) return toState(item, reviews);
+    const review = latestReview(reviews, complaintId);
+    const risk = currentRisk(undefined, review, options?.snapshot);
+    if (!risk) throw new ApiError({ status: 404, code: 'COMPLAINT_NOT_FOUND', message: '민원을 찾을 수 없습니다.' });
     return {
-      currentRiskLevel: options.snapshot.riskLevel,
-      currentRiskScore: options.snapshot.riskScore,
+      currentRiskLevel: risk.level,
+      currentRiskScore: risk.score,
+      emergencyReviewRequestId: review?.requestId ?? null,
       escalationId: null,
       escalationStatus: 'NOT_SHARED',
-      riskReviewStatus: null,
+      riskReviewStatus: review?.status ?? null,
+      safetyLock: review?.safetyLock ?? false,
     };
   },
 
@@ -224,7 +368,9 @@ export const mockEscalationApi: EscalationApi = {
     }
     const { snapshot } = options ?? {};
     if (!snapshot) throw new ApiError({ status: 404, message: '민원을 찾을 수 없습니다.' });
-    if (snapshot.riskLevel !== SHAREABLE_RISK_LEVEL) {
+    const shareRisk = currentRisk(undefined, latestReview(readReviews(), complaintId), snapshot) ??
+      { level: snapshot.riskLevel, score: snapshot.riskScore };
+    if (shareRisk.level !== SHAREABLE_RISK_LEVEL) {
       throw new ApiError({ status: 409, message: 'EMERGENCY 위험도의 민원만 관리자에게 공유할 수 있습니다.' });
     }
 
@@ -246,13 +392,11 @@ export const mockEscalationApi: EscalationApi = {
       ...base,
       assignedAdminId: adminId,
       complaintId: String(complaintId),
-      currentRiskLevel: snapshot.riskLevel,
-      currentRiskScore: snapshot.riskScore,
+      currentRiskLevel: shareRisk.level,
+      currentRiskScore: shareRisk.score,
       escalationStatus: 'SHARED',
       events: [createEvent(base, 'ESCALATION_SHARED', teacher.name, { reason })],
-      pendingRiskChange: null,
       reason,
-      riskReviewStatus: null,
       scopes,
       sharedAt: new Date().toISOString(),
       sharedBy: teacher.userId,
@@ -277,44 +421,47 @@ export const mockEscalationApi: EscalationApi = {
 
     const store = readStore();
     const item = findByComplaint(store, complaintId);
-    const previous = item
-      ? { level: item.currentRiskLevel, score: item.currentRiskScore }
-      : options?.snapshot && { level: options.snapshot.riskLevel, score: options.snapshot.riskScore };
-    if (!previous) throw new ApiError({ status: 404, message: '민원을 찾을 수 없습니다.' });
+    const reviews = readReviews();
+    const previous = currentRisk(item, latestReview(reviews, complaintId), options?.snapshot);
+    if (!previous) throw new ApiError({ status: 404, code: 'COMPLAINT_NOT_FOUND', message: '민원을 찾을 수 없습니다.' });
 
     const direction: RiskReviewDirection =
       riskScore < previous.score ? 'LOWERED' : riskScore > previous.score ? 'RAISED' : 'UNCHANGED';
     if (direction === 'LOWERED' && !reason) {
-      throw new ApiError({ status: 400, message: '위험도를 하향 조정할 때는 검토 사유가 필요합니다.' });
+      throw new ApiError({
+        status: 400,
+        code: 'RISK_REVIEW_REASON_REQUIRED',
+        message: '위험도를 하향 조정할 때는 검토 사유가 필요합니다.',
+      });
     }
 
     const riskLevel = mockScoreToLevel(riskScore);
-    // Like the backend, any change to an EMERGENCY score needs admin approval through the share.
-    const changesEmergency = previous.level === 'EMERGENCY' && riskScore !== previous.score;
-    let status: RiskReviewStatus = 'APPLIED';
+    const base = {
+      complaintId: mockComplaintNumber(String(complaintId)),
+      direction,
+      previousLevel: previous.level,
+      previousScore: previous.score,
+      ...(reason ? { reason } : {}),
+      reviewedBy: teacher.name,
+      riskAnalysisId: 1,
+      riskLevel,
+      riskScore,
+    };
 
-    if (changesEmergency) {
-      if (!item) {
-        throw new ApiError({ status: 409, message: 'EMERGENCY 위험도 변경을 요청하려면 먼저 관리자에게 공유해야 합니다.' });
-      }
-      if (item.escalationStatus === 'COMPLETED') {
-        throw new ApiError({ status: 409, message: '처리 완료된 공유 건에는 위험도 변경을 요청할 수 없습니다.' });
-      }
-      // A new request replaces a pending one, as the backend does.
-      status = 'PENDING_ADMIN_APPROVAL';
-      replaceStored(store, {
-        ...item,
-        events: [...item.events, createEvent(item, 'ESCALATION_RISK_CHANGE_REQUESTED', teacher.name, {
-          previousRiskLevel: previous.level,
-          previousRiskScore: previous.score,
-          reason,
-          riskLevel,
-          riskScore,
-        })],
-        pendingRiskChange: { previousLevel: previous.level, previousScore: previous.score, riskLevel, riskScore },
-        riskReviewStatus: status,
-      });
-    } else if (item) {
+    // Like the backend, changing an EMERGENCY score opens an emergency review instead of applying it.
+    // It no longer needs a share first.
+    if (previous.level === 'EMERGENCY' && riskScore !== previous.score) {
+      const review = createEmergencyReview(complaintId, { reason, riskScore }, teacher.name, options?.snapshot);
+      return {
+        ...base,
+        emergencyReviewRequestId: review.requestId,
+        reviewedAt: review.requestedAt,
+        safetyLock: true,
+        status: 'PENDING_ADMIN_APPROVAL',
+      } satisfies TeacherRiskReviewResponse;
+    }
+
+    if (item) {
       replaceStored(store, {
         ...item,
         currentRiskLevel: riskLevel,
@@ -330,19 +477,25 @@ export const mockEscalationApi: EscalationApi = {
     }
 
     return {
-      complaintId: mockComplaintNumber(String(complaintId)),
-      direction,
-      previousLevel: previous.level,
-      previousScore: previous.score,
-      reason,
+      ...base,
       reviewedAt: new Date().toISOString(),
-      reviewedBy: teacher.name,
-      riskAnalysisId: 1,
-      riskLevel,
       riskReviewId: Date.now(),
-      riskScore,
-      status,
-    };
+      safetyLock: isSafetyLocked(reviews, complaintId),
+      status: 'APPLIED',
+    } satisfies TeacherRiskReviewResponse;
+  },
+
+  async requestEmergencyReview(complaintId, request, options) {
+    await wait(options?.signal);
+    const teacher = requireUser('TEACHER');
+    return toEmergencyReview(createEmergencyReview(complaintId, request, teacher.name, options?.snapshot));
+  },
+
+  async getCurrentEmergencyReview(complaintId, options) {
+    await wait(options?.signal);
+    requireUser('TEACHER');
+    const review = latestReview(readReviews(), complaintId);
+    return review ? toEmergencyReview(review) : null;
   },
 
   async listMyEscalations(signal) {
@@ -368,7 +521,7 @@ export const mockEscalationApi: EscalationApi = {
       .filter((item) => !query.status || item.escalationStatus === query.status)
       .filter((item) => !query.riskLevel || item.currentRiskLevel === query.riskLevel)
       .sort((left, right) => right.sharedAt.localeCompare(left.sharedAt))
-      .map(toSummary);
+      .map((item) => toSummary(item));
   },
 
   async getAdminEscalation(escalationId, signal) {
@@ -394,17 +547,18 @@ export const mockEscalationApi: EscalationApi = {
     await wait(signal);
     const admin = requireUser('ADMIN');
     const item = requireAssigned(readStore(), escalationId, admin.userId);
-    const isReviewed = item.currentRiskScore !== item.snapshot.riskScore;
     return {
       analyzedAt: item.sharedAt,
       complaintId: mockComplaintNumber(item.complaintId),
       detectedFactors: item.snapshot.detectedFactors,
       latestReview: null,
-      reviewLevel: isReviewed ? item.currentRiskLevel : null,
-      reviewScore: isReviewed ? item.currentRiskScore : null,
+      // Like the server, these hold the latest review or fall back to the analysed values.
+      reviewLevel: item.currentRiskLevel,
+      reviewScore: item.currentRiskScore,
       riskAnalysisId: 1,
       riskLevel: item.snapshot.riskLevel,
       riskScore: item.snapshot.riskScore,
+      safetyLock: isSafetyLocked(readReviews(), item.complaintId),
     };
   },
 
@@ -437,10 +591,15 @@ export const mockEscalationApi: EscalationApi = {
     const store = readStore();
     const item = requireAssigned(store, escalationId, admin.userId);
     const message = readMessage(request.message);
-    requireStatus(item, 'UNDER_REVIEW');
-    if (item.riskReviewStatus === 'PENDING_ADMIN_APPROVAL') {
-      throw new ApiError({ status: 409, message: '위험도 변경 요청을 승인하거나 거부한 뒤 처리 완료할 수 있습니다.' });
+    // The server checks the latest emergency review before the share's own state.
+    if (latestReview(readReviews(), item.complaintId)?.status === 'PENDING_ADMIN_APPROVAL') {
+      throw new ApiError({
+        status: 409,
+        code: 'ESCALATION_STATE_INVALID',
+        message: 'Emergency 재검토 요청을 승인하거나 거부한 뒤 처리 완료할 수 있습니다.',
+      });
     }
+    requireStatus(item, 'UNDER_REVIEW');
     const next: StoredEscalation = {
       ...item,
       escalationStatus: 'COMPLETED',
@@ -450,40 +609,79 @@ export const mockEscalationApi: EscalationApi = {
     return toState(next);
   },
 
-  async decideRiskChange(escalationId, request, signal) {
+  async listAdminEmergencyReviews(signal) {
     await wait(signal);
     const admin = requireUser('ADMIN');
-    const store = readStore();
-    const item = requireAssigned(store, escalationId, admin.userId);
-    const message = readMessage(request.message);
-    // Repeating the decision already made is a no-op on the backend.
-    if (item.riskReviewStatus === request.status) return toState(item);
-    requireStatus(item, 'UNDER_REVIEW');
-    const pending = item.pendingRiskChange;
-    if (item.riskReviewStatus !== 'PENDING_ADMIN_APPROVAL' || !pending) {
-      throw new ApiError({ status: 409, message: '교사가 요청한 위험도 변경 건이 없습니다.' });
+    return readReviews()
+      .filter((review) => review.reviewerId === admin.userId)
+      .reverse()
+      .map(toEmergencyReview);
+  },
+
+  async getAdminEmergencyReview(requestId, signal) {
+    await wait(signal);
+    const admin = requireUser('ADMIN');
+    return toEmergencyReview(requireAssignedReview(readReviews(), requestId, admin.userId));
+  },
+
+  // EmergencyReviewService.update: a decision only on a pending request; the lock changes on its own.
+  async updateEmergencyReview(requestId, request, signal) {
+    await wait(signal);
+    const admin = requireUser('ADMIN');
+    if (request.status === undefined && request.safetyLock === undefined) {
+      throw new ApiError({ status: 400, code: 'INVALID_REQUEST', message: '요청 값이 올바르지 않습니다.' });
     }
-    const isApplied = request.status === 'APPLIED';
-    const next: StoredEscalation = {
-      ...item,
-      currentRiskLevel: isApplied ? pending.riskLevel : item.currentRiskLevel,
-      currentRiskScore: isApplied ? pending.riskScore : item.currentRiskScore,
-      events: [...item.events, createEvent(
-        item,
-        isApplied ? 'ESCALATION_RISK_CHANGE_APPROVED' : 'ESCALATION_RISK_CHANGE_REJECTED',
-        admin.name,
-        {
-          previousRiskLevel: pending.previousLevel,
-          previousRiskScore: pending.previousScore,
-          reason: message,
-          riskLevel: pending.riskLevel,
-          riskScore: pending.riskScore,
-        },
-      )],
-      pendingRiskChange: null,
-      riskReviewStatus: request.status,
+    const message = request.message?.trim() || null;
+    if (message && message.length > ADMIN_MESSAGE_MAX_LENGTH) {
+      throw new ApiError({ status: 400, code: 'VALIDATION_FAILED', message: '검토자 메시지는 500자 이하로 입력해주세요.' });
+    }
+    const reviews = readReviews();
+    const review = requireAssignedReview(reviews, requestId, admin.userId);
+    if (request.status && review.status !== 'PENDING_ADMIN_APPROVAL') {
+      throw new ApiError({ status: 409, code: 'ESCALATION_STATE_INVALID', message: '이미 결정된 Emergency 재검토 요청입니다.' });
+    }
+
+    const now = new Date().toISOString();
+    const lockChanged = request.safetyLock !== undefined && request.safetyLock !== review.safetyLock;
+    const next: StoredEmergencyReview = {
+      ...review,
+      ...(request.status ? { decidedAt: now, status: request.status } : {}),
+      ...(request.safetyLock !== undefined ? { safetyLock: request.safetyLock, safetyLockUpdatedAt: now } : {}),
     };
-    replaceStored(store, next);
-    return toState(next);
+    writeReviews(reviews.map((entry) => entry.requestId === requestId ? next : entry));
+
+    if (request.status === 'APPLIED') {
+      // Approval saves the requested score as the teacher's review, so the share's current level drops.
+      const store = readStore();
+      const item = findByComplaint(store, review.complaintId);
+      if (item) {
+        replaceStored(store, {
+          ...item,
+          currentRiskLevel: review.requestedRiskLevel,
+          currentRiskScore: review.requestedRiskScore,
+          events: [...item.events, createEvent(item, 'RISK_REVIEWED', item.sharedByName, {
+            previousRiskLevel: review.previousRiskLevel,
+            previousRiskScore: review.previousRiskScore,
+            reason: review.reason,
+            riskLevel: review.requestedRiskLevel,
+            riskScore: review.requestedRiskScore,
+          })],
+        });
+      }
+    }
+    if (request.status) {
+      appendEvent(review.complaintId, request.status === 'APPLIED' ? 'EMERGENCY_REVIEW_APPROVED' : 'EMERGENCY_REVIEW_REJECTED',
+        admin.name, {
+          reason: message ?? (request.status === 'APPLIED'
+            ? 'Emergency 재검토 요청을 승인합니다.'
+            : 'Emergency 재검토 요청을 거부합니다.'),
+        });
+    }
+    if (lockChanged) {
+      appendEvent(review.complaintId, 'EMERGENCY_SAFETY_LOCK_UPDATED', admin.name, {
+        reason: message ?? (next.safetyLock ? '안전 잠금을 유지합니다.' : '안전 잠금을 해제합니다.'),
+      });
+    }
+    return toEmergencyReview(next);
   },
 };

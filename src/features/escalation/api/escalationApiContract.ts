@@ -2,12 +2,14 @@ import type {
   AdminEscalationListQuery,
   AdminEscalationSummaryResponse,
   ComplaintId,
+  EmergencyReviewCreateRequest,
+  EmergencyReviewResponse,
+  EmergencyReviewUpdateRequest,
   EscalationComplaintSnapshot,
   EscalationMessageRequest,
   EscalationShareContentResponse,
   EscalationStateResponse,
   MockTeacherEscalation,
-  RiskChangeDecisionRequest,
   ShareEscalationRequest,
   TeacherHistoryResponse,
   TeacherRiskResponse,
@@ -36,6 +38,17 @@ export type EscalationApi = {
   ) => Promise<TeacherRiskReviewResponse>;
   // Mock only: the spec has no "my shared complaints" endpoint, so the HTTP adapter leaves it out.
   listMyEscalations?: (signal?: AbortSignal) => Promise<MockTeacherEscalation[]>;
+  // Emergency review is its own resource, independent of the admin share.
+  requestEmergencyReview: (
+    complaintId: ComplaintId,
+    request: EmergencyReviewCreateRequest,
+    options?: TeacherRequestOptions,
+  ) => Promise<EmergencyReviewResponse>;
+  // null when the complaint has no emergency review request (the server answers 404 EMERGENCY_REVIEW_NOT_FOUND).
+  getCurrentEmergencyReview: (
+    complaintId: ComplaintId,
+    options?: TeacherRequestOptions,
+  ) => Promise<EmergencyReviewResponse | null>;
 
   // Admin
   listAdminEscalations: (
@@ -56,11 +69,14 @@ export type EscalationApi = {
     request: EscalationMessageRequest,
     signal?: AbortSignal,
   ) => Promise<EscalationStateResponse>;
-  decideRiskChange: (
-    escalationId: number,
-    request: RiskChangeDecisionRequest,
+  // Only requests assigned to the signed-in admin as reviewer.
+  listAdminEmergencyReviews: (signal?: AbortSignal) => Promise<EmergencyReviewResponse[]>;
+  getAdminEmergencyReview: (requestId: number, signal?: AbortSignal) => Promise<EmergencyReviewResponse>;
+  updateEmergencyReview: (
+    requestId: number,
+    request: EmergencyReviewUpdateRequest,
     signal?: AbortSignal,
-  ) => Promise<EscalationStateResponse>;
+  ) => Promise<EmergencyReviewResponse>;
 };
 
 // Fired on window after a share or admin action so open screens (lists, counts) can refetch.

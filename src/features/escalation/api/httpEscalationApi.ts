@@ -1,7 +1,8 @@
-import { ApiError, apiClient } from '../../../shared/api';
+import { ApiError, apiClient, isApiError } from '../../../shared/api';
 import type {
   AdminEscalationSummaryResponse,
   ComplaintId,
+  EmergencyReviewResponse,
   EscalationShareContentResponse,
   EscalationStateResponse,
   TeacherHistoryResponse,
@@ -10,7 +11,8 @@ import type {
 } from '../escalationTypes';
 import { notifyEscalationsChanged, toServerComplaintId, type EscalationApi } from './escalationApiContract';
 
-// Paths and shapes follow the backend OpenAPI spec (/v3/api-docs).
+// Paths and shapes follow the backend controllers. Status codes are not relied on beyond 2xx:
+// /v3/api-docs lists 200 for POST /emergency-review, but the server answers 201.
 
 // Callers check canSendEscalationRequest first; this keeps a stray mock ID from ever reaching the server.
 function serverComplaintId(complaintId: ComplaintId) {
@@ -48,6 +50,26 @@ export const httpEscalationApi: EscalationApi = {
       { signal: options?.signal },
     )),
 
+  requestEmergencyReview: async (complaintId, request, options) =>
+    mutate(apiClient.post<EmergencyReviewResponse>(
+      `/teacher/complaints/${serverComplaintId(complaintId)}/emergency-review`,
+      request,
+      { signal: options?.signal },
+    )),
+
+  getCurrentEmergencyReview: async (complaintId, options) => {
+    try {
+      return await apiClient.get<EmergencyReviewResponse>(
+        `/teacher/complaints/${serverComplaintId(complaintId)}/emergency-review/current`,
+        { signal: options?.signal },
+      );
+    } catch (error) {
+      // 404 here means "no request yet", not a failure. COMPLAINT_NOT_FOUND still throws.
+      if (isApiError(error) && error.code === 'EMERGENCY_REVIEW_NOT_FOUND') return null;
+      throw error;
+    }
+  },
+
   listAdminEscalations: (query, signal) =>
     apiClient.get<AdminEscalationSummaryResponse[]>('/admin/escalations', { query, signal }),
 
@@ -69,10 +91,12 @@ export const httpEscalationApi: EscalationApi = {
   completeEscalation: (escalationId, request, signal) =>
     mutate(apiClient.post<EscalationStateResponse>(`/admin/escalations/${escalationId}/complete`, request, { signal })),
 
-  decideRiskChange: (escalationId, request, signal) =>
-    mutate(apiClient.post<EscalationStateResponse>(
-      `/admin/escalations/${escalationId}/risk-change-decision`,
-      request,
-      { signal },
-    )),
+  listAdminEmergencyReviews: (signal) =>
+    apiClient.get<EmergencyReviewResponse[]>('/admin/emergency-review', { signal }),
+
+  getAdminEmergencyReview: (requestId, signal) =>
+    apiClient.get<EmergencyReviewResponse>(`/admin/emergency-review/${requestId}`, { signal }),
+
+  updateEmergencyReview: (requestId, request, signal) =>
+    mutate(apiClient.patch<EmergencyReviewResponse>(`/admin/emergency-review/${requestId}`, request, { signal })),
 };
