@@ -29,6 +29,10 @@ const history = {
     eventId: 'event:1', type: 'STATUS_CHANGED', occurredAt: '2026-10-29T10:01:00',
     actorName: '공유 교사', previousStatus: 'DRAFT', newStatus: 'OPEN',
     referenceType: 'COMPLAINT', referenceId: 12,
+  }, {
+    // The live server tags escalation events with COMPLAINT_ESCALATION.
+    eventId: 'complaint-event:7', type: 'ESCALATION_SHARED', occurredAt: '2026-10-29T10:03:00',
+    actorName: '공유 교사', referenceType: 'COMPLAINT_ESCALATION', referenceId: 3, reason: summary.reason,
   }],
 };
 
@@ -96,6 +100,7 @@ test('명세의 메시지·위험 요소·누락 이력을 표시하고 검토 �
   await expect(historyPanel.getByText('메시지 #8', { exact: true })).toBeVisible();
   await expect(historyPanel.getByText('작성 중 → 진행 중', { exact: true })).toBeVisible();
   await expect(historyPanel.getByText('민원 #12', { exact: true })).toBeVisible();
+  await expect(historyPanel.getByText('관리자 공유 #3', { exact: true })).toBeVisible();
 
   const process = page.getByRole('region', { name: '처리 상태', exact: true });
   await process.getByLabel('처리 메모').fill('  검토 메모  ');

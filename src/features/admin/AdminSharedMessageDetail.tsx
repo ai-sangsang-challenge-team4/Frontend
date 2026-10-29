@@ -42,7 +42,7 @@ const factorStateVariant: Record<RiskFactorStatus, BadgeVariant> = {
 };
 const historyReferenceLabel: Record<string, string> = {
   COMPLAINT: '민원', MESSAGE: '메시지', COMPLAINT_MESSAGE: '메시지', RISK_ANALYSIS: '위험 분석',
-  RISK_REVIEW: '위험도 검토', ESCALATION: '관리자 공유', EMERGENCY_REVIEW: '긴급 재검토',
+  RISK_REVIEW: '위험도 검토', ESCALATION: '관리자 공유', COMPLAINT_ESCALATION: '관리자 공유', EMERGENCY_REVIEW: '긴급 재검토',
   EMERGENCY_REVIEW_REQUEST: '긴급 재검토',
 };
 
