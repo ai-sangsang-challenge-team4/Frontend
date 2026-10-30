@@ -187,5 +187,8 @@ export function useServerTeacherInbox({ enabled, filters, setThreads }: UseServe
     void loadDetail(threadId).catch(() => undefined);
   }, [loadDetail, setThreads]);
 
-  return { listIds, listState, loadDetail, loadMore, retry, viewOriginal };
+  // Reloads the first page, e.g. after a status change moves a thread out of the current filter.
+  const reloadList = useCallback(() => loadPage(0), [loadPage]);
+
+  return { listIds, listState, loadDetail, loadMore, reloadList, retry, viewOriginal };
 }

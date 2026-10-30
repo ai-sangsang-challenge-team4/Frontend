@@ -130,7 +130,7 @@ import { messageApiMode, teacherInboxApi } from './api/teacherInboxApi';
 import { initialTeacherThreads } from './mockThreads';
 import { persistTeacherParentThread, readTeacherParentThreads } from './teacherParentMessages';
 import { useActiveMessageCount } from './useActiveMessageCount';
-import { getDefaultOriginalReplyId } from './serverThreads';
+import { getDefaultOriginalReplyId, threadStatus } from './serverThreads';
 import { useServerTeacherInbox } from './useServerTeacherInbox';
 import { useServerReply, type ServerReplyAction } from './useServerReply';
 import { getServerCloseBlockReason, getServerReplyBlockReason } from './serverReplies';
@@ -2577,6 +2577,13 @@ export function TeacherMessages({
     closingServerThreadIds.current.add(thread.id);
     try {
       await teacherInboxApi.closeComplaint(complaintId);
+      // Shown as complete even if the following reload fails, so the close button cannot be pressed again.
+      updateThread(thread.id, (current) => ({
+        ...current,
+        serverStatus: { status: 'CLOSED', waitingFor: 'NONE' },
+        status: threadStatus('CLOSED', 'NONE', true),
+      }));
+      void serverInbox.reloadList();
       setToastMessage('상담을 완료 처리했습니다.');
     } catch (error) {
       setToastMessage(getApiErrorMessage(error, '상담을 완료 처리하지 못했습니다. 다시 시도해 주세요.'));

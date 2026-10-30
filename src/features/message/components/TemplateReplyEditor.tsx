@@ -7,6 +7,7 @@ import {
   templateBlockText,
   templateVariableLabel,
   templateVariableValue,
+  unplacedTeacherVariables,
   type ReplyTemplate,
   type ReplyTemplateChange,
   type ReplyTemplateDraft,
@@ -136,6 +137,9 @@ export function TemplateReplyEditor({ disabled, draft, onApply, onChange, teache
               }
               return <p className="board-template-sentence" key={block.blockId}>{block.mode === 'VARIABLE_ONLY' ? renderText(templateBlockText(block, draft)) : templateBlockText(block, draft)}</p>;
             })}
+            {unplacedTeacherVariables(template).map((key) => (
+              <label className="board-template-option-variable" key={key}><span>{label(key)}</span>{variableInput(key)}</label>
+            ))}
           </div>
         </>
       ) : <p>답장 예시를 골라 필요한 내용을 채워 주세요.</p>}

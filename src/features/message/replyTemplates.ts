@@ -80,7 +80,14 @@ export function formatConsultationDateTime(value: string) {
 }
 
 export function isTeacherVariable(key: string, template?: ReplyTemplate) {
-  return template?.teacherVariables ? key in template.teacherVariables : key in teacherVariableLabels;
+  return Object.prototype.hasOwnProperty.call(template?.teacherVariables ?? teacherVariableLabels, key);
+}
+
+// Server templates may list a required variable that no {{slot}} shows; it still needs a value for POST /adoptions.
+export function unplacedTeacherVariables(template: ReplyTemplate) {
+  const placed = new Set(template.blocks.flatMap((block) => [block.text ?? '', ...(block.options ?? [])])
+    .flatMap((text) => [...text.matchAll(TEMPLATE_VARIABLE_PATTERN)].map((match) => match[1])));
+  return Object.keys(template.teacherVariables ?? {}).filter((key) => !placed.has(key));
 }
 
 export function templateVariableLabel(key: string, template?: ReplyTemplate) {
@@ -188,7 +195,8 @@ export function createReplyTemplateDraft(template: ReplyTemplate, thread: BoardT
       ...(template.teacherVariables
         ? Object.fromEntries(Object.keys(template.teacherVariables).map((key) => [
           key,
-          serverVariableDefaults[key]?.(thread, teacherName) ?? '',
+          // Variables are capped at 80 characters, and a long inquiry title must not block saving.
+          (serverVariableDefaults[key]?.(thread, teacherName) ?? '').slice(0, 80),
         ]))
         : { parentTitle: autoVariables.parentTitle(thread, teacherName), consultationSlot: '' }),
       ...compatible?.variables,
@@ -261,6 +269,10 @@ export function validateReplyTemplate(template: ReplyTemplate, draft: ReplyTempl
         if (!value.trim() || value.length > 80) errors.push(`${templateVariableLabel(match[1], template)}을 입력해 주세요.`);
       }
     }
+  }
+  for (const key of unplacedTeacherVariables(template)) {
+    const value = draft.variables[key] ?? '';
+    if (!value.trim() || value.length > 80) errors.push(`${templateVariableLabel(key, template)}을 입력해 주세요.`);
   }
   if (serializedText.trim() !== renderReplyTemplate(template, thread, teacherName, draft).trim()) {
     errors.push('예시의 고정 문장이 변경되었습니다. 예시를 다시 적용해 주세요.');
