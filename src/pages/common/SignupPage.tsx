@@ -457,7 +457,7 @@ export function SignupPage() {
               <legend>약관 동의</legend>
               <label className="auth-consent-option">
                 <input
-                  aria-describedby="signup-policy-description"
+                  aria-describedby={formErrors.policy ? 'signup-policy-description signup-policy-error' : 'signup-policy-description'}
                   aria-invalid={formErrors.policy ? true : undefined}
                   checked={policyAgreed}
                   disabled={isLoading}
@@ -475,7 +475,7 @@ export function SignupPage() {
                 동의하지 않으면 가입할 수 없습니다.
               </p>
               {formErrors.policy ? (
-                <p className="auth-field-error" role="alert">
+                <p className="auth-field-error" id="signup-policy-error" role="alert">
                   {formErrors.policy}
                 </p>
               ) : null}

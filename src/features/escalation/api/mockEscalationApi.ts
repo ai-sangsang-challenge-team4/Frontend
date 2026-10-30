@@ -26,9 +26,9 @@ import type {
 } from '../escalationTypes';
 import { notifyEscalationsChanged, toServerComplaintId, type EscalationApi } from './escalationApiContract';
 
-// v3: the in-share risk change request moved to separate emergency reviews, so v2 entries are ignored.
-export const MOCK_ESCALATION_STORAGE_KEY = 'teacher-hub.escalations.v3';
-export const MOCK_EMERGENCY_REVIEW_STORAGE_KEY = 'teacher-hub.emergency-reviews.v1';
+// v4 / reviews v2: scores moved from the teacher's 1~7 to the server's 0~70, so older entries are ignored.
+export const MOCK_ESCALATION_STORAGE_KEY = 'teacher-hub.escalations.v4';
+export const MOCK_EMERGENCY_REVIEW_STORAGE_KEY = 'teacher-hub.emergency-reviews.v2';
 const MOCK_DELAY_MS = 300;
 
 // The server assigns the first admin when adminId is null. Matches the ADMIN account in mockAuthApi.
@@ -214,6 +214,16 @@ function currentRisk(
   if (item) return { level: item.currentRiskLevel, score: item.currentRiskScore };
   if (review?.status === 'APPLIED') return { level: review.requestedRiskLevel, score: review.requestedRiskScore };
   return snapshot ? { level: snapshot.riskLevel, score: snapshot.riskScore } : null;
+}
+
+// The server reports the latest applied teacher review; the mock reads it back from the share's history.
+function latestAppliedReview(item: StoredEscalation) {
+  const event = item.events.filter((entry) => entry.type === 'RISK_REVIEWED').at(-1);
+  if (!event || event.riskScore == null || event.riskLevel == null) return null;
+  const previous = event.previousRiskScore ?? event.riskScore;
+  const direction: RiskReviewDirection =
+    event.riskScore < previous ? 'LOWERED' : event.riskScore > previous ? 'RAISED' : 'UNCHANGED';
+  return { direction, event, level: event.riskLevel, score: event.riskScore };
 }
 
 function appendEvent(complaintId: ComplaintId, type: HistoryEventType, actorName: string, fields: Partial<HistoryEvent>) {
@@ -558,17 +568,23 @@ export const mockEscalationApi: EscalationApi = {
     await wait(signal);
     const admin = requireUser('ADMIN');
     const item = requireAssigned(readStore(), escalationId, admin.userId);
+    const review = latestAppliedReview(item);
     return {
       analyzedAt: item.sharedAt,
       complaintId: mockComplaintNumber(item.complaintId),
       detectedFactors: item.snapshot.detectedFactors,
       currentRiskLevel: item.currentRiskLevel,
       currentRiskScore: item.currentRiskScore,
-      // The mock keeps no review records, so the review fields stay null as without a review.
-      latestReview: null,
-      reviewLevel: null,
-      reviewScale: null,
-      reviewScore: null,
+      latestReview: review ? {
+        direction: review.direction,
+        reason: review.event.reason ?? '',
+        reviewedAt: review.event.occurredAt,
+        reviewedBy: review.event.actorName ?? '',
+        riskReviewId: Date.parse(review.event.occurredAt),
+      } : null,
+      reviewLevel: review?.level ?? null,
+      reviewScale: review ? toMockScale(review.score) : null,
+      reviewScore: review?.score ?? null,
       riskAnalysisId: 1,
       riskLevel: item.snapshot.riskLevel,
       riskScore: item.snapshot.riskScore,

@@ -18,7 +18,7 @@
 
 ## Mock / HTTP 전환
 
-`VITE_ESCALATION_API=http`이면 백엔드를 호출하고, 그 외(기본)는 localStorage mock(`teacher-hub.escalations.v3`, `teacher-hub.emergency-reviews.v1`)을 씁니다.
+`VITE_ESCALATION_API=http`이면 백엔드를 호출하고, 그 외(기본)는 localStorage mock(`teacher-hub.escalations.v4`, `teacher-hub.emergency-reviews.v2`)을 씁니다.
 
 - 백엔드는 JWT가 필요하므로 `VITE_AUTH_API=http`와 함께 켭니다. mock 로그인 토큰으로는 401이 납니다.
 - 교사 메시지함은 mock 데이터(`thread-001` 같은 문자열 ID)라, http 모드에서는 숫자 complaintId가 없는 메시지에 요청을 보내지 않고 안내 문구만 표시합니다.
@@ -100,7 +100,7 @@ npx playwright test --config=playwright.admin-http.config.ts
 Mock 공유 내역 초기화:
 
 ```js
-localStorage.removeItem('teacher-hub.escalations.v3');
-localStorage.removeItem('teacher-hub.emergency-reviews.v1');
+localStorage.removeItem('teacher-hub.escalations.v4');
+localStorage.removeItem('teacher-hub.emergency-reviews.v2');
 location.reload();
 ```
