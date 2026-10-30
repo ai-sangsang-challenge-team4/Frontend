@@ -27,6 +27,7 @@ type SignupFormErrors = Partial<
     | 'employeeNo'
     | 'password'
     | 'passwordConfirmation'
+    | 'policy'
     | 'role'
     | 'submit'
     | 'verification',
@@ -63,6 +64,8 @@ export function SignupPage() {
   const [password, setPassword] = useState('');
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const [child, setChild] = useState(createEmptyChildSignupInfo);
+  const [policyAgreed, setPolicyAgreed] = useState(false);
+  const [optionalAgreed, setOptionalAgreed] = useState(false);
   const [formErrors, setFormErrors] = useState<SignupFormErrors>({});
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -96,6 +99,10 @@ export function SignupPage() {
       nextErrors.verification = '이메일 인증을 완료해 주세요.';
     }
 
+    if (!policyAgreed) {
+      nextErrors.policy = '필수 약관에 동의해 주세요.';
+    }
+
     if (role === 'PARENT') {
       const childErrors = validateChildSignupInfo(child);
       if (Object.keys(childErrors).length > 0) nextErrors.child = childErrors;
@@ -112,6 +119,8 @@ export function SignupPage() {
         email: email.trim(),
         password,
         name: name.trim(),
+        policyAgreed,
+        optionalAgreed,
         ...(role === 'PARENT'
           ? { role, child: { ...child, name: child.name.trim() } }
           : { role, schoolId: teacherSchool.id, employeeNo: employeeNo.trim() }),
@@ -278,6 +287,7 @@ export function SignupPage() {
             <div className="auth-stacked-field">
               <div className="auth-inline-row">
                 <TextField
+                  aria-describedby={!isEmailVerificationSupported ? 'signup-email-verification-notice' : undefined}
                   autoComplete="email"
                   error={emailError}
                   fieldSize="lg"
@@ -296,20 +306,24 @@ export function SignupPage() {
                   type="email"
                   value={email}
                 />
-                {isEmailVerificationSupported ? (
-                  <Button
-                    className="auth-inline-button"
-                    disabled={requestStatus === 'loading' || verificationStatus === 'verified'}
-                    isLoading={requestStatus === 'loading'}
-                    onClick={requestVerification}
-                    size="lg"
-                    type="button"
-                    variant="outline"
-                  >
-                    {hasRequestedVerification ? '재전송' : '인증번호 받기'}
-                  </Button>
-                ) : null}
+                <Button
+                  aria-describedby={!isEmailVerificationSupported ? 'signup-email-verification-notice' : undefined}
+                  className="auth-inline-button"
+                  disabled={!isEmailVerificationSupported || requestStatus === 'loading' || verificationStatus === 'verified'}
+                  isLoading={requestStatus === 'loading'}
+                  onClick={requestVerification}
+                  size="lg"
+                  type="button"
+                  variant="outline"
+                >
+                  {hasRequestedVerification ? '재전송' : '인증번호 받기'}
+                </Button>
               </div>
+              {!isEmailVerificationSupported ? (
+                <p className="auth-verification-notice" id="signup-email-verification-notice">
+                  이메일 인증 기능은 준비 중이에요. 현재는 인증 없이 가입할 수 있어요.
+                </p>
+              ) : null}
               {developmentCode ? (
                 <p className="auth-dev-code" role="status">
                   개발용 인증번호: <strong>{developmentCode}</strong>
@@ -438,6 +452,49 @@ export function SignupPage() {
               value={passwordConfirmation}
             />
 
+            {/* The spec's optional consent is test-data storage; the server records it as optionalAgreed. */}
+            <fieldset className="auth-fieldset auth-consent">
+              <legend>약관 동의</legend>
+              <label className="auth-consent-option">
+                <input
+                  aria-describedby="signup-policy-description"
+                  aria-invalid={formErrors.policy ? true : undefined}
+                  checked={policyAgreed}
+                  disabled={isLoading}
+                  name="policyAgreed"
+                  onChange={(event) => {
+                    setPolicyAgreed(event.currentTarget.checked);
+                    setFormErrors((errors) => ({ ...errors, policy: '', submit: '' }));
+                  }}
+                  type="checkbox"
+                />
+                <span>[필수] 서비스 이용약관 및 개인정보 수집·이용에 동의합니다.</span>
+              </label>
+              <p className="auth-consent-description" id="signup-policy-description">
+                계정 정보와 메시지·처리 기록을 서비스 제공 목적으로 수집·이용합니다.
+                동의하지 않으면 가입할 수 없습니다.
+              </p>
+              {formErrors.policy ? (
+                <p className="auth-field-error" role="alert">
+                  {formErrors.policy}
+                </p>
+              ) : null}
+              <label className="auth-consent-option">
+                <input
+                  aria-describedby="signup-optional-description"
+                  checked={optionalAgreed}
+                  disabled={isLoading}
+                  name="optionalAgreed"
+                  onChange={(event) => setOptionalAgreed(event.currentTarget.checked)}
+                  type="checkbox"
+                />
+                <span>[선택] 서비스 개선을 위한 메시지 활용에 동의합니다.</span>
+              </label>
+              <p className="auth-consent-description" id="signup-optional-description">
+                AI 분석이 더 정확해지도록 작성한 메시지를 테스트 자료로 보관해 활용합니다.
+                동의하지 않아도 모든 기능을 똑같이 이용할 수 있습니다.
+              </p>
+            </fieldset>
           </div>
 
           <div className="auth-submit-row">

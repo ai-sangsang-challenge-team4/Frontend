@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Sidebar } from '../../shared/components/teacher-shell/TeacherSidebar';
 import { useAuth } from '../auth';
 import { listAdminEscalations } from '../escalation/api';
@@ -13,6 +13,7 @@ const loadPendingEscalations = (signal: AbortSignal) => listAdminEscalations({ s
 export function AdminShell() {
   const { logout, user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const { data } = useEscalationRequest(loadPendingEscalations);
 
@@ -24,7 +25,7 @@ export function AdminShell() {
   return (
     <section className={`board-inbox-page admin-inbox-page${isSidebarCollapsed ? ' is-sidebar-collapsed' : ''}`}>
       <Sidebar
-        activeItem="adminMessages"
+        activeItem={location.pathname === '/admin/mypage' ? 'mypage' : 'adminMessages'}
         defaultCollapsed={isSidebarCollapsed}
         messageCount={data?.length ?? 0}
         onCollapsedChange={setIsSidebarCollapsed}

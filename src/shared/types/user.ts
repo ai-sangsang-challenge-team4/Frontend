@@ -5,4 +5,5 @@ export type User = {
   name: string;
   email: string;
   role: UserRole;
+  students?: { studentId: number; name: string; studentNo: string }[];
 };

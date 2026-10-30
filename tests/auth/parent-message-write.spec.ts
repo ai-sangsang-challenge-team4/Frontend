@@ -146,7 +146,7 @@ test('저장 실패와 오프라인 상태에서 작성한 내용을 유지한�
   await expect(page.getByRole('region', { name: '메시지 분석 중' })).toHaveCount(0);
 });
 
-test('학부모 메뉴와 계정 정보를 표시하고 화면이 가로로 넘치지 않는다', async ({ page }, testInfo) => {
+test('학부모 메뉴에서 마이페이지로 이동하고 화면이 가로로 넘치지 않는다', async ({ page }, testInfo) => {
   await openComposer(page);
   const isMobile = page.viewportSize()!.width <= 980;
   if (isMobile) {
@@ -155,17 +155,17 @@ test('학부모 메뉴와 계정 정보를 표시하고 화면이 가로로 넘�
     await expect(menu.getByRole('link', { name: '새 문의', exact: true })).toHaveAttribute('aria-current', 'page');
     await expect(menu.getByRole('link', { name: '문의 내역', exact: true })).toBeVisible();
     await expectMenuLabelsAligned(menu.locator('.sidebar-mobile-link > span'));
-    await menu.getByRole('button', { name: '설정/도움말', exact: true }).click();
+    await menu.getByRole('link', { name: '마이페이지', exact: true }).click();
   } else {
     await expect(page.locator('.sidebar-shell')).toHaveCSS('width', '297px');
     await expectMenuLabelsAligned(page.locator('.sidebar-shell .sidebar-link-label'));
     await page.getByRole('button', { name: '사이드바 접기', exact: true }).click();
     await expect(page.locator('.sidebar-shell')).toHaveCSS('width', '100px');
-    await page.getByRole('button', { name: '설정/도움말', exact: true }).click();
+    await page.locator('.sidebar-utility-link').click();
   }
-  const account = page.getByRole('dialog', { name: '계정 정보', exact: true });
-  await expect(account.getByText('parent@example.com', { exact: true })).toBeVisible();
-  await account.getByRole('button', { name: '닫기', exact: true }).click();
+  await expect(page).toHaveURL(/\/parent\/mypage$/);
+  await expect(page.getByRole('heading', { name: '마이페이지', exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: '기본 정보', exact: true }).getByText('parent@example.com', { exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('parent-message-write.png'), fullPage: true });
 });

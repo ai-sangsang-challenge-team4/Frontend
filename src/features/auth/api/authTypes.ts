@@ -33,17 +33,21 @@ export type MyStudentResponse = {
   studentNo: string;
 };
 
-// POST /users/me/policy-consents. allAgreed must be true (@AssertTrue); the server stores its current policy
-// version (teacherhub.policy.version), and agreeing again to the same version returns the first record.
+// POST /users/me/policy-consents. requiredAgreed must be true (@AssertTrue) and optionalAgreed is required;
+// the server stores them against its current policy version (teacherhub.policy.version).
 export type PolicyConsentRequest = {
-  allAgreed: true;
+  requiredAgreed: true;
+  optionalAgreed: boolean;
 };
 
+// GET and POST /users/me/policy-consents. GET returns false for both when the current policy version has
+// no record yet (e.g. after a version change), so the user has to agree again.
 export type PolicyConsentResponse = {
-  consentId: number;
+  consentId: number | null;
   policyVersion: string;
-  agreedAt: string;
-  allAgreed: boolean;
+  agreedAt: string | null;
+  requiredAgreed: boolean;
+  optionalAgreed: boolean;
 };
 
 // POST /auth/signup (201)
@@ -62,6 +66,10 @@ export type SignupRequest = {
   studentId: number | null;
   // Required for PARENT; must match the student's name on record.
   studentName: string | null;
+  // Must be true (@AssertTrue); signup and the consent record are saved in one transaction.
+  requiredAgreed: boolean;
+  // Required (true or false).
+  optionalAgreed: boolean;
 };
 
 export type SignupResponse = {

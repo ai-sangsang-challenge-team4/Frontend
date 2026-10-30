@@ -33,7 +33,7 @@ function toUser(response: UserInfoResponse): User {
   if (!isUser(user)) {
     throw new AuthApiError({ code: 'INVALID_USER', message: '사용자 정보를 확인하지 못했습니다.', status: 502 });
   }
-  return user;
+  return { ...user, ...(response.students !== undefined ? { students: response.students } : {}) };
 }
 
 type JwtClaims = { sub?: unknown; email?: unknown; role?: unknown; exp?: unknown };
@@ -113,9 +113,18 @@ export const httpAuthApi: AuthApi = {
   // No logout API: the JWT stays valid until it expires, and AuthProvider already cleared the local session.
   logout: async () => undefined,
 
-  agreeToCurrentPolicy: () =>
+  getCurrentPolicyConsent: () =>
     toAuthError(
-      apiClient.post<PolicyConsentResponse>('/users/me/policy-consents', { allAgreed: true } satisfies PolicyConsentRequest),
+      apiClient.get<PolicyConsentResponse>('/users/me/policy-consents'),
+      '약관 동의 여부를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+    ),
+
+  agreeToCurrentPolicy: ({ optionalAgreed }) =>
+    toAuthError(
+      apiClient.post<PolicyConsentResponse>(
+        '/users/me/policy-consents',
+        { requiredAgreed: true, optionalAgreed } satisfies PolicyConsentRequest,
+      ),
       '약관 동의를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.',
     ),
 };

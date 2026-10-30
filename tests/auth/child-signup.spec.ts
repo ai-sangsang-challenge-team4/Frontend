@@ -148,6 +148,7 @@ test('자녀 정보 누락과 공백 이름을 차단하고 회원가입 실패 
   await page.getByRole('button', { name: '회원가입', exact: true }).click();
   await expect(page.getByText('자녀 이름을 입력해 주세요.', { exact: true })).toBeVisible();
   await page.getByLabel('자녀 이름').fill('김상상');
+  await page.getByRole('checkbox', { name: /서비스 이용약관/ }).check();
   await page.evaluate(() => localStorage.setItem('teacher-hub.auth-mock-settings', JSON.stringify({
     failures: { signup: 503 },
   })));
@@ -177,6 +178,7 @@ test('교사로 전환해 가입하면 입력했던 자녀 정보를 저장하�
   await expect(page.getByRole('button', { name: '인증 완료' })).toBeVisible();
   await page.getByLabel('비밀번호 *', { exact: true }).fill('password123');
   await page.getByLabel('비밀번호 확인').fill('password123');
+  await page.getByRole('checkbox', { name: /서비스 이용약관/ }).check();
   await page.getByRole('button', { name: '회원가입', exact: true }).click();
   await expect(page).toHaveURL(/\/login\?role=TEACHER$/);
   const accounts = await page.evaluate(() => JSON.parse(localStorage.getItem('teacher-hub.auth-accounts') ?? '[]'));

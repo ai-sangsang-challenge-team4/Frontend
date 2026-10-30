@@ -4,7 +4,7 @@ const teacherPages = [
   { path: '/teacher/messages', title: '받은 메시지', label: '메시지' },
   { path: '/teacher/guide', title: '대응 가이드', label: '대응 가이드' },
   { path: '/teacher/admin-share', title: '관리자 공유', label: '관리자 공유' },
-  { path: '/teacher/settings', title: '설정/도움말', label: '설정/도움말' },
+  { path: '/teacher/mypage', title: '마이페이지', label: '마이페이지' },
 ];
 
 async function loginTeacher(page: Page) {
@@ -33,7 +33,7 @@ test('교사 화면은 모바일 햄버거 메뉴와 데스크톱 사이드바�
       ));
       expect(headerGap).toBeCloseTo(0, 1);
       await expect(page.locator('.sidebar-shell > .sidebar-nav')).toBeHidden();
-      await expect(page.getByRole('button', { name: '로그아웃', exact: true })).toHaveCount(0);
+      await expect(page.locator('.teacher-logout-button:visible')).toHaveCount(0);
       await toggle.click();
       const dialog = page.getByRole('dialog', { name: 'Teacher Hub 교사 메뉴', exact: true });
       await expect(dialog).toBeVisible();

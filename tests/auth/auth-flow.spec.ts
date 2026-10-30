@@ -132,6 +132,7 @@ for (const role of ['PARENT', 'TEACHER'] as const) {
     await page.locator('input[name="password"]').fill('newpassword123');
     await page.locator('input[name="passwordConfirmation"]').fill('newpassword123');
     if (role === 'PARENT') await fillChildInformation(page);
+    await page.getByRole('checkbox', { name: /서비스 이용약관/ }).check();
     await page.getByRole('button', { name: '회원가입', exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/login\\?role=${role}$`));
     await expect(page.getByRole('status')).toHaveText('회원가입이 완료되었습니다. 로그인해 주세요.');
@@ -180,6 +181,7 @@ test('회원가입 필수값, 이메일 형식, 비밀번호 불일치를 표시
   await expect(page.getByText('검색 결과에서 소속학교를 선택해 주세요.', { exact: true })).toBeVisible();
   await expect(page.getByText('교번을 입력해 주세요.', { exact: true })).toBeVisible();
   await expect(page.getByText('비밀번호는 8자 이상 20자 이하로 입력해 주세요.', { exact: true })).toBeVisible();
+  await expect(page.getByText('필수 약관에 동의해 주세요.', { exact: true })).toBeVisible();
   await page.locator('input[name="email"]').fill('invalid-email');
   await page.getByRole('button', { name: '인증번호 받기', exact: true }).click();
   await expect(page.getByText('이메일 형식으로 입력해 주세요.', { exact: true })).toBeVisible();
