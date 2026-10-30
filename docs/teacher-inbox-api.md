@@ -13,10 +13,11 @@
 | 대화 | GET | `/teacher/complaints/{id}/messages` | LOW 초과 학부모 메시지는 메시지마다 완충 요약(`summarized: true`) 카드로 표시 |
 | 위험 요소 | GET | `/teacher/complaints/{id}/risk` | 404(분석 없음)는 "분석 실패"로 표시 |
 | 처리 기록 | GET | `/teacher/complaints/{id}/history` | 최신순 응답을 오래된 순으로 표시 |
-| 원문 열람 | POST | `/teacher/complaints/{id}/original-views` | 원문 반환 + 서버가 `ORIGINAL_VIEWED` 기록. 받은 뒤 원문 화면을 엶. 최초 문의의 원문만 반환하므로 원문 보기는 첫 문의 요약 카드에서만 활성 |
+| 원문 열람 | POST | `/teacher/complaints/{id}/messages/{messageId}/original-views` | 메시지 하나의 원문 반환 + 서버가 `ORIGINAL_VIEWED` 기록. 받은 뒤 원문 화면을 엶. 요약 카드마다 그 메시지의 원문을 열고, 위험 요소·답변 작성 화면의 원문 보기는 최신 학부모 메시지(최신 분석 대상)를 엶. `messageId`는 대화의 `message:{id}`에서 숫자만 사용 |
+| 상담 완료 | POST | `/teacher/complaints/{id}/close` | `OPEN`·`waitingFor=PARENT`(답변 뒤 학부모 차례)만 요청. 교사 차례면 "답변을 보낸 뒤에 상담을 완료할 수 있습니다" 안내. 완료 뒤 상세를 다시 불러와 상담 완료로 표시 |
 | 사이드바 숫자 | GET | `/teacher/complaints?status=OPEN` | `totalElements` |
 
-메시지를 열면 상세·대화·위험·이력을 함께 불러옵니다. 위험도 검토·관리자 공유·원문 열람 뒤에는 서버 상태(위험도·안전 잠금·이력)를 다시 불러옵니다.
+메시지를 열면 상세·대화·위험·이력을 함께 불러옵니다. 위험도 검토·관리자 공유·원문 열람·상담 완료 뒤에는 서버 상태(위험도·안전 잠금·이력)를 다시 불러옵니다.
 
 - 같은 메시지의 상세 요청이 겹치면 마지막 요청의 응답만 반영합니다.
 - 상세 조회가 실패하면 위험 요소 탭에 "다시 불러오기"를 표시합니다. 처리 기록만 실패하면 마지막으로 불러온 기록을 유지하고 실패 안내와 "다시 시도"를 표시합니다.
@@ -48,7 +49,6 @@
 
 - 별표(고정), AI 판단 이의 제기, 증빙 패키지 생성, 학생 안전 신호(항상 "없음"), 지정 담당자 재검토 요청
 - 탭별 답변 초안 상태와 공식 템플릿 입력값(서버에는 현재 탭 내용 하나만 임시저장)
-- **상담 완료는 막혀 있습니다.** 백엔드에 API가 없습니다.
 
 AI 초안·임시저장·답변 전송은 [teacher-reply-api.md](teacher-reply-api.md)(#54)에서 서버에 연결했습니다.
 
@@ -56,8 +56,8 @@ AI 초안·임시저장·답변 전송은 [teacher-reply-api.md](teacher-reply-a
 
 - `allowedActions`는 백엔드가 위험 등급(잠금 중이면 EMERGENCY)으로 계산합니다. 화면 정책(낮음·주의 AI 초안, 위험 공식 템플릿, 긴급 답변 차단)과 대체로 같지만 `USE_RESPONSE_TEMPLATE`는 LOW·MEDIUM에도 포함됩니다. 지금은 증빙 패키지 가능 여부에만 사용합니다.
 - 목록 응답에 최신 메시지 내용이 없어 미리보기에 `aiSummary`를 씁니다.
-- `POST /original-views`는 최초 문의(`complaint.content`)의 원문만 반환합니다. 추가 문의의 원문을 열람할 API가 필요합니다.
-- `GET /users/me` 500 버그: 프론트는 5xx일 때 저장된 사용자를 유지하는 임시 우회를 둡니다([auth-mock-testing.md](auth-mock-testing.md)).
+- `GET /users/me` 500 버그는 2026-10-30 배포 서버에서 고쳐진 것을 확인했습니다(200, `students` 포함). 5xx일 때 저장된 사용자를 유지하는 임시 우회([auth-mock-testing.md](auth-mock-testing.md))는 남아 있어 정리할 수 있습니다.
+- `POST /close`는 학부모 차례가 아닐 때 `IllegalStateException`이 그대로 409 `INVALID_STATE`("요청을 현재 상태에서 처리할 수 없습니다.")로 나가 이유가 드러나지 않습니다. 프론트가 먼저 상태를 확인해 안내합니다.
 
 ## 테스트
 

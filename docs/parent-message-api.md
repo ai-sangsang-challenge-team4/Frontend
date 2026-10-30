@@ -6,7 +6,7 @@
 
 | 단계 | Method | Endpoint | 비고 |
 | --- | --- | --- | --- |
-| 자녀 목록(임시) | GET | `/complaints?page=` | 자녀 API가 없어 본인 민원 목록의 `studentId`·`studentName`을 모든 페이지에서 중복 없이 모음 |
+| 자녀 목록 | GET | `/users/me` | 응답의 `students`(연결된 자녀). 연결된 자녀가 없으면 고를 자녀가 없음 |
 | 수신 교사 | GET | `/complaints/recipients?studentId=` | 학생의 최신 학급 담당 교사. 담임이 먼저 오고 "(담임)"을 붙여 표시, 첫 교사를 기본 선택 |
 | 서버 초안 | POST | `/complaints` | `{ studentId, teacherId, title, content }`. "AI 분석 시작"을 처음 누를 때 생성 |
 | 본문 수정 | PATCH | `/complaints/{id}` | `{ content }`. 분석 전 본문을 바꿨거나, 검토 화면에서 고른 문장이 서버 내용과 다를 때 |
@@ -65,7 +65,6 @@
 
 ## 아직 연동하지 않은 것
 
-- **자녀 목록 API**: 임시로 민원 목록에서 자녀를 모읍니다. 민원이 하나도 없는 학부모는 자녀를 고를 수 없어 "확인된 자녀 정보가 없습니다"가 나옵니다. API가 생기면 `serverComplaint.ts`의 `listServerChildren`만 바꾸면 됩니다.
 - **생성 응답 유실**: `POST /complaints`가 서버에서 처리됐는데 응답이 시간 초과 등으로 오지 않으면 프론트는 서버 초안 ID를 알 수 없어, 다시 시도할 때 새 초안을 만들고 처음 것은 연결 없이 서버에 남습니다. 프론트만으로는 복구할 수 없어 백엔드와 재시도 식별자(같은 요청이면 기존 초안 ID 반환)나 작성 중 초안 조회·정리 API를 정해야 합니다.
 - **학부모 문의 내역·상세·대화 조회**(`GET /complaints`, `/{id}`, `/messages`, `/close`): 화면은 아직 브라우저 사본을 읽으므로, 서버로 낸 문의에 교사가 답해도 학부모 화면에는 반영되지 않습니다.
 
