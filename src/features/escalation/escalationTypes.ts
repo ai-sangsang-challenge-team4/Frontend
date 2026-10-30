@@ -190,21 +190,23 @@ export type LatestReview = {
 };
 
 // GET /admin/escalations/{escalationId}/risk. Scores are 0~70 (LOW ≤20, MEDIUM ≤40, HIGH ≤60, EMERGENCY).
+// A complaint sent without a completed analysis (the AI failed on /send) answers 200 on the teacher path with
+// riskAnalysisId and every risk field null and no factors. That means "not analyzed", not "no risk".
 export type TeacherRiskResponse = {
   complaintId: number;
-  riskAnalysisId: number;
+  riskAnalysisId: number | null;
   // The system analysis: the sum of detected tag scores.
-  riskScore: number;
-  riskLevel: RiskLevel;
+  riskScore: number | null;
+  riskLevel: RiskLevel | null;
   // The latest teacher review: the choice 1~7 and its score ×10. null without a review.
   reviewScale: number | null;
   reviewScore: number | null;
   reviewLevel: RiskLevel | null;
   // What applies now: the review when there is one, else the system analysis.
-  currentRiskScore: number;
-  currentRiskLevel: RiskLevel;
+  currentRiskScore: number | null;
+  currentRiskLevel: RiskLevel | null;
   safetyLock: boolean;
-  analyzedAt: string;
+  analyzedAt: string | null;
   latestReview: LatestReview | null;
   detectedFactors: DetectedFactor[];
 };
