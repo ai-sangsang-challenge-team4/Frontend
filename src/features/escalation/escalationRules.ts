@@ -121,9 +121,9 @@ export function canReleaseSafetyLock(
   return requestId !== null && safetyLock && riskReviewStatus !== 'PENDING_ADMIN_APPROVAL';
 }
 
-// Teacher side: a pending request or a held lock makes the server answer 409 EMERGENCY_REVIEW_DUPLICATE.
-export function canRequestEmergencyReview(riskReviewStatus: RiskReviewStatus | null, safetyLock: boolean) {
-  return riskReviewStatus !== 'PENDING_ADMIN_APPROVAL' && !safetyLock;
+// Only a pending request blocks another request. A rejected request may retain its safety lock.
+export function canRequestEmergencyReview(riskReviewStatus: RiskReviewStatus | null) {
+  return riskReviewStatus !== 'PENDING_ADMIN_APPROVAL';
 }
 
 export const SHARE_REASON_MAX_LENGTH = 500;

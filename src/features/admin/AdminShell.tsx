@@ -25,7 +25,7 @@ export function AdminShell() {
   return (
     <section className={`board-inbox-page admin-inbox-page${isSidebarCollapsed ? ' is-sidebar-collapsed' : ''}`}>
       <Sidebar
-        activeItem={location.pathname === '/admin/mypage' ? 'mypage' : 'adminMessages'}
+        activeItem={location.pathname === '/admin/mypage' ? 'mypage' : location.pathname.startsWith('/admin/emergency-reviews') ? 'emergencyReviews' : 'adminMessages'}
         defaultCollapsed={isSidebarCollapsed}
         messageCount={data?.length ?? 0}
         onCollapsedChange={setIsSidebarCollapsed}

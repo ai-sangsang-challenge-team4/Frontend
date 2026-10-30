@@ -1,5 +1,28 @@
 /* Admin pages reuse the teacher inbox (board-*) styles; these rules cover only the differences. */
 
+.admin-emergency-list {
+  display: grid;
+  gap: 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-emergency-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 20px;
+  border: var(--divider-default);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.admin-emergency-link:focus-visible { outline: 2px solid var(--color-border-focus); }
+.admin-emergency-reason { flex-basis: 100%; white-space: pre-wrap; }
+
 .admin-list-notice {
   margin: 0;
   color: var(--color-text-secondary);

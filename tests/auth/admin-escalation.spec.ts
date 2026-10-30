@@ -125,6 +125,25 @@ async function requestEmergencyDowngrade(page: Page) {
   await page.getByRole('button', { name: '확인 요청', exact: true }).click();
 }
 
+test('거부 후 안전 잠금이 유지되어도 긴급 재검토를 다시 요청할 수 있다', async ({ page }) => {
+  await shareAsTeacher(page);
+  await requestEmergencyDowngrade(page);
+  await expect(page.getByRole('region', { name: '관리자 공유' }).getByText('관리자 승인 대기', { exact: true })).toBeVisible();
+  const processPanel = await openSharedAsAdmin(page);
+  await processPanel.getByLabel('위험도 변경 결정 사유').fill('추가 근거가 필요합니다.');
+  await processPanel.getByRole('button', { name: '위험도 변경 거부', exact: true }).click();
+  await expect(processPanel.getByText('위험도 변경 반려됨')).toBeVisible();
+  await login(page, 'TEACHER');
+  await openDetailTab(page, EMERGENCY_THREAD, '위험 요소');
+  await page.getByRole('button', { name: '5점 위험', exact: true }).click();
+  await page.getByPlaceholder('하향 수정 사유를 입력해주세요.').fill('추가 근거를 확인했습니다.');
+  const submit = page.getByRole('button', { name: '확인 요청', exact: true });
+  await expect(submit).toBeEnabled();
+  await submit.click();
+  await expect(page.getByRole('region', { name: '관리자 공유' }).getByText('관리자 승인 대기', { exact: true })).toBeVisible();
+  await expect(page.getByText('현재 답변 작성이 제한되어 있습니다.')).toBeVisible();
+});
+
 test('긴급 위험도 하향은 관리자 승인 대기가 되고, 승인해도 안전 잠금은 별도로 해제해야 한다', async ({ page }) => {
   await shareAsTeacher(page);
   await requestEmergencyDowngrade(page);
