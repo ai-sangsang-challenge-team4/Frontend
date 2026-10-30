@@ -37,7 +37,7 @@ function json(status: number, body: unknown) {
 function route(routes: Record<string, () => Response>) {
   return (call: FetchCall) => {
     const key = `${call.method} ${new URL(call.url).pathname}`;
-    const respond = routes[key] ?? (key === 'POST /complaints/42/mask'
+    const respond = routes[key] ?? (key === 'GET /risk-tags' ? () => json(200, []) : undefined) ?? (key === 'POST /complaints/42/mask'
       ? () => json(200, { complaintId: 42, contentVersion: 1, maskedContent: server().content }) : undefined);
     if (!respond) throw new Error(`Unexpected request ${key}`);
     return respond();
@@ -224,7 +224,8 @@ test('첫 분석은 마스킹한 제목·본문으로 서버 초안을 만든 �
     title: '상담 일정 문의 [전화번호]',
     content: '상담 가능한 시간을 알려 주세요. 연락은 [이메일] 으로 부탁드립니다.',
   });
-  expect(calls.map((call) => call.method)).toEqual(['POST', 'POST', 'POST', 'GET']);
+  expect(calls.map((call) => call.method)).toEqual(['POST', 'POST', 'POST', 'GET', 'GET']);
+  expect(calls.at(-1)?.url).toBe('https://api.test/risk-tags');
   expect(persisted.map((value) => value.analysisId)).toEqual([null, 7]);
   expect(result.server).toEqual(server());
   expect(result.analysis.risks).toHaveLength(3);
