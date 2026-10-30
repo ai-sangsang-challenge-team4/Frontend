@@ -23,22 +23,10 @@ export type ServerChild = { studentId: number; studentName: string };
 
 export type ServerRecipient = { teacherId: number; teacherName: string; label: string };
 
-// There is no children API yet, so the children come from the parent's own complaints (studentId and
-// studentName on each), across every page. A parent without any complaint has no child to choose. Replace
-// this with the children endpoint once the backend adds it.
+// The parent's linked children from GET /users/me. A parent without a linked child has none to choose.
 export async function listServerChildren(signal?: AbortSignal): Promise<ServerChild[]> {
-  const children = new Map<number, string>();
-  // totalPages from the first page bounds the loop even if hasNext never turns false.
-  let totalPages = 1;
-  for (let page = 0; page < totalPages; page += 1) {
-    const result = await parentComplaintApi.listComplaints(page, signal);
-    for (const item of result.content) {
-      if (!children.has(item.studentId)) children.set(item.studentId, item.studentName);
-    }
-    if (!result.hasNext) break;
-    if (page === 0) totalPages = result.totalPages;
-  }
-  return [...children].map(([studentId, studentName]) => ({ studentId, studentName }));
+  const me = await parentComplaintApi.getMe(signal);
+  return (me.students ?? []).map(({ studentId, name }) => ({ studentId, studentName: name }));
 }
 
 export function toServerRecipients(recipients: ComplaintRecipientResponse[]): ServerRecipient[] {

@@ -3,7 +3,13 @@ import type { User } from '../../../shared/types';
 import { isUser, toSignupRequest } from '../authState';
 import { AuthApiError, type AuthApi } from './authApiContract';
 import { readAuthSession } from './authStorage';
-import type { LoginResponse, SignupResponse, UserInfoResponse } from './authTypes';
+import type {
+  LoginResponse,
+  PolicyConsentRequest,
+  PolicyConsentResponse,
+  SignupResponse,
+  UserInfoResponse,
+} from './authTypes';
 
 // AuthProvider and the forms read AuthApiError, so ApiError is converted here.
 // The message keeps the server's reason (e.g. 401 "이메일 또는 비밀번호가 올바르지 않습니다.").
@@ -106,4 +112,10 @@ export const httpAuthApi: AuthApi = {
 
   // No logout API: the JWT stays valid until it expires, and AuthProvider already cleared the local session.
   logout: async () => undefined,
+
+  agreeToCurrentPolicy: () =>
+    toAuthError(
+      apiClient.post<PolicyConsentResponse>('/users/me/policy-consents', { allAgreed: true } satisfies PolicyConsentRequest),
+      '약관 동의를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+    ),
 };

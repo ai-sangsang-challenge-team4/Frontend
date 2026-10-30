@@ -1,4 +1,5 @@
 import { apiClient, isApiError } from '../../../shared/api';
+import type { UserInfoResponse } from '../../auth/api/authTypes';
 import type { ParentComplaintApi } from './parentComplaintApiContract';
 import type {
   ComplaintMessageResponse,
@@ -13,10 +14,13 @@ import type {
   ParentConversationResponse,
 } from './parentComplaintTypes';
 
-// Paths follow the backend ParentComplaintController and RiskAnalysisController.
+// Paths follow the backend ParentComplaintController, RiskAnalysisController, and UserController (/users/me).
 export const httpParentComplaintApi: ParentComplaintApi = {
   listComplaints: (page, signal) =>
     apiClient.get<ParentComplaintPageResponse>('/complaints', { query: { page }, signal }),
+
+  getMe: (signal) =>
+    apiClient.get<UserInfoResponse>('/users/me', { signal }),
 
   listRecipients: (studentId, signal) =>
     apiClient.get<ComplaintRecipientResponse[]>('/complaints/recipients', { query: { studentId }, signal }),

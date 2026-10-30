@@ -152,24 +152,21 @@ test('학부모 문의 API는 백엔드 경로·메서드·본문을 사용한�
   ]);
 });
 
-test('자녀 목록은 학부모 민원 목록의 모든 페이지에서 중복 없이 모은다', async () => {
-  const item = (studentId: number, studentName: string) => ({ studentId, studentName });
-  mockFetch((call) => new URL(call.url).searchParams.get('page') === '0'
-    ? json(200, { content: [item(10, '김하나'), item(11, '김두리'), item(10, '김하나')], hasNext: true, totalPages: 2 })
-    : json(200, { content: [item(11, '김두리'), item(12, '김세찌')], hasNext: false, totalPages: 2 }));
+test('자녀 목록은 GET /users/me의 연결된 학생에서 가져온다', async () => {
+  mockFetch(() => json(200, {
+    userId: 1, email: 'parent@test.com', name: 'Demo Parent', role: 'PARENT',
+    students: [{ studentId: 10, name: '김하나', studentNo: '7' }, { studentId: 11, name: '김두리', studentNo: '8' }],
+  }));
 
   expect(await listServerChildren()).toEqual([
     { studentId: 10, studentName: '김하나' },
     { studentId: 11, studentName: '김두리' },
-    { studentId: 12, studentName: '김세찌' },
   ]);
-  expect(calls).toHaveLength(2);
+  expect(calls.map(({ method, url }) => [method, url.replace('https://api.test', '')])).toEqual([['GET', '/users/me']]);
 
-  // A hasNext that never turns false stops at the first page's totalPages.
-  calls = [];
-  mockFetch(() => json(200, { content: [], hasNext: true, totalPages: 3 }));
-  await listServerChildren();
-  expect(calls).toHaveLength(3);
+  // A parent without a linked child (or a response without students) has no child to choose.
+  mockFetch(() => json(200, { userId: 1, email: 'parent@test.com', name: 'Demo Parent', role: 'PARENT' }));
+  expect(await listServerChildren()).toEqual([]);
 });
 
 test('수신 교사는 담임 표시를 붙인 선택지로 바뀐다', () => {

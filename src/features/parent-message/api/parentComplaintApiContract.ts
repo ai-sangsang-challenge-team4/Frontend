@@ -1,3 +1,4 @@
+import type { UserInfoResponse } from '../../auth/api/authTypes';
 import type {
   ComplaintCreateRequest,
   ComplaintDraftUpdateRequest,
@@ -16,6 +17,8 @@ import type {
 // New inquiries and follow-ups: server draft, masking, analysis, suggestions, and submission.
 export type ParentComplaintApi = {
   listComplaints: (page: number, signal?: AbortSignal) => Promise<ParentComplaintPageResponse>;
+  // GET /users/me: the children come from its students.
+  getMe: (signal?: AbortSignal) => Promise<UserInfoResponse>;
   listRecipients: (studentId: number, signal?: AbortSignal) => Promise<ComplaintRecipientResponse[]>;
   createDraft: (request: ComplaintCreateRequest, signal?: AbortSignal) => Promise<ComplaintResponse>;
   updateDraft: (complaintId: number, request: ComplaintDraftUpdateRequest, signal?: AbortSignal) => Promise<ComplaintMessageResponse>;

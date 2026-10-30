@@ -23,6 +23,27 @@ export type UserInfoResponse = {
   email: string;
   name: string;
   role: UserRole;
+  // GET /users/me only: the parent's linked children (empty for other roles).
+  students?: MyStudentResponse[];
+};
+
+export type MyStudentResponse = {
+  studentId: number;
+  name: string;
+  studentNo: string;
+};
+
+// POST /users/me/policy-consents. allAgreed must be true (@AssertTrue); the server stores its current policy
+// version (teacherhub.policy.version), and agreeing again to the same version returns the first record.
+export type PolicyConsentRequest = {
+  allAgreed: true;
+};
+
+export type PolicyConsentResponse = {
+  consentId: number;
+  policyVersion: string;
+  agreedAt: string;
+  allAgreed: boolean;
 };
 
 // POST /auth/signup (201)
