@@ -109,6 +109,30 @@ test('교사 답변 API는 백엔드 경로와 content 본문을 사용한다', 
   ]);
 });
 
+test('답변 전송은 Idempotency-Key를 보내고, 응답을 못 받은 재전송만 같은 키를 쓴다', async () => {
+  const sentKeys = () => calls.map((call) => new Headers(call.init.headers).get('Idempotency-Key'));
+  const sendExpectingFailure = () => httpTeacherInboxApi.submitResponse(7, { content: '답변' }).catch(() => null);
+
+  mockFetch(() => json(503, {}));
+  await sendExpectingFailure();
+  await sendExpectingFailure();
+  mockFetch(() => json(201, {}));
+  await httpTeacherInboxApi.submitResponse(7, { content: '답변' });
+  const [first, retry, stored] = sentKeys();
+  expect(first).toBeTruthy();
+  expect(retry).toBe(first);
+  expect(stored).toBe(first);
+
+  // The same words sent again after success are a new reply, and so is a send after a refusal.
+  await httpTeacherInboxApi.submitResponse(7, { content: '답변' });
+  mockFetch(() => json(409, { code: 'RESPONSE_NOT_EDITABLE', message: '' }));
+  await sendExpectingFailure();
+  await sendExpectingFailure();
+  const [, , , again, refused, afterRefusal] = sentKeys();
+  expect(again).not.toBe(first);
+  expect(afterRefusal).not.toBe(refused);
+});
+
 const serverTemplate: ResponseTemplateResponse = {
   templateId: 1,
   versionId: 3,
