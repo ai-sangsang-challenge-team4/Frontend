@@ -1,5 +1,5 @@
 import type { ThreadActivityLog } from '../parent-message/parentMessageTypes';
-import type { ReplyTemplateDraft } from './replyTemplates';
+import type { ReplyTemplate, ReplyTemplateDraft } from './replyTemplates';
 import type { RiskClassification } from '../risk-analysis';
 import type { ComplaintStatus, RiskReviewStatus, WaitingFor } from '../../shared/types';
 
@@ -113,6 +113,9 @@ export type BoardThread = {
   serverStatus?: { status: ComplaintStatus; waitingFor: WaitingFor };
   // Server inbox: GET /response-draft was checked once this session, so a cleared tab is not refilled.
   serverDraftChecked?: boolean;
+  // Server inbox: High templates from GET /response-templates, loaded on entering the composer. They replace
+  // the browser examples for this thread.
+  serverTemplates?: ReplyTemplate[];
   conversationSummary?: ConversationSummary;
   parentUserId?: number;
   needsTeacherReview?: boolean;
@@ -157,5 +160,7 @@ export type RiskReviewSubmission = {
 
 export type OriginalMessageRequest = {
   evidence?: string;
+  // Server threads: the conversation message whose original to open. Unset opens the latest parent message.
+  replyId?: string;
   source?: 'detail' | 'replyComposer';
 };

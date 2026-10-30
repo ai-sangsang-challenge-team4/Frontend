@@ -10,6 +10,7 @@ import {
   toComplaintListQuery,
   toListThread,
   toServerComplaintNumber,
+  toServerMessageNumber,
   type ServerInboxFilters,
 } from './serverThreads';
 import type { BoardThread } from './types';
@@ -173,16 +174,21 @@ export function useServerTeacherInbox({ enabled, filters, setThreads }: UseServe
     });
   }, [setThreads]);
 
-  // POST /original-views returns the original and records the view, so the history is reloaded after it.
-  const viewOriginal = useCallback(async (threadId: string) => {
+  // POST /messages/{messageId}/original-views returns that message's original and records the view, so the
+  // history is reloaded after it. The viewer shows one original at a time.
+  const viewOriginal = useCallback(async (threadId: string, replyId: string) => {
     const complaintId = toServerComplaintNumber(threadId);
-    if (complaintId === null) return;
-    const response = await teacherInboxApi.viewOriginal(complaintId);
+    const messageId = toServerMessageNumber(replyId);
+    if (complaintId === null || messageId === null) return;
+    const response = await teacherInboxApi.viewOriginal(complaintId, messageId);
     setThreads((current) => current.map((thread) => thread.id === threadId
       ? { ...thread, originalMessage: response.content }
       : thread));
     void loadDetail(threadId).catch(() => undefined);
   }, [loadDetail, setThreads]);
 
-  return { listIds, listState, loadDetail, loadMore, retry, viewOriginal };
+  // Reloads the first page, e.g. after a status change moves a thread out of the current filter.
+  const reloadList = useCallback(() => loadPage(0), [loadPage]);
+
+  return { listIds, listState, loadDetail, loadMore, reloadList, retry, viewOriginal };
 }

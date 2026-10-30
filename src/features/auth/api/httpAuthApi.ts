@@ -3,7 +3,13 @@ import type { User } from '../../../shared/types';
 import { isUser, toSignupRequest } from '../authState';
 import { AuthApiError, type AuthApi } from './authApiContract';
 import { readAuthSession } from './authStorage';
-import type { LoginResponse, SignupResponse, UserInfoResponse } from './authTypes';
+import type {
+  LoginResponse,
+  PolicyConsentRequest,
+  PolicyConsentResponse,
+  SignupResponse,
+  UserInfoResponse,
+} from './authTypes';
 
 // AuthProvider and the forms read AuthApiError, so ApiError is converted here.
 // The message keeps the server's reason (e.g. 401 "이메일 또는 비밀번호가 올바르지 않습니다.").
@@ -27,7 +33,7 @@ function toUser(response: UserInfoResponse): User {
   if (!isUser(user)) {
     throw new AuthApiError({ code: 'INVALID_USER', message: '사용자 정보를 확인하지 못했습니다.', status: 502 });
   }
-  return user;
+  return { ...user, ...(response.students !== undefined ? { students: response.students } : {}) };
 }
 
 type JwtClaims = { sub?: unknown; email?: unknown; role?: unknown; exp?: unknown };
@@ -106,4 +112,19 @@ export const httpAuthApi: AuthApi = {
 
   // No logout API: the JWT stays valid until it expires, and AuthProvider already cleared the local session.
   logout: async () => undefined,
+
+  getCurrentPolicyConsent: () =>
+    toAuthError(
+      apiClient.get<PolicyConsentResponse>('/users/me/policy-consents'),
+      '약관 동의 여부를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+    ),
+
+  agreeToCurrentPolicy: ({ optionalAgreed }) =>
+    toAuthError(
+      apiClient.post<PolicyConsentResponse>(
+        '/users/me/policy-consents',
+        { requiredAgreed: true, optionalAgreed } satisfies PolicyConsentRequest,
+      ),
+      '약관 동의를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+    ),
 };

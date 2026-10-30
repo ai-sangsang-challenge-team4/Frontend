@@ -8,6 +8,9 @@ import { Button, EmptyState, StatusChip, Toast } from '../../shared/components/u
 import { compareMessageTimes, consultationChips, formatMessageDate, getConversation } from './conversation';
 import { ParentMessageHeader } from './ParentMessageHeader';
 import { useParentMessages } from './useParentMessages';
+import { complaintIdFromThreadId } from './serverHistory';
+import { useServerHistorySync } from './useServerHistorySync';
+import { getApiErrorMessage } from '../../shared/api';
 import './ParentMessageHistory.css';
 import './ParentMessageReceipt.css';
 
@@ -17,6 +20,8 @@ export function ParentMessageReceipt({ userId, messageId }: { userId: number; me
   const justSent = location.state?.justSent === true;
   const { messages, error, refresh } = useParentMessages(userId);
   const message = messages.find((item) => item.messageId === messageId);
+  // Loads the conversation with the teacher's replies; a link to an inquiry not stored here yet carries its ID.
+  const sync = useServerHistorySync(userId, message ? message.serverComplaintId : complaintIdFromThreadId(messageId));
   const conversation = message ? getConversation(message) : [];
   const latest = conversation[conversation.length - 1];
   const teacherClassName = mockConnectedTeachers.find((teacher) => teacher.value === message?.teacherId)?.className;
@@ -64,6 +69,10 @@ export function ParentMessageReceipt({ userId, messageId }: { userId: number; me
             </div>
           </div>
         </section>
+        {sync.error ? <div className="parent-history-sync-error" role="alert">
+          <p>{getApiErrorMessage(sync.error, '선생님 답변을 불러오지 못했습니다.')} 이 기기에 저장된 대화만 표시합니다.</p>
+          <Button onClick={sync.retry} size="sm" variant="outline">다시 불러오기</Button>
+        </div> : null}
         <div className="parent-conversation-notice"><Info aria-hidden="true" size={24} /><p>같은 내용에 대한 추가 질문은 이 문의에서 이어서 작성할 수 있습니다. 다른 내용은 새 문의로 작성해 주세요.</p></div>
         <section aria-label="전체 대화 내역" className="parent-conversation">
           <ol className="parent-conversation-messages">
@@ -95,8 +104,9 @@ export function ParentMessageReceipt({ userId, messageId }: { userId: number; me
             <p>다른 내용으로 문의를 원하시나요? <Link to="/parent/messages/new?fresh=1">새 문의 작성</Link></p>
           </div>
         </section>
-      </> : <EmptyState title={error ?? '문의를 찾을 수 없습니다.'}
-        action={error ? <Button onClick={refresh}>다시 시도</Button> : <Button onClick={() => navigate('/parent/messages')}>문의 내역</Button>} />}
+      </> : sync.isLoading ? <EmptyState title="문의를 불러오고 있습니다." /> : <EmptyState
+        title={error ?? (sync.error ? getApiErrorMessage(sync.error, '문의를 불러오지 못했습니다.') : '문의를 찾을 수 없습니다.')}
+        action={error ? <Button onClick={refresh}>다시 시도</Button> : sync.error ? <Button onClick={sync.retry}>다시 시도</Button> : <Button onClick={() => navigate('/parent/messages')}>문의 내역</Button>} />}
     </main>
     {notice ? <Toast message={notice} onClose={dismissNotice} /> : null}
   </>;

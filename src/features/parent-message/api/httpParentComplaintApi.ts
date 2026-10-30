@@ -1,9 +1,11 @@
 import { apiClient, isApiError } from '../../../shared/api';
+import type { UserInfoResponse } from '../../auth/api/authTypes';
 import type { ParentComplaintApi } from './parentComplaintApiContract';
 import type {
   ComplaintMessageResponse,
   ComplaintRecipientResponse,
   ComplaintResponse,
+  ParentComplaintDetailResponse,
   ParentComplaintPageResponse,
   RiskRevisionResponse,
   RiskSummaryResponse,
@@ -13,10 +15,25 @@ import type {
   ParentConversationResponse,
 } from './parentComplaintTypes';
 
-// Paths follow the backend ParentComplaintController and RiskAnalysisController.
+// Paths follow the backend ParentComplaintController, RiskAnalysisController, and UserController (/users/me).
 export const httpParentComplaintApi: ParentComplaintApi = {
-  listComplaints: (page, signal) =>
-    apiClient.get<ParentComplaintPageResponse>('/complaints', { query: { page }, signal }),
+  listComplaints: (query = {}, signal) =>
+    apiClient.get<ParentComplaintPageResponse>('/complaints', {
+      query: {
+        page: query.page,
+        keyword: query.keyword?.trim() || undefined,
+        status: query.status,
+        riskLevel: query.riskLevel,
+        sort: query.sort,
+      },
+      signal,
+    }),
+
+  getComplaint: (complaintId, signal) =>
+    apiClient.get<ParentComplaintDetailResponse>(`/complaints/${complaintId}`, { signal }),
+
+  getMe: (signal) =>
+    apiClient.get<UserInfoResponse>('/users/me', { signal }),
 
   listRecipients: (studentId, signal) =>
     apiClient.get<ComplaintRecipientResponse[]>('/complaints/recipients', { query: { studentId }, signal }),
@@ -60,8 +77,8 @@ export const httpParentComplaintApi: ParentComplaintApi = {
   analyzeFollowUp: (complaintId, messageId, signal) =>
     apiClient.post<RiskSummaryResponse>(`/complaints/${complaintId}/messages/${messageId}/risk-analysis`, undefined, { signal }),
 
-  submitFollowUp: (complaintId, messageId, signal) =>
-    apiClient.post<ParentFollowUpResponse>(`/complaints/${complaintId}/messages/${messageId}/send`, undefined, { signal }),
+  submitFollowUp: (complaintId, messageId, request, signal) =>
+    apiClient.post<ParentFollowUpResponse>(`/complaints/${complaintId}/messages/${messageId}/send`, request, { signal }),
 
   getConversation: (complaintId, signal) =>
     apiClient.get<ParentConversationResponse>(`/complaints/${complaintId}/messages`, { signal }),

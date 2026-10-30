@@ -3,13 +3,25 @@ import { configureApiClient } from '../../src/shared/api/apiClient';
 import { getApiErrorMessage, toApiError } from '../../src/shared/api/apiError';
 import { httpTeacherInboxApi } from '../../src/features/message/api/httpTeacherInboxApi';
 import type {
+  ResponseTemplateResponse,
   TeacherResponseDraftResponse,
   TeacherResponseSubmissionResponse,
 } from '../../src/features/message/api/teacherInboxTypes';
 import { getReplyDraftTab, selectReplyDraft } from '../../src/features/message/replyDrafts';
 import {
+  changeReplyTemplateDraft,
+  createReplyTemplateDraft,
+  findReplyTemplates,
+  getReplyTemplate,
+  renderReplyTemplate,
+  validateReplyTemplate,
+} from '../../src/features/message/replyTemplates';
+import {
   applyServerSubmission,
+  getServerCloseBlockReason,
   getServerReplyBlockReason,
+  toServerReplyTemplate,
+  toTemplateAdoptionRequest,
   markServerDraftSaved,
   restoreServerDraft,
   setReplyDraftTabState,
@@ -97,6 +109,69 @@ test('교사 답변 API는 백엔드 경로와 content 본문을 사용한다', 
   ]);
 });
 
+const serverTemplate: ResponseTemplateResponse = {
+  templateId: 1,
+  versionId: 3,
+  code: 'HIGH_ACKNOWLEDGEMENT',
+  name: 'High 민원 접수 및 확인 안내',
+  version: 1,
+  contentTemplate: '안녕하세요, {{parentName}} 보호자님. {{issueSummary}} 내용을 확인했습니다. {{ nextAction }} 절차를 진행합니다.',
+  requiredVariables: ['parentName', 'issueSummary', 'nextAction'],
+};
+
+test('High 답변 템플릿 API는 조회·채택 경로와 variables·finalContent 본문을 사용한다', async () => {
+  mockFetch(() => json(200, []));
+
+  await httpTeacherInboxApi.getResponseTemplates(7);
+  await httpTeacherInboxApi.adoptResponseTemplate(7, 3, { variables: { parentName: '김' }, finalContent: '최종 답변' });
+
+  expect(calls.map((call) => `${call.init.method} ${call.url.replace('https://api.test', '')}`)).toEqual([
+    'GET /teacher/complaints/7/response-templates',
+    'POST /teacher/complaints/7/response-templates/3/adoptions',
+  ]);
+  expect(calls[1].init.body).toBe(JSON.stringify({ variables: { parentName: '김' }, finalContent: '최종 답변' }));
+});
+
+test('서버 템플릿은 서버 스레드의 유일한 답장 예시가 되고 교사 변수만 고칠 수 있다', () => {
+  const template = toServerReplyTemplate(serverTemplate);
+  const target = thread({ parentName: '김민수 학부모', title: '상담 일정 문의', serverTemplates: [template] });
+  expect(findReplyTemplates(target)).toEqual([template]);
+  expect(findReplyTemplates(thread())).toEqual([]);
+  expect(getReplyTemplate(template.templateId, target)).toBe(template);
+
+  // parentName and issueSummary are prefilled from the thread; nextAction is left for the teacher.
+  let draft = createReplyTemplateDraft(template, target, '담임');
+  expect(draft.variables).toEqual({ parentName: '김민수', issueSummary: '상담 일정 문의', nextAction: '' });
+  expect(renderReplyTemplate(template, target, '담임', draft)).toContain('[진행 중인 절차] 절차를');
+  expect(validateReplyTemplate(template, draft, target, '담임', renderReplyTemplate(template, target, '담임', draft)))
+    .toEqual(['진행 중인 절차을 입력해 주세요.']);
+
+  draft = changeReplyTemplateDraft(template, draft, { type: 'variable', key: 'nextAction', value: '학교 상담' });
+  // A key the template does not have cannot be written into the draft.
+  expect(changeReplyTemplateDraft(template, draft, { type: 'variable', key: 'consultationSlot', value: 'x' })).toBe(draft);
+  const text = renderReplyTemplate(template, target, '담임', draft);
+  expect(text).toBe('안녕하세요, 김민수 보호자님. 상담 일정 문의 내용을 확인했습니다. 학교 상담 절차를 진행합니다.');
+  expect(validateReplyTemplate(template, draft, target, '담임', text)).toEqual([]);
+
+  expect(toTemplateAdoptionRequest(template, { ...draft, variables: { ...draft.variables, extra: 'x' } }, text)).toEqual({
+    variables: { parentName: '김민수', issueSummary: '상담 일정 문의', nextAction: '학교 상담' },
+    finalContent: text,
+  });
+});
+
+test('긴 문의 제목 기본값은 80자로 자르되 이모지를 반으로 나누지 않는다', () => {
+  const template = toServerReplyTemplate(serverTemplate);
+  const target = thread({ title: `${'가'.repeat(79)}😀 뒤에 더 긴 제목`, serverTemplates: [template] });
+  const { issueSummary } = createReplyTemplateDraft(template, target, '담임').variables;
+  expect(issueSummary).toBe('가'.repeat(79));
+});
+
+test('상담 완료는 학부모 차례인 OPEN 민원만 서버에 요청한다', () => {
+  expect(getServerCloseBlockReason(thread({ serverStatus: { status: 'OPEN', waitingFor: 'PARENT' } }))).toBeNull();
+  expect(getServerCloseBlockReason(thread())).toContain('답변을 보낸 뒤');
+  expect(getServerCloseBlockReason(thread({ serverStatus: { status: 'CLOSED', waitingFor: 'NONE' } }))).toContain('이미 완료');
+});
+
 test('답변할 수 없는 상태의 409와 초안 없음 404를 구분해 안내한다', async () => {
   mockFetch((call) => call.init.method === 'GET'
     ? json(404, { status: 404, code: 'RESPONSE_DRAFT_NOT_FOUND', message: '저장된 답변 초안을 찾을 수 없습니다.' })
@@ -107,7 +182,8 @@ test('답변할 수 없는 상태의 409와 초안 없음 404를 구분해 안�
 
   expect(notFound?.code).toBe('RESPONSE_DRAFT_NOT_FOUND');
   expect(notEditable?.code).toBe('RESPONSE_NOT_EDITABLE');
-  expect(getApiErrorMessage(notEditable)).toContain('지금은 답변할 수 없는 문의');
+  // The server names the blocking state, so its reason is shown.
+  expect(getApiErrorMessage(notEditable)).toBe('접수되어 답변 대기 중인 민원만 답변할 수 있습니다.');
 });
 
 test('서버가 답변을 받는 상태(OPEN·교사 차례)가 아니면 작성·전송을 막는다', () => {

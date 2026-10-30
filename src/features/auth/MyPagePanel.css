@@ -1,0 +1,421 @@
+.mypage-panel {
+  display: grid;
+  gap: var(--space-8);
+  max-width: 1040px;
+}
+
+.mypage-intro,
+.mypage-muted,
+.mypage-section-heading p,
+.mypage-consent-copy p,
+.mypage-data-card > p,
+.mypage-help-link p,
+.mypage-policy-note p {
+  color: var(--color-text-secondary);
+  font-size: 15px;
+  line-height: 1.65;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.mypage-profile {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-6) var(--space-8);
+  border: var(--divider-default);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-canvas);
+}
+
+.mypage-profile-avatar,
+.mypage-student-avatar {
+  display: block;
+  flex: 0 0 auto;
+  object-fit: cover;
+}
+
+.mypage-profile-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-full);
+}
+
+.mypage-profile-copy {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.mypage-profile-name,
+.mypage-consent-copy h3,
+.mypage-data-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.mypage-profile-name h2 {
+  font-size: 22px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.mypage-profile-copy > p {
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.mypage-tabs .ui-tabs-list {
+  grid-auto-flow: column;
+  grid-auto-rows: auto;
+}
+
+.mypage-tabs .ui-tabs-trigger {
+  min-height: 56px;
+  padding: var(--space-3) var(--space-2);
+  border-bottom-color: var(--color-border-divider);
+  color: var(--color-text-secondary);
+  font-size: 16px;
+}
+
+.mypage-tabs.ui-tabs--line .ui-tabs-trigger.is-active {
+  border-color: var(--color-border-strong);
+  color: var(--color-text-primary);
+}
+
+.mypage-tab-content {
+  display: grid;
+  gap: var(--space-6);
+  padding-top: var(--space-8);
+}
+
+.mypage-card {
+  padding: var(--space-8);
+  border: var(--divider-default);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface);
+}
+
+.mypage-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.mypage-section-heading h2 {
+  margin-bottom: var(--space-2);
+  font-size: var(--font-size-title-sm);
+  line-height: var(--line-height-title-sm);
+}
+
+.mypage-section-heading > .ui-badge {
+  flex: 0 0 auto;
+}
+
+.mypage-info-list {
+  margin-top: var(--space-6);
+}
+
+.mypage-info-list > div {
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr);
+  gap: var(--space-4);
+  padding: var(--space-5) 0;
+  border-top: var(--divider-default);
+  font-size: 15px;
+}
+
+.mypage-info-list dt,
+.mypage-consent-meta dt {
+  color: var(--color-text-secondary);
+}
+
+.mypage-info-list dd {
+  font-weight: var(--font-weight-medium);
+  overflow-wrap: anywhere;
+}
+
+.mypage-help-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-6);
+  padding: var(--space-4);
+  border-radius: var(--radius-xs);
+  background: var(--color-bg-canvas);
+}
+
+.mypage-help-link h3,
+.mypage-policy-note h3 {
+  margin-bottom: var(--space-1);
+  font-size: 16px;
+  font-weight: var(--font-weight-medium);
+}
+
+.mypage-help-link > .ui-button {
+  flex: 0 0 auto;
+}
+
+.mypage-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-xs);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-canvas);
+}
+
+.mypage-notice > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--color-text-brand);
+}
+
+.mypage-notice p,
+.mypage-footnote,
+.mypage-card-footer p {
+  font-size: 14px;
+  line-height: 1.65;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.mypage-card > .mypage-notice,
+.mypage-card > .mypage-muted,
+.mypage-student-list,
+.mypage-faq {
+  margin-top: var(--space-6);
+}
+
+.mypage-consent-list {
+  margin-top: var(--space-2);
+}
+
+.mypage-consent-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-6) 0;
+  border-bottom: var(--divider-default);
+}
+
+.mypage-item-icon {
+  flex: 0 0 auto;
+  color: var(--color-text-secondary);
+}
+
+.mypage-consent-copy {
+  flex: 1;
+}
+
+.mypage-consent-copy h3 {
+  margin-bottom: var(--space-2);
+  font-size: 16px;
+  font-weight: var(--font-weight-medium);
+}
+
+.mypage-consent-row > .ui-button {
+  flex: 0 0 auto;
+}
+
+.mypage-consent-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-5);
+  padding: var(--space-6) 0;
+  font-size: 14px;
+}
+
+.mypage-consent-meta dd {
+  margin-top: var(--space-2);
+}
+
+.mypage-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding-top: var(--space-5);
+  border-top: var(--divider-default);
+}
+
+.mypage-card-footer p,
+.mypage-footnote {
+  color: var(--color-text-secondary);
+}
+
+.mypage-card-footer > .ui-button {
+  flex: 0 0 auto;
+}
+
+.mypage-policy-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-xs);
+  background: var(--color-bg-canvas);
+}
+
+.mypage-policy-note > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--color-primary);
+}
+
+.mypage-data-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-5);
+}
+
+.mypage-data-card {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.mypage-data-card > p {
+  flex: 1;
+}
+
+.mypage-data-title h3 {
+  font-size: 18px;
+}
+
+.mypage-faq .ui-accordion-trigger {
+  font-size: 16px;
+  font-weight: var(--font-weight-medium);
+  line-height: 1.6;
+}
+
+.mypage-faq .ui-accordion-panel {
+  font-size: 15px;
+  line-height: 1.7;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.mypage-consent-guide {
+  display: grid;
+  gap: var(--space-5);
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.mypage-student-list li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-4) 0;
+  border-top: var(--divider-default);
+  overflow-wrap: anywhere;
+}
+
+.mypage-student-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+}
+
+.mypage-student-list li > span:last-child {
+  color: var(--color-text-secondary);
+  font-size: 14px;
+}
+
+.mypage-parent-main {
+  width: 100%;
+}
+
+.mypage-admin-main {
+  padding: var(--board-page-top-offset) var(--board-content-right) 72px var(--board-content-left);
+}
+
+@media (max-width: 1240px) {
+  .mypage-admin-main {
+    padding-right: 24px;
+    padding-left: 48px;
+  }
+}
+
+@media (max-width: 980px) {
+  .mypage-admin-main {
+    padding: 48px 24px 72px;
+  }
+}
+
+@media (max-width: 620px) {
+  .mypage-admin-main {
+    padding: 36px 16px 56px;
+  }
+
+  .mypage-panel {
+    gap: var(--space-6);
+  }
+
+  .mypage-profile {
+    gap: var(--space-4);
+    padding: var(--space-5) var(--space-4);
+  }
+
+  .mypage-profile-avatar {
+    width: 48px;
+    height: 48px;
+  }
+
+  .mypage-profile-name h2 {
+    font-size: 19px;
+  }
+
+  .mypage-tabs .ui-tabs-trigger {
+    padding-right: var(--space-1);
+    padding-left: var(--space-1);
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .mypage-tabs .ui-tabs-list {
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.1fr) minmax(0, 1.3fr) minmax(0, 0.8fr);
+  }
+
+  .mypage-card {
+    padding: var(--space-5) var(--space-4);
+  }
+
+  .mypage-info-list > div {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+
+  .mypage-data-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mypage-consent-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: var(--space-3);
+  }
+
+  .mypage-consent-row > .ui-button {
+    grid-column: 2;
+    justify-self: start;
+    margin-left: -10px;
+  }
+
+  .mypage-item-icon {
+    align-self: start;
+    margin-top: 3px;
+  }
+
+  .mypage-card-footer,
+  .mypage-help-link {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

@@ -5,6 +5,7 @@ import type {
   EscalationStateResponse,
 } from '../escalation/escalationTypes';
 import type { RiskLevel } from '../../shared/types';
+import { toDisplayRiskScore } from '../escalation/escalationRules';
 import { maskContactInfo } from '../pii/masking';
 import { defaultRiskScore, getThreadRiskLevel, getVisibleRiskFactors, systemRiskTone } from './messageRules';
 import type { BoardThread, RiskScore, SystemRiskLevel } from './types';
@@ -54,7 +55,8 @@ export function syncThreadWithEmergencyReview(thread: BoardThread, state: Escala
         safetyLock: state.safetyLock,
       },
       safetyLock: state.safetyLock,
-      ...(level ? { teacherReviewedRiskLevel: level, teacherRiskScore: state.currentRiskScore as RiskScore } : {}),
+      // An applied review's currentRiskScore is the teacher's 1~7 choice ×10.
+      ...(level ? { teacherReviewedRiskLevel: level, teacherRiskScore: toDisplayRiskScore(state.currentRiskScore!) as RiskScore } : {}),
     },
     ...(level ? { risk: systemRiskTone[level], riskReviewRequired: false } : {}),
   };
@@ -102,7 +104,8 @@ export function createEscalationSnapshot(thread: BoardThread): EscalationComplai
     maskedMessages: [{ ...parentMessage, content: maskContactInfo(deliveredMessage).text, messageId: `${thread.id}-masked` }],
     originalMessages: original ? [{ ...parentMessage, content: original, messageId: `${thread.id}-original` }] : [],
     riskLevel: apiRiskLevel[level],
-    riskScore: thread.analysis?.teacherRiskScore ?? defaultRiskScore[level],
+    // 0~70 like the server: the 1~7 choice (or the level's starting choice) ×10.
+    riskScore: (thread.analysis?.teacherRiskScore ?? defaultRiskScore[level]) * 10,
     title: thread.title,
   };
 }

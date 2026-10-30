@@ -1,5 +1,6 @@
 import type { User } from '../../../shared/types';
 import type { LoginInput, SignupInput } from '../authState';
+import type { PolicyConsentResponse } from './authTypes';
 
 export type AuthSession = {
   accessToken: string;
@@ -22,6 +23,10 @@ export type AuthApi = {
   // and the signup form skips the verification step.
   sendEmailVerificationCode?: (email: string) => Promise<VerificationCodeResult>;
   verifyEmailCode?: (email: string, code: string) => Promise<boolean>;
+  // HTTP only: the mock keeps no policy records. No screen asks for re-agreement yet; requiredAgreed false
+  // from getCurrentPolicyConsent means the current policy version still needs it.
+  getCurrentPolicyConsent?: () => Promise<PolicyConsentResponse>;
+  agreeToCurrentPolicy?: (input: { optionalAgreed: boolean }) => Promise<PolicyConsentResponse>;
 };
 
 export class AuthApiError extends Error {

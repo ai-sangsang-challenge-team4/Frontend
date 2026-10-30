@@ -1,6 +1,6 @@
 import type { ComplaintStatus, MessageStatus, RiskFactorStatus, RiskLevel, WaitingFor } from '../../../shared/types';
 import type { DetectedFactorCode } from '../../escalation/escalationTypes';
-import type { ComplaintPageResponse } from '../../message/api/teacherInboxTypes';
+import type { ComplaintListQuery, ComplaintPageResponse } from '../../message/api/teacherInboxTypes';
 
 // Shapes in this file follow the backend parent complaint and risk analysis DTOs
 // (complaint/parent/dto/complaint, risk/dto/response). Do not add fields the backend does not define.
@@ -43,8 +43,27 @@ export type ComplaintRecipientResponse = {
   homeroomTeacher: boolean;
 };
 
-// GET /complaints: the same page shape as the teacher list; counterpartName is the teacher.
+// GET /complaints: the same query and page shape as the teacher list, but the parent's own DRAFT complaints
+// are listed too. counterpartName is the teacher, latestReceivedAt is the parent's latest sent message, and
+// aiSummary summarises that message.
+export type ParentComplaintListQuery = ComplaintListQuery;
 export type ParentComplaintPageResponse = ComplaintPageResponse;
+
+// GET /complaints/{id}. content is the initial inquiry; follow-ups and replies come from /messages.
+export type ParentComplaintDetailResponse = {
+  complaintId: number;
+  title: string;
+  studentId: number;
+  studentName: string;
+  parentName: string;
+  teacherName: string;
+  content: string;
+  status: ComplaintStatus;
+  waitingFor: WaitingFor;
+  riskLevel: RiskLevel | null;
+  createdAt: string;
+  updatedAt: string;
+};
 
 // POST /complaints/{id}/risk-analysis. Only the score; evidence and suggestions come from /findings.
 // One analysis per message: the same content returns the existing analysis, and different content after an
@@ -103,6 +122,19 @@ export type RiskDetectorResponse = {
   llm: { modelName: string; temperature: number | null } | null;
 };
 
+// PUT /complaints/{id}/message-draft. expectedContentVersion is required once a draft exists and omitted
+// for the first save; a mismatch answers 409 CONTENT_VERSION_CONFLICT without saving.
+export type ParentFollowUpDraftRequest = {
+  content: string;
+  expectedContentVersion?: number;
+};
+
+// POST /complaints/{id}/messages/{messageId}/send. A missing or stale version answers 409
+// CONTENT_VERSION_CONFLICT without sending.
+export type ParentFollowUpSendRequest = {
+  expectedContentVersion: number;
+};
+
 export type ParentFollowUpResponse = {
   messageId: number;
   complaintId: number;
@@ -115,8 +147,7 @@ export type ParentFollowUpResponse = {
   sentAt: string | null;
 };
 
-// GET /complaints/{id}/messages. Swagger shows the teacher Message schema here (string messageId, summarized)
-// because both DTOs are named Message; the parent DTO answers the numeric id and no summary flag.
+// GET /complaints/{id}/messages (Swagger ParentConversationMessage).
 export type ParentConversationResponse = {
   complaintId: number;
   status: ComplaintStatus;

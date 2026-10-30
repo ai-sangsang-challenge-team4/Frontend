@@ -7,6 +7,8 @@ import { mockConnectedTeachers, updateSentMessage, type MessageDraft } from '../
 import { consultationChips, formatHistoryTime, formatMessageDate, getConversation, getDraftPath, needsParentReview } from '../../features/parent-message/conversation';
 import { ParentMessageHeader } from '../../features/parent-message/ParentMessageHeader';
 import { useParentMessages } from '../../features/parent-message/useParentMessages';
+import { useServerHistorySync } from '../../features/parent-message/useServerHistorySync';
+import { getApiErrorMessage } from '../../shared/api';
 import { Badge, Button, EmptyState, Modal, StatusChip, Tabs, TextField, Toast } from '../../shared/components/ui';
 import '../../features/parent-message/ParentMessageHistory.css';
 
@@ -24,6 +26,7 @@ function MessageHistory({ userId }: { userId: number }) {
   const [notice, setNotice] = useState<string | null>(null);
   const dismissNotice = useCallback(() => setNotice(null), []);
   const { messages, drafts, error, refresh } = useParentMessages(userId);
+  const sync = useServerHistorySync(userId, null);
   const teacherName = (draft: MessageDraft) => {
     const serverName = draft.server?.teacherName ?? draft.teacherName;
     return serverName ? `${serverName} 선생님`
@@ -48,6 +51,10 @@ function MessageHistory({ userId }: { userId: number }) {
       <TextField aria-label="문의 검색" containerClassName="parent-history-search" trailingIcon={<Search size={20} />}
         onChange={(event) => setQuery(event.target.value)} placeholder="선생님 성함 또는 문의 내용으로 검색" type="search" value={query} />
     </div>
+    {sync.error && !error ? <div className="parent-history-sync-error" role="alert">
+      <p>{getApiErrorMessage(sync.error, '서버에서 문의 내역을 불러오지 못했습니다.')} 이 기기에 저장된 내역만 표시합니다.</p>
+      <Button onClick={sync.retry} size="sm" variant="outline">다시 불러오기</Button>
+    </div> : null}
     {error ? <EmptyState title={error} action={<Button onClick={refresh}>다시 시도</Button>} /> : (
       <>
         <p aria-live="polite" className="sr-only">{tab === 'drafts' ? '임시저장' : '문의'} {tab === 'drafts' ? visibleDrafts.length : visibleMessages.length}건</p>
@@ -61,7 +68,7 @@ function MessageHistory({ userId }: { userId: number }) {
               </button>
             </li>)}
           </ul>
-        ) : <EmptyState title={query ? '검색 결과가 없습니다.' : '임시저장한 문의가 없습니다.'} /> : visibleMessages.length ? (
+        ) : sync.isLoading && !messages.length ? <EmptyState title="문의 내역을 불러오고 있습니다." /> : <EmptyState title={query ? '검색 결과가 없습니다.' : '임시저장한 문의가 없습니다.'} /> : visibleMessages.length ? (
           <ul aria-label="문의 목록" className="parent-inquiry-list">
             {visibleMessages.map((message) => {
               const teacher = mockConnectedTeachers.find((item) => item.value === message.teacherId);
@@ -79,7 +86,7 @@ function MessageHistory({ userId }: { userId: number }) {
               </li>;
             })}
           </ul>
-        ) : <EmptyState title={query ? '검색 결과가 없습니다.' : tab === 'starred' ? '중요 문의가 없습니다.' : '전송한 문의가 없습니다.'}
+        ) : sync.isLoading && !messages.length ? <EmptyState title="문의 내역을 불러오고 있습니다." /> : <EmptyState title={query ? '검색 결과가 없습니다.' : tab === 'starred' ? '중요 문의가 없습니다.' : '전송한 문의가 없습니다.'}
           description={query ? '선생님 성함이나 문의 내용을 다시 확인해 주세요.' : tab === 'starred' ? '문의 옆 별표를 눌러 중요 문의로 등록할 수 있습니다.' : '선생님께 문의를 작성하면 이곳에서 대화를 확인할 수 있습니다.'} />}
       </>
     )}

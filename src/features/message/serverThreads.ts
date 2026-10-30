@@ -1,7 +1,7 @@
 import { toServerInstant } from '../../shared/api';
 import type { ComplaintStatus, RiskLevel as ApiRiskLevel, WaitingFor } from '../../shared/types';
 import type { DetectedFactorCode, HistoryEvent, TeacherRiskResponse } from '../escalation/escalationTypes';
-import { getDetectedFactorEvidence, getDetectedFactorState, historyEventLabel } from '../escalation/escalationRules';
+import { getDetectedFactorEvidence, getDetectedFactorState, historyEventLabel, toDisplayRiskScore } from '../escalation/escalationRules';
 import { formatMessageDate } from '../parent-message/conversation';
 import { riskCategories, type RiskClassification } from '../risk-analysis';
 import type {
@@ -50,6 +50,17 @@ const complaintStatusLabel: Record<ComplaintStatus, string> = {
 export function toServerComplaintNumber(threadId: string) {
   const value = Number(threadId);
   return Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+
+// Conversation messages carry "message:{id}"; the original-view path takes the numeric id.
+export function toServerMessageNumber(replyId: string) {
+  const value = Number(replyId.replace(/^message:/, ''));
+  return Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+
+// The original opened without a chosen message: the latest parent message, which the latest analysis covers.
+export function getDefaultOriginalReplyId(thread: BoardThread) {
+  return [...thread.replies].reverse().find((reply) => reply.authorRole === 'parent')?.id;
 }
 
 function className(grade: number | null, classNo: number | null) {
@@ -121,7 +132,7 @@ function toReplies(conversation: TeacherConversationResponse): BoardReply[] {
 function riskText(level: ApiRiskLevel | null | undefined, score: number | null | undefined) {
   if (!level) return null;
   const label = systemRiskLabel[systemRiskLevelFromApi[level]];
-  return score == null ? label : `${label}(${score}점)`;
+  return score == null ? label : `${label}(${toDisplayRiskScore(score)}점)`;
 }
 
 // GET /history is newest first; the inbox lists logs oldest first. Empty fields are omitted, not null.
@@ -191,10 +202,10 @@ function toAnalysis(
     ...base,
     status: 'ready',
     riskClassifications: toClassifications(risk),
-    // reviewScore falls back to the initial score for the analysed level, so it counts only with a review.
-    ...(risk.latestReview ? {
+    // The review fields are null without a review. reviewScale is the 1~7 choice; reviewScore is it ×10.
+    ...(risk.latestReview && risk.reviewLevel && risk.reviewScale != null ? {
       teacherReviewedRiskLevel: systemRiskLevelFromApi[risk.reviewLevel],
-      teacherRiskScore: risk.reviewScore as RiskScore,
+      teacherRiskScore: risk.reviewScale as RiskScore,
       teacherReviewReason: risk.latestReview.reason || undefined,
     } : {}),
   };

@@ -1,10 +1,15 @@
 import { toServerInstant } from '../../shared/api';
 import { formatMessageDate } from '../parent-message/conversation';
-import type { TeacherResponseDraftResponse, TeacherResponseSubmissionResponse } from './api/teacherInboxTypes';
+import type {
+  ResponseTemplateAdoptionRequest,
+  ResponseTemplateResponse,
+  TeacherResponseDraftResponse,
+  TeacherResponseSubmissionResponse,
+} from './api/teacherInboxTypes';
 import { formatConversationTime } from './messageDates';
 import { canUseOfficialReplyTemplate } from './messageRules';
 import { getReplyDraftTab, selectReplyDraft } from './replyDrafts';
-import { findReplyTemplate } from './replyTemplates';
+import { findReplyTemplate, type ReplyTemplate, type ReplyTemplateDraft } from './replyTemplates';
 import { threadStatus } from './serverThreads';
 import type { BoardThread, ReplyDraftState, ReplyDraftTab } from './types';
 
@@ -19,6 +24,58 @@ export function getServerReplyBlockReason(thread: BoardThread) {
   return state.status === 'CLOSED' || state.waitingFor === 'NONE'
     ? '완료된 상담이라 답변을 작성하거나 보낼 수 없습니다.'
     : '학부모의 답장을 기다리는 중이라 지금은 답변을 보낼 수 없습니다.';
+}
+
+// POST /close accepts only a complaint the teacher has answered and that now waits for the parent.
+export function getServerCloseBlockReason(thread: BoardThread) {
+  const state = thread.serverStatus;
+  if (!state) return null;
+  if (state.status === 'CLOSED' || state.waitingFor === 'NONE') return '이미 완료된 상담입니다.';
+  if (state.waitingFor === 'TEACHER') return '답변을 보낸 뒤에 상담을 완료할 수 있습니다.';
+  return null;
+}
+
+// Labels for the seeded HIGH_ACKNOWLEDGEMENT variables; an unknown variable shows its own name.
+const serverTemplateVariableLabels: Record<string, string> = {
+  parentName: '보호자 호칭',
+  issueSummary: '문의 내용',
+  nextAction: '진행 중인 절차',
+  contactPlan: '안내 방법',
+};
+
+// A server template is one sentence block with the teacher's variables; the server renders it again on
+// POST /adoptions, so the wording outside the variables cannot change.
+export function toServerReplyTemplate(response: ResponseTemplateResponse): ReplyTemplate {
+  return {
+    approved: true,
+    blocks: [{ blockId: 'content', kind: 'ACKNOWLEDGE', mode: 'VARIABLE_ONLY', text: response.contentTemplate }],
+    description: `${response.code} v${response.version}`,
+    matchFactorIds: [],
+    serverVersionId: response.versionId,
+    status: 'ACTIVE',
+    teacherVariables: Object.fromEntries(response.requiredVariables.map((key) => [
+      key,
+      serverTemplateVariableLabels[key] ?? key,
+    ])),
+    templateId: `server-template:${response.versionId}`,
+    title: response.name,
+    version: response.version,
+  };
+}
+
+// Only the template's own variables go to POST /adoptions.
+export function toTemplateAdoptionRequest(
+  template: ReplyTemplate,
+  draft: ReplyTemplateDraft,
+  finalContent: string,
+): ResponseTemplateAdoptionRequest {
+  return {
+    variables: Object.fromEntries(Object.keys(template.teacherVariables ?? {}).map((key) => [
+      key,
+      (draft.variables[key] ?? '').trim(),
+    ])),
+    finalContent,
+  };
 }
 
 export function formatServerSavedAt(value: string) {

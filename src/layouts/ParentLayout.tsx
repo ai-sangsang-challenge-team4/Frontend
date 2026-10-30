@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react';
-import { LogOut } from 'lucide-react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../features/auth';
 import { Sidebar } from '../shared/components/teacher-shell/TeacherSidebar';
-import { Button, Modal } from '../shared/components/ui';
 import '../shared/styles/teacher-prototype.css';
 import './ParentLayout.css';
 
@@ -15,10 +13,9 @@ export function ParentLayout() {
   const isDetailPage = /^\/parent\/messages\/[^/]+$/.test(location.pathname) && location.pathname !== '/parent/messages/new';
   // One sidebar state for every parent page so the page header does not shift between list and detail.
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [isAccountOpen, setIsAccountOpen] = useState(false);
   const isHistoryPage = location.pathname === '/parent/messages' ||
     (location.pathname.startsWith('/parent/messages/') && location.pathname !== '/parent/messages/new');
-  const activeItem = isHistoryPage ? 'history' : 'new';
+  const activeItem = location.pathname === '/parent/mypage' ? 'mypage' : isHistoryPage ? 'history' : 'new';
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' });
@@ -34,7 +31,6 @@ export function ParentLayout() {
       <Sidebar
         activeItem={activeItem}
         defaultCollapsed={isSidebarCollapsed}
-        onAccountClick={() => setIsAccountOpen(true)}
         onCollapsedChange={setIsSidebarCollapsed}
         onLogout={handleLogout}
         profileMeta={user?.email}
@@ -46,19 +42,6 @@ export function ParentLayout() {
           <Outlet />
         </div>
       </div>
-      <Modal
-        footer={
-          <Button leftIcon={<LogOut size={20} />} onClick={handleLogout} variant="outline">
-            로그아웃
-          </Button>
-        }
-        onOpenChange={setIsAccountOpen}
-        open={isAccountOpen}
-        title="계정 정보"
-      >
-        <p>{user?.name}</p>
-        <p>{user?.email}</p>
-      </Modal>
     </div>
   );
 }

@@ -107,6 +107,10 @@ async function signup(input: SignupInput): Promise<User> {
   if (!input.name?.trim()) {
     throw new AuthApiError({ code: 'VALIDATION_FAILED', message: '이름은 필수입니다.' });
   }
+  // Mirrors the backend SignupRequest requiredAgreed check.
+  if (!input.policyAgreed) {
+    throw new AuthApiError({ code: 'VALIDATION_FAILED', message: '필수 정책에 동의해야 회원가입할 수 있습니다.' });
+  }
 
   if (input.role === 'PARENT') {
     const errors = validateChildSignupInfo(input.child);

@@ -1,4 +1,4 @@
-export { TeacherSettingsPanel } from './TeacherSettingsPanel';
+export { MyPagePanel } from './MyPagePanel';
 export { AuthProvider } from './AuthProvider';
 export {
   getDefaultRolePath,

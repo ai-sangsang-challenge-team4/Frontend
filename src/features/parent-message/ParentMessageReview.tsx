@@ -34,6 +34,7 @@ const riskIcons: Record<RiskExpressionKind, typeof Gavel> = {
   profanity: Ban, insult: MessageCircleWarning, threat: ShieldAlert, exposure: Megaphone, privacy: LockKeyhole,
 };
 const SEND_FAILED_MESSAGE = '문의를 전송하지 못했습니다. 작성한 내용은 유지됩니다. 다시 시도해 주세요.';
+const DRAFT_CONFLICT_ON_SEND_MESSAGE = '다른 기기나 탭에서 서버의 추가 문의 초안이 변경되어 전송하지 않았습니다. 작성한 내용은 유지됩니다. 이전 화면에서 서버 초안을 불러와 확인해 주세요.';
 const selectionLabels = { AI: 'AI 초안', ORIGINAL: '원문', CUSTOM: '직접 수정' };
 
 function HighlightedMessage({ text, risks, onSelect }: {
@@ -218,7 +219,9 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
           setDialog(null);
           return;
         }
-        setNotice(isApiError(failure) ? getApiErrorMessage(failure, SEND_FAILED_MESSAGE)
+        // The composer offers the server draft, so the parent goes back there for a draft changed elsewhere.
+        setNotice(isApiError(failure) && failure.code === 'PARENT_DRAFT_CONFLICT' ? DRAFT_CONFLICT_ON_SEND_MESSAGE
+          : isApiError(failure) ? getApiErrorMessage(failure, SEND_FAILED_MESSAGE)
           : failure instanceof DOMException
             ? '문의 내용을 저장하지 못했습니다. 작성한 내용은 유지됩니다.'
             : failure instanceof Error ? failure.message : '문의를 전송하지 못했습니다. 다시 시도해 주세요.');

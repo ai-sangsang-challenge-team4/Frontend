@@ -18,7 +18,7 @@
 
 ## Mock / HTTP 전환
 
-`VITE_ESCALATION_API=http`이면 백엔드를 호출하고, 그 외(기본)는 localStorage mock(`teacher-hub.escalations.v3`, `teacher-hub.emergency-reviews.v1`)을 씁니다.
+`VITE_ESCALATION_API=http`이면 백엔드를 호출하고, 그 외(기본)는 localStorage mock(`teacher-hub.escalations.v4`, `teacher-hub.emergency-reviews.v2`)을 씁니다.
 
 - 백엔드는 JWT가 필요하므로 `VITE_AUTH_API=http`와 함께 켭니다. mock 로그인 토큰으로는 401이 납니다.
 - 교사 메시지함은 mock 데이터(`thread-001` 같은 문자열 ID)라, http 모드에서는 숫자 complaintId가 없는 메시지에 요청을 보내지 않고 안내 문구만 표시합니다.
@@ -78,7 +78,8 @@
 - 관리자 화면은 공유받은 건의 상세에서만 재검토 요청을 보여 줍니다. 공유되지 않은 민원의 재검토 요청(지정 검토자 = 첫 관리자)을 볼 화면은 아직 없습니다(`listAdminEmergencyReviews`는 어댑터에만 있음).
 - 관리자 목록·상세 응답에 민원 제목·학생·학급 정보가 없어 `민원 #{complaintId}`와 공유 교사(`sharedBy`)만 표시합니다.
 - 관리자 처리 메모·결정 사유는 응답에 없고 `/history`의 `reason`으로만 확인됩니다. 처리 이력의 빈 필드는 `null`이 아니라 생략됩니다(`@JsonInclude(NON_NULL)`).
-- 교사 위험도 점수(1~7) → 등급 매핑 기준은 서버에 있습니다. 프론트 슬라이더의 단계 미리보기만 로컬 매핑을 쓰고, mock 서버가 같은 매핑을 흉내 냅니다.
+- 위험 점수는 0~70점(LOW ≤20·MEDIUM ≤40·HIGH ≤60·EMERGENCY)입니다. 교사는 1~7점을 고르고 서버가 10을 곱해 저장합니다. 검토·재검토 응답은 선택값(`*Scale`, 1~7)과 환산 점수(`*Score`, 10~70)를 함께 줍니다. 화면은 모든 점수를 교사 슬라이더와 같은 7점 기준으로 보여 줍니다(`toDisplayRiskScore`: 10으로 나눠 올림, 1~7로 제한). 등급 경계가 2·4·6점으로 맞고, 교사 선택값은 그대로 보입니다. 등급 판정은 서버가 하며, 프론트 슬라이더 미리보기와 mock 서버만 같은 기준을 흉내 냅니다.
+- 관리자 위험 분석 탭은 시스템 분석(`riskScore`), 교사 검토(`reviewScore`·`reviewScale`, 검토가 없으면 숨김), 현재 적용(`currentRiskScore`·`currentRiskLevel`)을 나눠 보여 줍니다.
 - 교사 메시지함이 아직 mock이라, 관리자가 잠금을 해제해도 mock 스레드의 `analysis.safetyLock`은 그대로입니다. 메시지함을 `/teacher/complaints/{id}/risk`(`safetyLock`)로 연동할 때 해소됩니다.
 
 ## 미결정 정책
@@ -99,7 +100,7 @@ npx playwright test --config=playwright.admin-http.config.ts
 Mock 공유 내역 초기화:
 
 ```js
-localStorage.removeItem('teacher-hub.escalations.v3');
-localStorage.removeItem('teacher-hub.emergency-reviews.v1');
+localStorage.removeItem('teacher-hub.escalations.v4');
+localStorage.removeItem('teacher-hub.emergency-reviews.v2');
 location.reload();
 ```

@@ -138,12 +138,15 @@ test('폼 상태를 역할별 SignupRequest로 변환한다', () => {
     email: ' parent@example.com ',
     password: 'password123',
     name: ' 김보호 ',
+    policyAgreed: true,
     role: 'PARENT',
     child: { schoolId: 1, schoolName: '상상초등학교', grade: 3, schoolClassId: 7, studentId: 21, name: ' 김학생 ' },
   })).toEqual({
     email: 'parent@example.com',
     password: 'password123',
     name: '김보호',
+    requiredAgreed: true,
+    optionalAgreed: false,
     role: 'PARENT',
     schoolId: 1,
     schoolClassId: 7,
@@ -156,6 +159,7 @@ test('폼 상태를 역할별 SignupRequest로 변환한다', () => {
     email: 'teacher@example.com',
     password: 'password123',
     name: '가입용 교사',
+    policyAgreed: true,
     role: 'TEACHER',
     schoolId: 1,
     employeeNo: ' DEV-2026-002 ',
@@ -163,6 +167,8 @@ test('폼 상태를 역할별 SignupRequest로 변환한다', () => {
     email: 'teacher@example.com',
     password: 'password123',
     name: '가입용 교사',
+    requiredAgreed: true,
+    optionalAgreed: false,
     role: 'TEACHER',
     schoolId: 1,
     employeeNo: 'DEV-2026-002',
@@ -172,6 +178,19 @@ test('폼 상태를 역할별 SignupRequest로 변환한다', () => {
   });
 });
 
+test('선택 동의 체크 여부를 optionalAgreed로 보낸다', () => {
+  expect(toSignupRequest({
+    email: 'teacher@example.com',
+    password: 'password123',
+    name: '가입용 교사',
+    policyAgreed: true,
+    optionalAgreed: true,
+    role: 'TEACHER',
+    schoolId: 1,
+    employeeNo: 'DEV-2026-002',
+  })).toMatchObject({ requiredAgreed: true, optionalAgreed: true });
+});
+
 test('회원가입은 토큰 없이 SignupRequest를 보내고 SIGNUP_* 서버 사유를 그대로 보여 준다', async () => {
   mockFetch(() => json(400, { code: 'SIGNUP_VALIDATION_FAILED', message: '학생 번호와 자녀 이름이 일치하지 않습니다.' }));
 
@@ -179,13 +198,14 @@ test('회원가입은 토큰 없이 SignupRequest를 보내고 SIGNUP_* 서버 �
     email: 'parent@example.com',
     password: 'password123',
     name: '김보호',
+    policyAgreed: true,
     role: 'PARENT',
     child: { schoolId: 1, schoolName: '상상초등학교', grade: 3, schoolClassId: 7, studentId: 21, name: '김학생' },
   }).catch((caught: unknown) => caught);
 
   expect(calls[0].url).toBe('https://api.test/auth/signup');
   expect(new Headers(calls[0].init.headers).get('Authorization')).toBeNull();
-  expect(JSON.parse(String(calls[0].init.body))).toMatchObject({ role: 'PARENT', schoolClassId: 7, studentId: 21 });
+  expect(JSON.parse(String(calls[0].init.body))).toMatchObject({ role: 'PARENT', schoolClassId: 7, studentId: 21, requiredAgreed: true, optionalAgreed: false });
   expect(error).toMatchObject({ code: 'SIGNUP_VALIDATION_FAILED', message: '학생 번호와 자녀 이름이 일치하지 않습니다.' });
 });
 

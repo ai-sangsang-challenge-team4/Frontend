@@ -10,7 +10,7 @@ import {
   getAdminEscalationMessages,
   getAdminEscalationRisk,
 } from '../escalation/api';
-import { apiRiskTone, formatEscalationTime, getDetectedFactorEvidence, getDetectedFactorState, historyEventLabel } from '../escalation/escalationRules';
+import { apiRiskTone, formatEscalationTime, toDisplayRiskScore, getDetectedFactorEvidence, getDetectedFactorState, historyEventLabel } from '../escalation/escalationRules';
 import type {
   AdminEscalationSummaryResponse,
   ConversationMessage,
@@ -56,7 +56,7 @@ type AdminSharedMessageDetailProps = {
 
 // History events omit empty fields (@JsonInclude(NON_NULL)), so a score may be undefined as well as null.
 function riskText(level: RiskLevel, score: number | null | undefined) {
-  return score == null ? riskLabel[apiRiskTone[level]] : `${riskLabel[apiRiskTone[level]]}(${score}점)`;
+  return score == null ? riskLabel[apiRiskTone[level]] : `${riskLabel[apiRiskTone[level]]}(${toDisplayRiskScore(score)}점)`;
 }
 
 export function AdminSharedMessageDetail({ escalationId }: AdminSharedMessageDetailProps) {
@@ -297,13 +297,17 @@ function RiskAnalysisPanel({ escalationId }: { escalationId: number }) {
                 <dt>시스템 분석</dt>
                 <dd>{riskText(data.riskLevel, data.riskScore)}</dd>
               </div>
-              {/* reviewLevel falls back to the analysed level, so it only means a review once one exists. */}
-              {data.latestReview ? (
+              {/* The review fields are null until a teacher reviews. */}
+              {data.reviewLevel ? (
                 <div>
                   <dt>교사 검토</dt>
                   <dd>{riskText(data.reviewLevel, data.reviewScore)}</dd>
                 </div>
               ) : null}
+              <div>
+                <dt>현재 적용</dt>
+                <dd>{riskText(data.currentRiskLevel, data.currentRiskScore)}</dd>
+              </div>
               {data.latestReview ? (
                 <div>
                   <dt>최근 검토</dt>

@@ -16,13 +16,23 @@ export type SignupInput = {
   password: string;
   // The account holder's own name, required for every role.
   name: string;
+  // The required policy checkbox; the form blocks signup until it is checked.
+  policyAgreed: boolean;
+  // The optional consent to keep messages as test data for improving the AI analysis.
+  optionalAgreed?: boolean;
 } & (
   | { role: 'PARENT'; child: ChildSignupInfo; schoolId?: never; employeeNo?: never }
   | ({ role: 'TEACHER'; child?: never } & TeacherSignupInfo)
 );
 
 export function toSignupRequest(input: SignupInput): SignupRequest {
-  const base = { email: input.email.trim(), password: input.password, name: input.name.trim() };
+  const base = {
+    email: input.email.trim(),
+    password: input.password,
+    name: input.name.trim(),
+    requiredAgreed: input.policyAgreed,
+    optionalAgreed: input.optionalAgreed ?? false,
+  };
   if (input.role === 'PARENT') {
     return {
       ...base,

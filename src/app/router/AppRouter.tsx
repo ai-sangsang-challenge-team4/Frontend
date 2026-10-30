@@ -7,6 +7,7 @@ import { SharedMessageDetailPage } from '../../pages/admin/SharedMessageDetailPa
 import { SharedMessageListPage } from '../../pages/admin/SharedMessageListPage';
 import { LandingPage } from '../../pages/common/LandingPage';
 import { LoginPage } from '../../pages/common/LoginPage';
+import { MyPage } from '../../pages/common/MyPage';
 import { NotFoundPage } from '../../pages/common/NotFoundPage';
 import { SignupPage } from '../../pages/common/SignupPage';
 import { MessageDetailPage as ParentMessageDetailPage } from '../../pages/parent/MessageDetailPage';
@@ -16,7 +17,6 @@ import { MessageWritePage } from '../../pages/parent/MessageWritePage';
 import { AdminSharePage as TeacherAdminSharePage } from '../../pages/teacher/AdminSharePage';
 import { ExternalAnalysisPage } from '../../pages/teacher/ExternalAnalysisPage';
 import { MessageListPage } from '../../pages/teacher/MessageListPage';
-import { SettingsPage as TeacherSettingsPage } from '../../pages/teacher/SettingsPage';
 import { TeacherHomePage } from '../../pages/teacher/TeacherHomePage';
 import { ProtectedRoute } from './ProtectedRoute';
 import { RoleRoute } from './RoleRoute';
@@ -46,6 +46,7 @@ export function AppRouter() {
         <Route path="messages/:messageId/follow-up" element={<MessageWritePage />} />
         <Route path="messages/:messageId/review" element={<MessageReviewPage />} />
         <Route path="messages/:messageId" element={<ParentMessageDetailPage />} />
+        <Route path="mypage" element={<MyPage />} />
         <Route path="*" element={<Navigate to="/parent/messages/new" replace />} />
       </Route>
 
@@ -65,7 +66,8 @@ export function AppRouter() {
         <Route path="messages/:messageId/response" element={<MessageListPage />} />
         <Route path="guide" element={<ExternalAnalysisPage />} />
         <Route path="admin-share" element={<TeacherAdminSharePage />} />
-        <Route path="settings" element={<TeacherSettingsPage />} />
+        <Route path="mypage" element={<MyPage />} />
+        <Route path="settings" element={<Navigate to="/teacher/mypage" replace />} />
         <Route path="external-analysis" element={<Navigate to="/teacher/guide" replace />} />
         <Route path="*" element={<Navigate to="/teacher" replace />} />
       </Route>
@@ -83,6 +85,7 @@ export function AppRouter() {
         <Route index element={<Navigate to="/admin/messages" replace />} />
         <Route path="messages" element={<SharedMessageListPage />} />
         <Route path="messages/:escalationId" element={<SharedMessageDetailPage />} />
+        <Route path="mypage" element={<MyPage />} />
         <Route path="*" element={<Navigate to="/admin/messages" replace />} />
       </Route>
 

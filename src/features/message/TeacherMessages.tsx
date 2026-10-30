@@ -30,7 +30,7 @@ import { getApiErrorMessage, type ApiError } from '../../shared/api';
 import { AsyncContent } from '../../shared/components/feedback';
 import { useAuth } from '../auth';
 import { canSendEscalationRequest, getEscalationState, submitRiskReview } from '../escalation/api';
-import { canRequestEmergencyReview } from '../escalation/escalationRules';
+import { canRequestEmergencyReview, toDisplayRiskScore } from '../escalation/escalationRules';
 import type { EscalationStateResponse } from '../escalation/escalationTypes';
 import { useEscalationRequest } from '../escalation/useEscalationRequest';
 import { AiJudgmentNotice } from '../safety/AiJudgmentNotice';
@@ -126,13 +126,14 @@ import {
   syncThreadWithEmergencyReview,
   systemRiskLevelFromApi,
 } from './escalationSnapshot';
-import { messageApiMode } from './api/teacherInboxApi';
+import { messageApiMode, teacherInboxApi } from './api/teacherInboxApi';
 import { initialTeacherThreads } from './mockThreads';
 import { persistTeacherParentThread, readTeacherParentThreads } from './teacherParentMessages';
 import { useActiveMessageCount } from './useActiveMessageCount';
+import { getDefaultOriginalReplyId, threadStatus } from './serverThreads';
 import { useServerTeacherInbox } from './useServerTeacherInbox';
 import { useServerReply, type ServerReplyAction } from './useServerReply';
-import { getServerReplyBlockReason } from './serverReplies';
+import { getServerCloseBlockReason, getServerReplyBlockReason } from './serverReplies';
 import { TEACHER_RESPONSE_MAX_LENGTH } from './api/teacherInboxTypes';
 
 const isServerInbox = messageApiMode === 'http';
@@ -360,6 +361,7 @@ function canUseAiDraftTab(thread: BoardThread) {
 }
 
 const serverReplyStatusText: Record<ServerReplyAction, string> = {
+  loadingTemplates: '답장 예시를 불러오는 중…',
   loadingDraft: '임시저장한 답변을 불러오는 중…',
   generatingAiDraft: 'AI 초안을 만드는 중…',
   saving: '임시저장 중…',
@@ -372,7 +374,7 @@ function isAppliedTemplateInactive(thread: BoardThread) {
     return false;
   }
 
-  const template = getReplyTemplate(thread.appliedTemplate.templateId);
+  const template = getReplyTemplate(thread.appliedTemplate.templateId, thread);
 
   return (
     !template ||
@@ -382,7 +384,7 @@ function isAppliedTemplateInactive(thread: BoardThread) {
 }
 
 function getAppliedTemplateLabel(thread: BoardThread) {
-  const template = getReplyTemplate(thread.appliedTemplate?.templateId);
+  const template = getReplyTemplate(thread.appliedTemplate?.templateId, thread);
 
   return template && thread.appliedTemplate
     ? `${template.title} 템플릿 v${thread.appliedTemplate.version}`
@@ -398,7 +400,7 @@ function getReplyDraftErrors(thread: BoardThread, teacherName: string) {
     return canUseOfficialReplyTemplate(thread) && findReplyTemplate(thread)
       ? ['먼저 답장 예시를 골라 주세요.'] : [];
   }
-  const template = getReplyTemplate(thread.appliedTemplate.templateId);
+  const template = getReplyTemplate(thread.appliedTemplate.templateId, thread);
   if (!template) return ['사용할 수 없는 예시입니다. 다른 예시를 골라 주세요.'];
   return validateReplyTemplate(template, thread.appliedTemplate, thread, teacherName, thread.draftText);
 }
@@ -1580,8 +1582,9 @@ type DetailProps = {
   onBack: () => void;
   onEvidencePackageCreate: (threadId: string) => void;
   onOpenReplyComposer: (threadId: string) => void;
-  // Resolves once the original can be shown; a server thread fetches it first (POST /original-views).
-  onOriginalViewed: (threadId: string, evidence?: string) => Promise<boolean>;
+  // Resolves once the original can be shown; a server thread fetches it first
+  // (POST /messages/{messageId}/original-views).
+  onOriginalViewed: (threadId: string, request: OriginalMessageRequest) => Promise<boolean>;
   onReturnToReplyComposer: (threadId: string) => void;
   // Rejects with the API error so the panel can show it.
   onReviewComplete: (threadId: string, review: RiskReviewSubmission) => Promise<void>;
@@ -1627,7 +1630,6 @@ function ThreadDetail({
   // A server thread carries a summary per parent message, so every message stays in the conversation and
   // each summarized one shows as its own summary card.
   const usesMessageSummaries = Boolean(thread.serverComplaintId);
-  const firstParentReplyId = thread.replies.find((reply) => reply.authorRole === 'parent')?.id;
   const visibleConversationReplies = needsBufferedSummary && !usesMessageSummaries
     ? thread.replies.filter((reply) => reply.authorRole !== 'parent')
     : thread.replies;
@@ -1663,12 +1665,12 @@ function ThreadDetail({
     setOriginalViewer(initialOriginalViewer ?? null);
   }, [initialOriginalViewer, initialTab, thread.id]);
 
-  const openOriginalViewer = (evidence?: string) => {
+  const openOriginalViewer = (evidence?: string, replyId?: string) => {
     if (!canInspectOriginal) {
       return;
     }
 
-    setOriginalRequest({ evidence, source: 'detail' });
+    setOriginalRequest({ evidence, replyId, source: 'detail' });
   };
 
   const confirmOriginalViewer = async () => {
@@ -1679,7 +1681,7 @@ function ThreadDetail({
     const request = originalRequest;
     const requestedThreadId = thread.id;
     setOriginalRequest(null);
-    if (!(await onOriginalViewed(requestedThreadId, request.evidence))) return;
+    if (!(await onOriginalViewed(requestedThreadId, request))) return;
     if (activeThreadIdRef.current === requestedThreadId) setOriginalViewer(request);
   };
   const closeOriginalViewer = () => {
@@ -1835,9 +1837,8 @@ function ThreadDetail({
               {dateLabel !== previousDateLabel ? <ConversationDateChip label={dateLabel} /> : null}
               {reply.summarized ? (
                 <BufferedSummaryCard
-                  // POST /original-views returns only the first inquiry's original.
-                  canInspectOriginal={canInspectOriginal && reply.id === firstParentReplyId}
-                  onOpenOriginal={() => openOriginalViewer()}
+                  canInspectOriginal={canInspectOriginal}
+                  onOpenOriginal={() => openOriginalViewer(undefined, reply.id)}
                   onOpenRiskEvidence={() => setActiveDetailTab('risk')}
                   sentAt={reply.sentAt}
                   summaryText={reply.content}
@@ -2563,11 +2564,33 @@ export function TeacherMessages({
     return () => controller.abort();
   }, [loadServerDetail, selectedThreadId]);
 
-  // The backend has no API to close a consultation yet, so a server thread must not look closed locally.
-  const blockServerConsultationComplete = (thread: BoardThread | undefined) => {
-    if (!thread?.serverComplaintId) return false;
-    setToastMessage('서버 메시지의 상담 완료는 아직 연동되지 않았습니다.');
-    return true;
+  // A server thread closes through POST /close; the reloaded detail then shows it as complete.
+  const closingServerThreadIds = useRef(new Set<string>());
+  const completeServerConsultation = async (thread: BoardThread) => {
+    const complaintId = thread.serverComplaintId;
+    if (!complaintId || closingServerThreadIds.current.has(thread.id)) return;
+    const blockReason = getServerCloseBlockReason(thread);
+    if (blockReason) {
+      setToastMessage(blockReason);
+      return;
+    }
+    closingServerThreadIds.current.add(thread.id);
+    try {
+      await teacherInboxApi.closeComplaint(complaintId);
+      // Shown as complete even if the following reload fails, so the close button cannot be pressed again.
+      updateThread(thread.id, (current) => ({
+        ...current,
+        serverStatus: { status: 'CLOSED', waitingFor: 'NONE' },
+        status: threadStatus('CLOSED', 'NONE', true),
+      }));
+      void serverInbox.reloadList();
+      setToastMessage('상담을 완료 처리했습니다.');
+    } catch (error) {
+      setToastMessage(getApiErrorMessage(error, '상담을 완료 처리하지 못했습니다. 다시 시도해 주세요.'));
+    } finally {
+      closingServerThreadIds.current.delete(thread.id);
+      refreshServerThread(thread.id);
+    }
   };
 
   const retryServerDetail = (threadId: string) => {
@@ -2704,7 +2727,7 @@ export function TeacherMessages({
   const handleTemplateChange = (threadId: string, change: ReplyTemplateChange) => {
     updateThread(threadId, (thread) => {
       if (isReplyLocked(thread) || !thread.appliedTemplate || isAppliedTemplateInactive(thread)) return thread;
-      const template = getReplyTemplate(thread.appliedTemplate.templateId);
+      const template = getReplyTemplate(thread.appliedTemplate.templateId, thread);
       if (!template) return thread;
       const draft = changeReplyTemplateDraft(template, thread.appliedTemplate, change);
       return { ...thread, appliedTemplate: draft, draftSavedAt: undefined, draftText: renderReplyTemplate(template, thread, user?.name ?? '담임', draft) };
@@ -2874,8 +2897,8 @@ export function TeacherMessages({
     const modifiedAt = formatNow();
     const beforeLevel = systemRiskLevelFromApi[result.previousLevel];
     const afterLevel = systemRiskLevelFromApi[result.riskLevel];
-    const beforeLabel = `${systemRiskLabel[beforeLevel]}(${result.previousScore}점)`;
-    const afterLabel = `${systemRiskLabel[afterLevel]}(${result.riskScore}점)`;
+    const beforeLabel = `${systemRiskLabel[beforeLevel]}(${toDisplayRiskScore(result.previousScore)}점)`;
+    const afterLabel = `${systemRiskLabel[afterLevel]}(${toDisplayRiskScore(result.riskScore)}점)`;
     const reviewer = result.reviewedBy;
     const reasonDetail = result.reason
       ? `수정 사유: "${result.reason}"`
@@ -2943,7 +2966,7 @@ export function TeacherMessages({
             thread.analysis.safetyLock || result.safetyLock || afterLevel === 'emergency',
           teacherReviewReason: result.reason || undefined,
           teacherReviewedRiskLevel: afterLevel,
-          teacherRiskScore: result.riskScore as RiskScore,
+          teacherRiskScore: result.reviewScale as RiskScore,
         },
         risk: systemRiskTone[afterLevel],
         riskReviewRequired: false,
@@ -3023,11 +3046,17 @@ export function TeacherMessages({
     });
   };
 
-  const handleOriginalViewed = async (threadId: string, evidence?: string) => {
+  const handleOriginalViewed = async (threadId: string, { evidence, replyId }: OriginalMessageRequest = {}) => {
     // The server records the view itself (ORIGINAL_VIEWED) and its history replaces the local log.
-    if (threads.find((thread) => thread.id === threadId)?.serverComplaintId) {
+    const serverThread = threads.find((thread) => thread.id === threadId && thread.serverComplaintId);
+    if (serverThread) {
+      const originalReplyId = replyId ?? getDefaultOriginalReplyId(serverThread);
+      if (!originalReplyId) {
+        setToastMessage('원문을 확인할 학부모 메시지가 없습니다.');
+        return false;
+      }
       try {
-        await viewServerOriginal(threadId);
+        await viewServerOriginal(threadId, originalReplyId);
         return true;
       } catch (error) {
         setToastMessage(getApiErrorMessage(error, '원문을 불러오지 못했습니다. 다시 시도해 주세요.'));
@@ -3324,7 +3353,11 @@ export function TeacherMessages({
         <main className="board-detail-page">
           <ThreadDetail
             onConsultationComplete={(threadId) => {
-              if (blockServerConsultationComplete(threads.find((thread) => thread.id === threadId))) return;
+              const target = threads.find((thread) => thread.id === threadId);
+              if (target?.serverComplaintId) {
+                void completeServerConsultation(target);
+                return;
+              }
               updateThread(threadId, (thread) => ({ ...thread, status: 'complete', needsTeacherReview: false }));
             }}
             initialOriginalViewer={
