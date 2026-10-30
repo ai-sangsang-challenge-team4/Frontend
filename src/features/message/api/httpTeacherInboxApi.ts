@@ -1,4 +1,4 @@
-import { apiClient } from '../../../shared/api';
+import { apiClient, isApiError } from '../../../shared/api';
 import type { TeacherHistoryResponse, TeacherRiskResponse } from '../../escalation/escalationTypes';
 import type { TeacherInboxApi } from './teacherInboxApiContract';
 import type {
@@ -13,6 +13,11 @@ import type {
   TeacherResponseDraftResponse,
   TeacherResponseSubmissionResponse,
 } from './teacherInboxTypes';
+
+// POST /responses requires an Idempotency-Key. A send that got no answer (timeout, network, 5xx) may have been
+// stored, so retrying the same reply reuses its key and the server returns the stored reply instead of a second one.
+// The server rejects a key reused for different content, so the key belongs to one complaint and content.
+const pendingReplyKeys = new Map<string, string>();
 
 // Paths follow the backend TeacherComplaintController and TeacherResponseTemplateController.
 export const httpTeacherInboxApi: TeacherInboxApi = {
@@ -59,8 +64,24 @@ export const httpTeacherInboxApi: TeacherInboxApi = {
   saveResponseDraft: (complaintId, request) =>
     apiClient.put<TeacherResponseDraftResponse>(`/teacher/complaints/${complaintId}/response-draft`, request),
 
-  submitResponse: (complaintId, request) =>
-    apiClient.post<TeacherResponseSubmissionResponse>(`/teacher/complaints/${complaintId}/responses`, request),
+  submitResponse: async (complaintId, request) => {
+    const attempt = `${complaintId}:${request.content}`;
+    const key = pendingReplyKeys.get(attempt) ?? crypto.randomUUID();
+    pendingReplyKeys.set(attempt, key);
+    try {
+      const response = await apiClient.post<TeacherResponseSubmissionResponse>(
+        `/teacher/complaints/${complaintId}/responses`,
+        request,
+        { headers: { 'Idempotency-Key': key } },
+      );
+      pendingReplyKeys.delete(attempt);
+      return response;
+    } catch (error) {
+      // A 4xx was refused and stored nothing, so a later send of the same text is a new reply.
+      if (isApiError(error) && error.status >= 400 && error.status < 500) pendingReplyKeys.delete(attempt);
+      throw error;
+    }
+  },
 
   getResponseTemplates: (complaintId, signal) =>
     apiClient.get<ResponseTemplateResponse[]>(`/teacher/complaints/${complaintId}/response-templates`, { signal }),
