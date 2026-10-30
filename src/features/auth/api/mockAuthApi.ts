@@ -11,10 +11,11 @@ import {
 } from './authApiContract';
 import {
   readStoredJson,
+  readAuthSession,
   removeStoredValue,
   writeStoredJson,
 } from './authStorage';
-import type { SignupRequest } from './authTypes';
+import type { PolicyConsentResponse, SignupRequest } from './authTypes';
 import { hasMockSchool, hasMockStudentPlacement } from './mockSignupOptionsApi';
 
 // What the server links on signup: the parent's student, or the teacher's roster entry.
@@ -155,6 +156,10 @@ async function signup(input: SignupInput): Promise<User> {
       : { schoolId, employeeNo: employeeNo ?? '' }),
   };
   writeStoredJson(ACCOUNT_STORAGE_KEY, [...accounts, account]);
+  writeStoredJson(`teacher-hub.policy-consent.${account.userId}`, {
+    consentId: account.userId, policyVersion: 'mock-v1', agreedAt: new Date().toISOString(),
+    requiredAgreed: request.requiredAgreed, optionalAgreed: request.optionalAgreed,
+  } satisfies PolicyConsentResponse);
   removeStoredValue(SIGNUP_VERIFICATION_STORAGE_KEY);
   return toUser(account);
 }
@@ -181,6 +186,24 @@ export const mockAuthApi: AuthApi = {
   logout,
   sendEmailVerificationCode,
   verifyEmailCode,
+  async getCurrentPolicyConsent() {
+    await waitForRequest('getCurrentPolicyConsent');
+    const session = readAuthSession();
+    if (!session) throw unauthorized('UNAUTHORIZED', '로그인이 필요합니다.');
+    return readStoredJson<PolicyConsentResponse>(`teacher-hub.policy-consent.${session.user.userId}`)
+      ?? { consentId: null, policyVersion: 'mock-v1', agreedAt: null, requiredAgreed: false, optionalAgreed: false };
+  },
+  async agreeToCurrentPolicy({ optionalAgreed }) {
+    await waitForRequest('agreeToCurrentPolicy');
+    const session = readAuthSession();
+    if (!session) throw unauthorized('UNAUTHORIZED', '로그인이 필요합니다.');
+    const consent: PolicyConsentResponse = {
+      consentId: session.user.userId, policyVersion: 'mock-v1', agreedAt: new Date().toISOString(),
+      requiredAgreed: true, optionalAgreed,
+    };
+    writeStoredJson(`teacher-hub.policy-consent.${session.user.userId}`, consent);
+    return consent;
+  },
 };
 
 function readAccounts(): AuthAccount[] {

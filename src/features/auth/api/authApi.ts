@@ -15,6 +15,8 @@ export const {
   logout,
   sendEmailVerificationCode,
   verifyEmailCode,
+  getCurrentPolicyConsent,
+  agreeToCurrentPolicy,
 } = api;
 
 export const isEmailVerificationSupported = Boolean(sendEmailVerificationCode && verifyEmailCode);
