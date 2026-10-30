@@ -5,6 +5,7 @@ import type { RiskFactorStatus } from '../../shared/types';
 import { maskContactInfo } from '../pii';
 import { toDisplayRiskScore } from '../escalation/escalationRules';
 import { classificationStatusLabel } from '../risk-analysis';
+import { getRiskTagNames } from '../risk-analysis/riskTagCatalog';
 import { parentComplaintApi, type RiskDetection } from './api/parentComplaintApi';
 import type { ParentMessageAnalysis } from './parentMessageTypes';
 import { detectionConfidence, detectionEvidence, detectionState } from './riskDetectorResults';
@@ -27,7 +28,12 @@ function DetectorResult({ label, result }: { label: string; result: RiskDetectio
 }
 
 export function ParentRiskAnalysisDetails({ analysis, analysisId }: { analysis: ParentMessageAnalysis; analysisId: number }) {
-  const request = useCallback((signal: AbortSignal) => parentComplaintApi.getDetectorResults(analysisId, signal), [analysisId]);
+  const request = useCallback(async (signal: AbortSignal) => {
+    const [results, tagNames] = await Promise.all([
+      parentComplaintApi.getDetectorResults(analysisId, signal), getRiskTagNames(signal),
+    ]);
+    return { ...results, tagNames };
+  }, [analysisId]);
   const { data, error, isLoading, retry } = useApiRequest(request);
   return <section aria-label="위험 분석 결과" className="parent-review-analysis-details">
     {analysis.riskSummary ? <p className="parent-review-risk-score">
@@ -46,7 +52,7 @@ export function ParentRiskAnalysisDetails({ analysis, analysisId }: { analysis: 
           const state = detectionState(result.finalState, result.finalDetected);
           return {
             id: `detector-${result.code}-${index}`,
-            title: <span className="parent-detector-title"><strong>{riskTags[result.code]?.title ?? result.code}</strong>
+            title: <span className="parent-detector-title"><strong>{data.tagNames[result.code] ?? riskTags[result.code]?.title ?? result.code}</strong>
               <Badge size="sm" variant={stateVariant[state]}>{classificationStatusLabel[state]}</Badge></span>,
             content: <>
               <DetectorResult label="규칙 분석" result={result.rule} />
