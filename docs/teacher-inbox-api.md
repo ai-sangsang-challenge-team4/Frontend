@@ -37,7 +37,8 @@
 
 - 상담 상태: `CLOSED`·`waitingFor=NONE` → 상담 완료, `waitingFor=PARENT` 또는 교사 답변이 있으면 → 상담 중, 그 외 → 상담 전. 교사 답변 뒤 `waitingFor=TEACHER`(추가 문의)면 "재확인 필요".
 - 위험 분류: 백엔드 `RiskTagCode` 8종과 화면 분류 8종이 1:1입니다(PROFANITY→감정적 표현, INSULT→인신공격, THREAT→위협, LEGAL→법적·행정적 조치, EXPOSURE→공개·유포 위협, REPEAT→반복성, UNFAIR_REQUEST→무리한 요구, PRIVACY→개인정보 위험). `detectedFactors`에 있으면 탐지, 없으면 미탐지입니다.
-- 교사 검토 위험도: `latestReview`가 있을 때만 반영합니다. `reviewScore`는 검토가 없어도 초기 환산값으로 채워지기 때문입니다.
+- 위험 점수(2026-10-30 백엔드 정책): 시스템 점수 `riskScore`는 탐지된 태그 점수의 합(0~70, LOW ≤20·MEDIUM ≤40·HIGH ≤60·EMERGENCY)입니다. 교사는 1~7점(`reviewScale`)을 고르고 서버가 10을 곱해 `reviewScore`(10~70)로 저장합니다. 현재 적용 위험도는 `currentRiskScore`·`currentRiskLevel`입니다. 처리 기록의 `RISK_REVIEWED` 점수도 10배 값입니다. 화면에는 모두 7점 기준으로 바꿔 표시합니다(예: 시스템 23점 → 3점, 교사 선택 4 → 4점).
+- 교사 검토 위험도: 검토가 없으면 `reviewScale`·`reviewScore`·`reviewLevel`이 `null`입니다. 화면의 1~7점 슬라이더에는 `reviewScale`을 씁니다.
 - 증빙 패키지 가능 여부: `allowedActions`에 `CREATE_EVIDENCE_PACKAGE`가 있을 때.
 - 위험도 검토 가능: `status=OPEN`이고 `waitingFor=TEACHER`일 때(백엔드 규칙과 동일).
 - 날짜: 서버 `LocalDateTime`은 타임존이 없고 서버 시각이 KST라 `+09:00`을 붙여 해석합니다(`shared/api/serverDateTime.ts`).
@@ -57,7 +58,7 @@ AI 초안·임시저장·답변 전송은 [teacher-reply-api.md](teacher-reply-a
 - `allowedActions`는 백엔드가 위험 등급(잠금 중이면 EMERGENCY)으로 계산합니다. 화면 정책(낮음·주의 AI 초안, 위험 공식 템플릿, 긴급 답변 차단)과 대체로 같지만 `USE_RESPONSE_TEMPLATE`는 LOW·MEDIUM에도 포함됩니다. 지금은 증빙 패키지 가능 여부에만 사용합니다.
 - 목록 응답에 최신 메시지 내용이 없어 미리보기에 `aiSummary`를 씁니다.
 - `GET /users/me` 500 버그는 2026-10-30 배포 서버에서 고쳐진 것을 확인했습니다(200, `students` 포함). 5xx일 때 저장된 사용자를 유지하는 임시 우회([auth-mock-testing.md](auth-mock-testing.md))는 남아 있어 정리할 수 있습니다.
-- `POST /close`는 학부모 차례가 아닐 때 `IllegalStateException`이 그대로 409 `INVALID_STATE`("요청을 현재 상태에서 처리할 수 없습니다.")로 나가 이유가 드러나지 않습니다. 프론트가 먼저 상태를 확인해 안내합니다.
+- `POST /close`가 불가능한 상태면 409 `RESPONSE_NOT_EDITABLE`과 구체적인 이유(예: "이미 완료된 민원은 다시 완료 처리할 수 없습니다.")를 줍니다. `RESPONSE_NOT_EDITABLE`은 서버 문구를 우선 표시합니다.
 
 ## 테스트
 

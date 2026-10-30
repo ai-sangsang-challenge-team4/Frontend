@@ -3,6 +3,7 @@ import { getApiErrorMessage, useApiRequest } from '../../shared/api';
 import { Accordion, Badge, Button, type BadgeVariant } from '../../shared/components/ui';
 import type { RiskFactorStatus } from '../../shared/types';
 import { maskContactInfo } from '../pii';
+import { toDisplayRiskScore } from '../escalation/escalationRules';
 import { classificationStatusLabel } from '../risk-analysis';
 import { parentComplaintApi, type RiskDetection } from './api/parentComplaintApi';
 import type { ParentMessageAnalysis } from './parentMessageTypes';
@@ -30,7 +31,7 @@ export function ParentRiskAnalysisDetails({ analysis, analysisId }: { analysis: 
   const { data, error, isLoading, retry } = useApiRequest(request);
   return <section aria-label="위험 분석 결과" className="parent-review-analysis-details">
     {analysis.riskSummary ? <p className="parent-review-risk-score">
-      위험도: <strong>{riskLabels[analysis.riskSummary.riskLevel]}</strong> · 위험 점수: {analysis.riskSummary.riskScore}점
+      위험도: <strong>{riskLabels[analysis.riskSummary.riskLevel]}</strong> · 위험 점수: {toDisplayRiskScore(analysis.riskSummary.riskScore)}점
     </p> : null}
     {analysis.revisionReason ? <p><strong>수정 이유:</strong> {analysis.revisionReason}</p> : null}
     {analysis.maskingContentVersion !== undefined ? <p>서버에서 개인정보 마스킹을 확인한 내용입니다.</p> : null}

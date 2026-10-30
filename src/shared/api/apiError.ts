@@ -160,6 +160,8 @@ const SERVER_MESSAGE_FIRST_CODES = new Set([
   'EMERGENCY_REVIEW_DUPLICATE',
   'EMERGENCY_REVIEW_ACCESS_DENIED',
   'ADMIN_NOT_FOUND',
+  // e.g. "이미 완료된 민원은 다시 완료 처리할 수 없습니다." on POST /teacher/complaints/{id}/close.
+  'RESPONSE_NOT_EDITABLE',
 ]);
 
 export const REPLY_SEND_FAILED_MESSAGE = '답변을 전송하지 못했어요. 내용을 확인한 후 다시 시도해 주세요.';

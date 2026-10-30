@@ -138,8 +138,9 @@ export function riskScoreToLevel(score: RiskScore): SystemRiskLevel {
   return 'emergency';
 }
 
-// Starting score when the teacher has not rated yet: the lowest score inside the current level.
-export const defaultRiskScore: Record<SystemRiskLevel, RiskScore> = { low: 1, medium: 3, high: 5, emergency: 7 };
+// Starting score when the teacher has not rated yet: the highest score inside the current level,
+// matching the server's reviewScore before any review (TeacherRiskScale.initialScoreFor).
+export const defaultRiskScore: Record<SystemRiskLevel, RiskScore> = { low: 2, medium: 4, high: 6, emergency: 7 };
 
 export const aiObjectionTypeLabel: Record<AiObjectionType, string> = {
   overestimated: '실제보다 위험하게 판단했어요',

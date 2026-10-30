@@ -127,10 +127,10 @@ test('학부모 문의 API는 백엔드 경로·메서드·본문을 사용한�
   await httpParentComplaintApi.getStatus(42);
   await httpParentComplaintApi.mask(42);
   await httpParentComplaintApi.getDetectorResults(7);
-  await httpParentComplaintApi.saveFollowUpDraft(42, { content: '추가 문의' });
+  await httpParentComplaintApi.saveFollowUpDraft(42, { content: '추가 문의', expectedContentVersion: 3 });
   await httpParentComplaintApi.getFollowUpDraft(42);
   await httpParentComplaintApi.analyzeFollowUp(42, 101);
-  await httpParentComplaintApi.submitFollowUp(42, 101);
+  await httpParentComplaintApi.submitFollowUp(42, 101, { expectedContentVersion: 3 });
   await httpParentComplaintApi.getConversation(42);
 
   expect(calls.map(({ method, url, body }) => [method, url.replace('https://api.test', ''), body])).toEqual([
@@ -144,10 +144,10 @@ test('학부모 문의 API는 백엔드 경로·메서드·본문을 사용한�
     ['GET', '/complaints/42/status', undefined],
     ['POST', '/complaints/42/mask', undefined],
     ['GET', '/risk-analyses/7/detector-results', undefined],
-    ['PUT', '/complaints/42/message-draft', { content: '추가 문의' }],
+    ['PUT', '/complaints/42/message-draft', { content: '추가 문의', expectedContentVersion: 3 }],
     ['GET', '/complaints/42/message-draft', undefined],
     ['POST', '/complaints/42/messages/101/risk-analysis', undefined],
-    ['POST', '/complaints/42/messages/101/send', undefined],
+    ['POST', '/complaints/42/messages/101/send', { expectedContentVersion: 3 }],
     ['GET', '/complaints/42/messages', undefined],
   ]);
 });
@@ -349,9 +349,24 @@ test('추가 문의는 서버 메시지 ID로 분석하며 최초 민원 mask AP
 });
 
 test('추가 문의의 서버 초안이 다른 내용이면 덮어쓰지 않는다', async () => {
-  mockFetch(route({ 'GET /complaints/42/message-draft': () => json(200, { messageId: 101, complaintId: 42, content: '다른 탭에서 작성한 내용' }) }));
-  await expect(analyzeServerDraft(draft({ threadId: 'thread-local', body: '내가 작성한 내용', server: server({ serverMessageId: 101 }) }), target, () => undefined, new AbortController().signal)).rejects.toMatchObject({ status: 409 });
-  expect(calls.every((call) => call.method === 'GET')).toBe(true);
+  mockFetch(route({
+    'PUT /complaints/42/message-draft': () => json(409, { code: 'CONTENT_VERSION_CONFLICT', message: '추가 문의 초안이 다른 기기에서 변경되었습니다.' }),
+    'GET /complaints/42/message-draft': () => json(200, { messageId: 101, complaintId: 42, content: '다른 탭에서 작성한 내용', contentVersion: 2 }),
+  }));
+  await expect(analyzeServerDraft(draft({ threadId: 'thread-local', body: '내가 작성한 내용', server: server({ serverMessageId: 101 }) }), target, () => undefined, new AbortController().signal)).rejects.toMatchObject({ status: 409, code: 'PARENT_DRAFT_CONFLICT' });
+  expect(calls.find((call) => call.method === 'PUT')?.body).toEqual({ content: '내가 작성한 내용', expectedContentVersion: 1 });
+  expect(calls.some((call) => call.url.includes('risk-analysis'))).toBe(false);
+});
+
+test('저장 응답을 놓친 뒤 재시도하면 서버 초안이 같은 내용일 때 그 초안으로 이어간다', async () => {
+  mockFetch(route({
+    'PUT /complaints/42/message-draft': () => json(409, { code: 'CONTENT_VERSION_CONFLICT' }),
+    'GET /complaints/42/message-draft': () => json(200, { messageId: 101, complaintId: 42, content: '내가 작성한 내용', contentVersion: 2 }),
+    'POST /complaints/42/messages/101/risk-analysis': () => json(200, { analysisId: 8, complaintId: 42, riskScore: 0, riskLevel: 'LOW' }),
+    'GET /risk-analyses/8/findings': () => json(200, { findings: [], finalRevision: null }),
+  }));
+  const result = await analyzeServerDraft(draft({ threadId: 'thread-local', body: '내가 작성한 내용', server: server({ serverMessageId: 101 }) }), target, () => undefined, new AbortController().signal);
+  expect(result.server).toMatchObject({ content: '내가 작성한 내용', contentVersion: 2 });
 });
 
 test('추가 문의 전송 응답을 놓치면 같은 서버 메시지의 전송 여부로 복구하고 중복 추가하지 않는다', async () => {
@@ -400,6 +415,7 @@ test('서로 다른 로컬 초안이 같은 서버 메시지를 보내도 대화
   let sent = false;
   mockFetch(route({
     'GET /complaints/42/message-draft': () => sent ? json(404, { code: 'MESSAGE_DRAFT_NOT_FOUND' }) : json(200, { messageId: 101, content: '추가 문의' }),
+    'PUT /complaints/42/message-draft': () => json(200, { messageId: 101, content: '추가 문의', contentVersion: 1 }),
     'POST /complaints/42/messages/101/send': () => { sent = true; return json(200, { messageId: 101, content: '추가 문의', sentAt: '2026-10-30T10:03:00' }); },
     'GET /complaints/42/messages': () => json(200, { messages: [{ messageId: 101, content: '추가 문의', status: 'SENT', sentAt: '2026-10-30T10:03:00' }] }),
   }));
@@ -409,7 +425,7 @@ test('서로 다른 로컬 초안이 같은 서버 메시지를 보내도 대화
   await submitServerDraft(101, { ...current, messageId: 'other-local-id' }, review, new AbortController().signal);
   const stored = JSON.parse(storage.get('teacher-hub.parent-sent-messages.101')!)[0];
   expect(stored.conversation.filter((entry: { body: string }) => entry.body === '추가 문의')).toHaveLength(1);
-  expect(calls.filter((call) => call.url.endsWith('/send'))).toHaveLength(1);
+  expect(calls.filter((call) => call.url.endsWith('/send'))).toEqual([expect.objectContaining({ body: { expectedContentVersion: 1 } })]);
   // A different confirmed sentence must not be treated as that already-sent message.
   await expect(submitServerDraft(101, { ...current, messageId: 'unsent-edit' }, { ...review, originalEdit: '아직 전송하지 않은 수정문' }, new AbortController().signal)).rejects.toMatchObject({ code: 'PARENT_MESSAGE_CONTENT_MISMATCH' });
   await expect(submitServerDraft(101, current, { ...review, originalEdit: '같은 로컬 초안에서 수정한 문장' }, new AbortController().signal)).rejects.toMatchObject({ code: 'PARENT_MESSAGE_CONTENT_MISMATCH' });
@@ -455,7 +471,7 @@ test('재분석이 제한돼도 이미 조회한 서버 마스킹 결과를 원�
 test('전송 응답의 본문이 확인한 문장과 다르면 로컬에 성공 사본을 만들지 않는다', async () => {
   const storage = seedFollowUpThread();
   mockFetch(route({
-    'GET /complaints/42/message-draft': () => json(200, { messageId: 101, content: '확인한 문장' }),
+    'PUT /complaints/42/message-draft': () => json(200, { messageId: 101, content: '확인한 문장', contentVersion: 1 }),
     'POST /complaints/42/messages/101/send': () => json(200, { messageId: 101, content: '다른 탭의 문장', sentAt: '2026-10-30T10:03:00' }),
     'GET /complaints/42/messages': () => json(200, { messages: [{ messageId: 101, content: '다른 탭의 문장', status: 'SENT' }] }),
   }));

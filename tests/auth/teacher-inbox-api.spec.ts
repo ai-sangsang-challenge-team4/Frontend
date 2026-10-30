@@ -64,10 +64,13 @@ const conversation: TeacherConversationResponse = {
 const risk: TeacherRiskResponse = {
   complaintId: 1,
   riskAnalysisId: 1,
-  riskScore: 30,
+  riskScore: 70,
   riskLevel: 'EMERGENCY',
-  reviewScore: 7,
-  reviewLevel: 'EMERGENCY',
+  reviewScale: null,
+  reviewScore: null,
+  reviewLevel: null,
+  currentRiskScore: 70,
+  currentRiskLevel: 'EMERGENCY',
   safetyLock: false,
   analyzedAt: '2026-10-29T10:42:17',
   latestReview: null,
@@ -76,7 +79,7 @@ const risk: TeacherRiskResponse = {
 
 // The backend omits empty history fields (@JsonInclude(NON_NULL)).
 const history = [
-  { eventId: 'complaint-event:3', type: 'RISK_ANALYZED', occurredAt: '2026-10-29T10:42:17', actorName: 'SYSTEM', riskScore: 30, riskLevel: 'EMERGENCY' },
+  { eventId: 'complaint-event:3', type: 'RISK_ANALYZED', occurredAt: '2026-10-29T10:42:17', actorName: 'SYSTEM', riskScore: 70, riskLevel: 'EMERGENCY' },
   { eventId: 'complaint-event:2', type: 'STATUS_CHANGED', occurredAt: '2026-10-29T10:42:16', actorName: 'Demo Parent', newStatus: 'DRAFT' },
 ] as HistoryEvent[];
 
@@ -181,7 +184,7 @@ test('상세·대화·위험·이력을 합쳐 위험 분류, 완충 요약, 처
   expect(classifications).toHaveLength(8);
   expect(classifications.find((item) => item.code === 'THREAT')).toMatchObject({ status: 'PRESENT', evidenceSpan: '직접 다치게 하겠습니다' });
   expect(classifications.filter((item) => item.status === 'ABSENT')).toHaveLength(7);
-  // reviewScore without a latestReview is only the initial score, not a teacher review.
+  // Without a teacher review the review fields are null.
   expect(thread.analysis?.teacherReviewedRiskLevel).toBeUndefined();
   expect(thread.needsTeacherReview).toBe(false);
 });
@@ -189,7 +192,7 @@ test('상세·대화·위험·이력을 합쳐 위험 분류, 완충 요약, 처
 test('교사 검토가 있으면 검토 위험도를 쓰고, 답변 후 학부모 차례가 아니면 재확인 필요로 표시한다', () => {
   const reviewed = mergeServerDetail(toListThread(listItem), bundle({
     risk: {
-      ...risk, reviewScore: 5, reviewLevel: 'HIGH', safetyLock: true,
+      ...risk, reviewScale: 5, reviewScore: 50, reviewLevel: 'HIGH', currentRiskScore: 50, currentRiskLevel: 'HIGH', safetyLock: true,
       latestReview: { riskReviewId: 3, direction: 'LOWERED', reason: '오탐', reviewedBy: 'Demo Teacher', reviewedAt: '2026-10-29T11:00:00' },
     },
     conversation: {
@@ -246,7 +249,7 @@ test('명시적으로 빈 근거 구간이 오면 이전 evidence 문자열을 �
 test('서버 이력은 오래된 순으로 바꾸고 생략된 필드를 비어 있는 값으로 처리한다', () => {
   expect(toActivityLogs(history)).toEqual([
     expect.objectContaining({ id: 'complaint-event:2', action: '민원 상태 변경', actor: 'Demo Parent', detail: '작성 중' }),
-    expect.objectContaining({ id: 'complaint-event:3', action: '위험 분석', actor: '시스템', detail: '긴급(30점)' }),
+    expect.objectContaining({ id: 'complaint-event:3', action: '위험 분석', actor: '시스템', detail: '긴급(7점)' }),
   ]);
 });
 

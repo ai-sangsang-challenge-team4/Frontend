@@ -28,7 +28,8 @@ export type EscalationStateResponse = {
   escalationStatus: EscalationStatus;
   // Status of that emergency review request; null when none was made.
   riskReviewStatus: RiskReviewStatus | null;
-  // null only when the complaint has no completed analysis (NOT_SHARED).
+  // 0~70: the system score, or the teacher's choice ×10 once reviewed. null only when the complaint has
+  // no completed analysis (NOT_SHARED).
   currentRiskScore: number | null;
   currentRiskLevel: RiskLevel | null;
   // True while the emergency policy holds, even after the reviewer applied a lower score.
@@ -45,6 +46,7 @@ export type ShareEscalationRequest = {
 
 // POST /teacher/complaints/{complaintId}/risk-reviews
 export type TeacherRiskReviewRequest = {
+  // The teacher's choice, 1~7; the server stores it ×10.
   riskScore: number;
   // Required when lowering.
   reason: string | null;
@@ -57,8 +59,11 @@ export type TeacherRiskReviewResponse = {
   emergencyReviewRequestId?: number;
   complaintId: number;
   riskAnalysisId: number;
+  // Teacher choices 1~7 (*Scale) and their scores ×10, 10~70 (*Score).
+  previousScale: number;
   previousScore: number;
   previousLevel: RiskLevel;
+  reviewScale: number;
   riskScore: number;
   riskLevel: RiskLevel;
   direction: RiskReviewDirection;
@@ -97,7 +102,7 @@ export type EscalationMessageRequest = {
 
 // POST /teacher/complaints/{complaintId}/emergency-review (201)
 export type EmergencyReviewCreateRequest = {
-  // 1~6, below the current EMERGENCY score.
+  // The teacher's choice 1~6, below EMERGENCY; the server stores it ×10.
   riskScore: number;
   // Required, up to 300 characters.
   reason: string;
@@ -119,8 +124,11 @@ export type EmergencyReviewResponse = {
   requestId: number;
   complaintId: number;
   riskAnalysisId: number;
+  // Teacher choices 1~7 (*Scale) and their scores ×10, 10~70 (*Score).
+  previousRiskScale: number;
   previousRiskScore: number;
   previousRiskLevel: RiskLevel;
+  requestedRiskScale: number;
   requestedRiskScore: number;
   requestedRiskLevel: RiskLevel;
   reason: string;
@@ -181,15 +189,20 @@ export type LatestReview = {
   reviewedAt: string;
 };
 
-// GET /admin/escalations/{escalationId}/risk
+// GET /admin/escalations/{escalationId}/risk. Scores are 0~70 (LOW ≤20, MEDIUM ≤40, HIGH ≤60, EMERGENCY).
 export type TeacherRiskResponse = {
   complaintId: number;
   riskAnalysisId: number;
+  // The system analysis: the sum of detected tag scores.
   riskScore: number;
   riskLevel: RiskLevel;
-  // The server always fills these: the latest review, or the initial score for the analysed level.
-  reviewScore: number;
-  reviewLevel: RiskLevel;
+  // The latest teacher review: the choice 1~7 and its score ×10. null without a review.
+  reviewScale: number | null;
+  reviewScore: number | null;
+  reviewLevel: RiskLevel | null;
+  // What applies now: the review when there is one, else the system analysis.
+  currentRiskScore: number;
+  currentRiskLevel: RiskLevel;
   safetyLock: boolean;
   analyzedAt: string;
   latestReview: LatestReview | null;
@@ -206,6 +219,7 @@ export type HistoryEvent = {
   referenceId?: number | null;
   previousStatus?: ComplaintStatus | null;
   newStatus?: ComplaintStatus | null;
+  // 0~70; RISK_REVIEWED scores are the teacher's choice ×10.
   riskScore?: number | null;
   riskLevel?: RiskLevel | null;
   previousRiskScore?: number | null;

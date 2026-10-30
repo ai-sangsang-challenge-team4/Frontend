@@ -30,7 +30,7 @@ import { getApiErrorMessage, type ApiError } from '../../shared/api';
 import { AsyncContent } from '../../shared/components/feedback';
 import { useAuth } from '../auth';
 import { canSendEscalationRequest, getEscalationState, submitRiskReview } from '../escalation/api';
-import { canRequestEmergencyReview } from '../escalation/escalationRules';
+import { canRequestEmergencyReview, toDisplayRiskScore } from '../escalation/escalationRules';
 import type { EscalationStateResponse } from '../escalation/escalationTypes';
 import { useEscalationRequest } from '../escalation/useEscalationRequest';
 import { AiJudgmentNotice } from '../safety/AiJudgmentNotice';
@@ -2897,8 +2897,8 @@ export function TeacherMessages({
     const modifiedAt = formatNow();
     const beforeLevel = systemRiskLevelFromApi[result.previousLevel];
     const afterLevel = systemRiskLevelFromApi[result.riskLevel];
-    const beforeLabel = `${systemRiskLabel[beforeLevel]}(${result.previousScore}점)`;
-    const afterLabel = `${systemRiskLabel[afterLevel]}(${result.riskScore}점)`;
+    const beforeLabel = `${systemRiskLabel[beforeLevel]}(${toDisplayRiskScore(result.previousScore)}점)`;
+    const afterLabel = `${systemRiskLabel[afterLevel]}(${toDisplayRiskScore(result.riskScore)}점)`;
     const reviewer = result.reviewedBy;
     const reasonDetail = result.reason
       ? `수정 사유: "${result.reason}"`
@@ -2966,7 +2966,7 @@ export function TeacherMessages({
             thread.analysis.safetyLock || result.safetyLock || afterLevel === 'emergency',
           teacherReviewReason: result.reason || undefined,
           teacherReviewedRiskLevel: afterLevel,
-          teacherRiskScore: result.riskScore as RiskScore,
+          teacherRiskScore: result.reviewScale as RiskScore,
         },
         risk: systemRiskTone[afterLevel],
         riskReviewRequired: false,

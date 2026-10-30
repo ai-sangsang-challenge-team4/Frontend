@@ -11,6 +11,7 @@ import {
 import {
   ADMIN_MESSAGE_MAX_LENGTH,
   apiRiskTone,
+  toDisplayRiskScore,
   canCompleteEscalation,
   canDecideEmergencyReview,
   canReleaseSafetyLock,
@@ -35,7 +36,7 @@ const steps: EscalationStatus[] = ['SHARED', 'UNDER_REVIEW', 'COMPLETED'];
 type PanelAction = 'review' | 'complete' | 'release-lock' | EmergencyReviewDecision;
 
 function riskText(level: RiskLevel, score: number) {
-  return `${riskLabel[apiRiskTone[level]]}(${score}점)`;
+  return `${riskLabel[apiRiskTone[level]]}(${toDisplayRiskScore(score)}점)`;
 }
 
 const decisionCopy: Record<EmergencyReviewDecision, string> = {

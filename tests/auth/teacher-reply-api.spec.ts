@@ -175,7 +175,8 @@ test('답변할 수 없는 상태의 409와 초안 없음 404를 구분해 안�
 
   expect(notFound?.code).toBe('RESPONSE_DRAFT_NOT_FOUND');
   expect(notEditable?.code).toBe('RESPONSE_NOT_EDITABLE');
-  expect(getApiErrorMessage(notEditable)).toContain('지금은 답변할 수 없는 문의');
+  // The server names the blocking state, so its reason is shown.
+  expect(getApiErrorMessage(notEditable)).toBe('접수되어 답변 대기 중인 민원만 답변할 수 있습니다.');
 });
 
 test('서버가 답변을 받는 상태(OPEN·교사 차례)가 아니면 작성·전송을 막는다', () => {

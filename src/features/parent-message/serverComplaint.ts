@@ -107,15 +107,44 @@ export function toFollowUpServerDraft(draft: MessageDraft, target: ServerDraftTa
   };
 }
 
+const DRAFT_CONFLICT_MESSAGE = '다른 기기나 탭에서 서버의 추가 문의 초안이 변경되었습니다. 작성한 내용은 유지됩니다. 서버 초안을 불러와 확인해 주세요.';
+
 function draftConflict(): never {
-  throw new ApiError({ code: 'PARENT_DRAFT_CONFLICT', status: 409, message: '서버의 추가 문의 초안이 변경되었습니다. 작성한 내용은 유지됩니다. 서버 초안을 불러와 확인해 주세요.' });
+  throw new ApiError({ code: 'PARENT_DRAFT_CONFLICT', status: 409, message: DRAFT_CONFLICT_MESSAGE });
 }
 
-async function updateFollowUp(server: ServerComplaintDraft, content: string, signal: AbortSignal) {
+// The server rejects a stale expectedContentVersion with 409 CONTENT_VERSION_CONFLICT (also when it is
+// missing); the composer offers the server draft for that code, as for the conflicts found here.
+async function withDraftConflict<T>(request: Promise<T>) {
+  try {
+    return await request;
+  } catch (error) {
+    if (isApiError(error) && error.code === 'CONTENT_VERSION_CONFLICT') draftConflict();
+    throw error;
+  }
+}
+
+// The version the parent last saw. Drafts stored before contentVersion was kept read it once from the server.
+async function knownFollowUpVersion(server: ServerComplaintDraft, signal: AbortSignal) {
+  if (server.contentVersion !== undefined) return server.contentVersion;
   const current = await parentComplaintApi.getFollowUpDraft(server.complaintId, signal);
-  if (!current || current.messageId !== server.serverMessageId || (current.content !== server.content && current.content !== content)) draftConflict();
-  if (current.content === content) return current;
-  return parentComplaintApi.saveFollowUpDraft(server.complaintId, { content }, signal);
+  if (!current || current.messageId !== server.serverMessageId || current.content !== server.content) draftConflict();
+  return current.contentVersion;
+}
+
+// Saved even when unchanged: the server keeps the version for the same content but still checks it, so a draft
+// changed on another device is caught before analysis. A conflict whose server draft already holds this content
+// is a retry after a lost save response, so that draft is used.
+async function updateFollowUp(server: ServerComplaintDraft, content: string, signal: AbortSignal) {
+  const expectedContentVersion = await knownFollowUpVersion(server, signal);
+  try {
+    return await parentComplaintApi.saveFollowUpDraft(server.complaintId, { content, expectedContentVersion }, signal);
+  } catch (error) {
+    if (!isApiError(error) || error.code !== 'CONTENT_VERSION_CONFLICT') throw error;
+    const current = await parentComplaintApi.getFollowUpDraft(server.complaintId, signal);
+    if (current && current.messageId === server.serverMessageId && current.content === content) return current;
+    draftConflict();
+  }
 }
 
 // Not abortable: a server draft created after the parent left the analysis would otherwise stay on the server
@@ -128,7 +157,7 @@ export async function createServerDraft(draft: MessageDraft, target: ServerDraft
     if (!target.complaintId) throw new Error('기존 문의의 서버 정보를 확인하지 못했습니다.');
     const existing = await parentComplaintApi.getFollowUpDraft(target.complaintId);
     if (existing && existing.content !== content) draftConflict();
-    const saved = existing ?? await parentComplaintApi.saveFollowUpDraft(target.complaintId, { content });
+    const saved = existing ?? await withDraftConflict(parentComplaintApi.saveFollowUpDraft(target.complaintId, { content }));
     return toFollowUpServerDraft(draft, target, saved);
   }
   if (!studentId) throw new Error('문의할 자녀를 선택해 주세요.');
@@ -236,7 +265,9 @@ export async function submitServerDraft(
       const saved = await updateFollowUp(server, content, signal);
       server = { ...server, content: saved.content, contentVersion: saved.contentVersion };
       onServerDraftUpdate?.(server);
-      const sent = await parentComplaintApi.submitFollowUp(server.complaintId, messageId, signal);
+      const sent = await withDraftConflict(parentComplaintApi.submitFollowUp(
+        server.complaintId, messageId, { expectedContentVersion: saved.contentVersion }, signal,
+      ));
       if (sent.messageId !== messageId || sent.content !== content) {
         throw new ApiError({ code: 'PARENT_MESSAGE_CONTENT_MISMATCH', status: 409,
           message: '서버에 전송된 내용이 확인한 문장과 다릅니다. 문의 내역을 다시 확인해 주세요.' });

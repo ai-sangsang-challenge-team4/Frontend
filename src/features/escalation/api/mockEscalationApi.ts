@@ -135,13 +135,18 @@ function requireUser(role: UserRole) {
   return user;
 }
 
-// Mock stand-in for the server's score → level rule. The UI never uses this for saved state.
+// Mock stand-in for the server's 0~70 score → level rule. The UI never uses this for saved state.
 function mockScoreToLevel(score: number): RiskLevel {
-  if (score <= 2) return 'LOW';
-  if (score <= 4) return 'MEDIUM';
-  if (score <= 6) return 'HIGH';
+  if (score <= 20) return 'LOW';
+  if (score <= 40) return 'MEDIUM';
+  if (score <= 60) return 'HIGH';
   return 'EMERGENCY';
 }
+
+// Stored scores are 0~70 like the server's; requests carry the teacher's 1~7 choice, stored ×10.
+// Every mock score is a choice ×10 (the inbox snapshot sends one too), so dividing gives the choice back.
+const toMockScore = (scale: number) => scale * 10;
+const toMockScale = (score: number) => Math.round(score / 10);
 
 // Mock inbox thread IDs are strings; the spec's complaintId is numeric.
 function mockComplaintNumber(complaintId: string) {
@@ -254,7 +259,7 @@ function createEmergencyReview(
   const item = findByComplaint(readStore(), complaintId);
   const previous = currentRisk(item, forComplaint.at(-1) ?? null, snapshot);
   if (!previous) throw new ApiError({ status: 404, code: 'COMPLAINT_NOT_FOUND', message: '민원을 찾을 수 없습니다.' });
-  if (previous.level !== 'EMERGENCY' || request.riskScore >= previous.score) {
+  if (previous.level !== 'EMERGENCY' || toMockScore(request.riskScore) >= previous.score) {
     throw new ApiError({
       status: 409,
       code: 'RISK_REVIEW_NOT_ALLOWED',
@@ -267,12 +272,14 @@ function createEmergencyReview(
     complaintId: String(complaintId),
     decidedAt: null,
     previousRiskLevel: previous.level,
+    previousRiskScale: toMockScale(previous.score),
     previousRiskScore: previous.score,
     reason,
     requestId: Math.max(500, ...reviews.map((review) => review.requestId)) + 1,
     requestedAt,
-    requestedRiskLevel: mockScoreToLevel(request.riskScore),
-    requestedRiskScore: request.riskScore,
+    requestedRiskLevel: mockScoreToLevel(toMockScore(request.riskScore)),
+    requestedRiskScale: request.riskScore,
+    requestedRiskScore: toMockScore(request.riskScore),
     reviewerId: request.reviewerId ?? item?.assignedAdminId ?? DEFAULT_ADMIN_ID,
     reviewerName: DEFAULT_ADMIN_NAME,
     riskAnalysisId: 1,
@@ -425,8 +432,9 @@ export const mockEscalationApi: EscalationApi = {
     const previous = currentRisk(item, latestReview(reviews, complaintId), options?.snapshot);
     if (!previous) throw new ApiError({ status: 404, code: 'COMPLAINT_NOT_FOUND', message: '민원을 찾을 수 없습니다.' });
 
+    const previousScale = toMockScale(previous.score);
     const direction: RiskReviewDirection =
-      riskScore < previous.score ? 'LOWERED' : riskScore > previous.score ? 'RAISED' : 'UNCHANGED';
+      riskScore < previousScale ? 'LOWERED' : riskScore > previousScale ? 'RAISED' : 'UNCHANGED';
     if (direction === 'LOWERED' && !reason) {
       throw new ApiError({
         status: 400,
@@ -435,22 +443,25 @@ export const mockEscalationApi: EscalationApi = {
       });
     }
 
-    const riskLevel = mockScoreToLevel(riskScore);
+    const reviewedScore = toMockScore(riskScore);
+    const riskLevel = mockScoreToLevel(reviewedScore);
     const base = {
       complaintId: mockComplaintNumber(String(complaintId)),
       direction,
       previousLevel: previous.level,
+      previousScale,
       previousScore: previous.score,
       ...(reason ? { reason } : {}),
+      reviewScale: riskScore,
       reviewedBy: teacher.name,
       riskAnalysisId: 1,
       riskLevel,
-      riskScore,
+      riskScore: reviewedScore,
     };
 
     // Like the backend, changing an EMERGENCY score opens an emergency review instead of applying it.
     // It no longer needs a share first.
-    if (previous.level === 'EMERGENCY' && riskScore !== previous.score) {
+    if (previous.level === 'EMERGENCY' && riskScore !== previousScale) {
       const review = createEmergencyReview(complaintId, { reason, riskScore }, teacher.name, options?.snapshot);
       return {
         ...base,
@@ -465,13 +476,13 @@ export const mockEscalationApi: EscalationApi = {
       replaceStored(store, {
         ...item,
         currentRiskLevel: riskLevel,
-        currentRiskScore: riskScore,
+        currentRiskScore: reviewedScore,
         events: [...item.events, createEvent(item, 'RISK_REVIEWED', teacher.name, {
           previousRiskLevel: previous.level,
           previousRiskScore: previous.score,
           reason: reason || null,
           riskLevel,
-          riskScore,
+          riskScore: reviewedScore,
         })],
       });
     }
@@ -551,10 +562,13 @@ export const mockEscalationApi: EscalationApi = {
       analyzedAt: item.sharedAt,
       complaintId: mockComplaintNumber(item.complaintId),
       detectedFactors: item.snapshot.detectedFactors,
+      currentRiskLevel: item.currentRiskLevel,
+      currentRiskScore: item.currentRiskScore,
+      // The mock keeps no review records, so the review fields stay null as without a review.
       latestReview: null,
-      // Like the server, these hold the latest review or fall back to the analysed values.
-      reviewLevel: item.currentRiskLevel,
-      reviewScore: item.currentRiskScore,
+      reviewLevel: null,
+      reviewScale: null,
+      reviewScore: null,
       riskAnalysisId: 1,
       riskLevel: item.snapshot.riskLevel,
       riskScore: item.snapshot.riskScore,

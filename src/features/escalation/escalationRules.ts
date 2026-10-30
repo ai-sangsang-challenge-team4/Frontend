@@ -80,6 +80,12 @@ export const apiRiskTone = {
   EMERGENCY: 'urgent',
 } as const satisfies Record<RiskLevel, string>;
 
+// Server scores are 0~70 (LOW ≤20, MEDIUM ≤40, HIGH ≤60, EMERGENCY); people see the 1~7 scale the teacher
+// rates on. Rounding up keeps the level boundaries at 2/4/6, and a teacher's choice ×10 shows as that choice.
+export function toDisplayRiskScore(score: number) {
+  return Math.min(7, Math.max(1, Math.ceil(score / 10)));
+}
+
 export const riskLevelOrder: RiskLevel[] = ['LOW', 'MEDIUM', 'HIGH', 'EMERGENCY'];
 
 // Only EMERGENCY can be shared (other levels get 409).

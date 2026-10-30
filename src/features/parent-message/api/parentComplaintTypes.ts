@@ -103,6 +103,19 @@ export type RiskDetectorResponse = {
   llm: { modelName: string; temperature: number | null } | null;
 };
 
+// PUT /complaints/{id}/message-draft. expectedContentVersion is required once a draft exists and omitted
+// for the first save; a mismatch answers 409 CONTENT_VERSION_CONFLICT without saving.
+export type ParentFollowUpDraftRequest = {
+  content: string;
+  expectedContentVersion?: number;
+};
+
+// POST /complaints/{id}/messages/{messageId}/send. A missing or stale version answers 409
+// CONTENT_VERSION_CONFLICT without sending.
+export type ParentFollowUpSendRequest = {
+  expectedContentVersion: number;
+};
+
 export type ParentFollowUpResponse = {
   messageId: number;
   complaintId: number;
@@ -115,8 +128,7 @@ export type ParentFollowUpResponse = {
   sentAt: string | null;
 };
 
-// GET /complaints/{id}/messages. Swagger shows the teacher Message schema here (string messageId, summarized)
-// because both DTOs are named Message; the parent DTO answers the numeric id and no summary flag.
+// GET /complaints/{id}/messages (Swagger ParentConversationMessage).
 export type ParentConversationResponse = {
   complaintId: number;
   status: ComplaintStatus;

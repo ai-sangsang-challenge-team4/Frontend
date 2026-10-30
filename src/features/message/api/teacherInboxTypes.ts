@@ -105,7 +105,7 @@ export type TeacherOriginalViewResponse = {
 };
 
 // POST /teacher/complaints/{complaintId}/close answers { message } instead of a DTO. Only an OPEN complaint
-// waiting for the parent closes (else 409 INVALID_STATE); answering does not close it on its own.
+// waiting for the parent closes (else 409 RESPONSE_NOT_EDITABLE with the reason); answering does not close it on its own.
 export type TeacherCloseResponse = {
   message: string;
 };

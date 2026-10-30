@@ -17,13 +17,16 @@ const thread = {
   sentAt: '2026-10-29T10:00:00Z', auditLog: [], consultationStatus: 'inProgress',
 };
 
-async function setup(page: Page, options: { followUp?: boolean; maskFailure?: boolean; detectorFailure?: boolean; conflict?: boolean; localOnly?: boolean; failFollowUpSendOnce?: boolean } = {}) {
+async function setup(page: Page, options: { followUp?: boolean; maskFailure?: boolean; detectorFailure?: boolean; conflict?: boolean; localOnly?: boolean; failFollowUpSendOnce?: boolean; changedBeforeSend?: boolean } = {}) {
   const calls: string[] = [];
   let content = maskedContent;
   let savedFollowUp = false;
   let sendAttempts = 0;
+  // The server's contentVersion: it grows only when the content changes.
+  let version = 1;
   const failDetector = options.detectorFailure;
-  const followUp = () => ({ messageId: 101, complaintId: 42, content, contentVersion: 1, status: 'DRAFT', waitingFor: 'PARENT', createdAt: '2026-10-30T10:00:00', updatedAt: '2026-10-30T10:00:00', sentAt: null });
+  const versionConflict = { code: 'CONTENT_VERSION_CONFLICT', message: '추가 문의 초안이 다른 기기에서 변경되었습니다.' };
+  const followUp = () => ({ messageId: 101, complaintId: 42, content, contentVersion: version, status: 'DRAFT', waitingFor: 'PARENT', createdAt: '2026-10-30T10:00:00', updatedAt: '2026-10-30T10:00:00', sentAt: null });
   await page.route((url) => url.pathname.startsWith('/api/'), async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname.replace('/api', '');
@@ -33,6 +36,7 @@ async function setup(page: Page, options: { followUp?: boolean; maskFailure?: bo
     let status = 200;
     switch (key) {
       case 'GET /complaints': json = { content: [{ studentId: 10, studentName: 'Demo Student' }], hasNext: false, totalPages: 1 }; break;
+      case 'GET /users/me': json = { userId: 101, email: 'parent@example.com', name: 'Demo Parent', role: 'PARENT', students: [{ studentId: 10, name: 'Demo Student', studentNo: '1' }] }; break;
       case 'GET /complaints/recipients': json = [{ teacherId: 20, teacherName: 'Demo Teacher', homeroomTeacher: true }]; break;
       case 'POST /complaints':
         expect(request.postDataJSON().content).not.toContain('010-1234-5678');
@@ -56,12 +60,20 @@ async function setup(page: Page, options: { followUp?: boolean; maskFailure?: bo
       case 'GET /complaints/42/message-draft':
         status = savedFollowUp || options.conflict ? 200 : 404;
         json = options.conflict ? { ...followUp(), content: '다른 탭의 초안' } : savedFollowUp ? followUp() : { code: 'MESSAGE_DRAFT_NOT_FOUND' }; break;
-      case 'PUT /complaints/42/message-draft':
-        content = request.postDataJSON().content;
-        expect(content).not.toContain('010-1234-5678');
+      case 'PUT /complaints/42/message-draft': {
+        const draft = request.postDataJSON();
+        expect(draft.content).not.toContain('010-1234-5678');
+        if (savedFollowUp ? draft.expectedContentVersion !== version : draft.expectedContentVersion !== undefined) {
+          status = 409; json = versionConflict; break;
+        }
+        if (savedFollowUp && draft.content !== content) version += 1;
+        content = draft.content;
         savedFollowUp = true;
         json = followUp(); break;
+      }
       case 'POST /complaints/42/messages/101/send':
+        if (options.changedBeforeSend) { content = '다른 기기에서 고친 내용'; version += 1; }
+        if (request.postDataJSON().expectedContentVersion !== version) { status = 409; json = versionConflict; break; }
         sendAttempts += 1;
         status = options.failFollowUpSendOnce && sendAttempts === 1 ? 500 : 200;
         json = status === 500 ? { code: 'INTERNAL_SERVER_ERROR' }
@@ -102,7 +114,7 @@ test('HTTP 새 문의에서 마스킹·분석·findings·상세 탐지를 호출
   const calls = await setup(page);
   await analyze(page);
   const results = page.getByRole('region', { name: '위험 분석 결과' });
-  await expect(results).toContainText('위험 점수: 30점');
+  await expect(results).toContainText('위험 점수: 3점');
   await expect(results).toContainText('요청을 구체적이고 부드럽게 표현했습니다.');
   await results.getByText('상세 탐지 결과 보기', { exact: true }).click();
   await results.getByRole('button', { name: '위험·협박 경계', exact: true }).click();
@@ -169,6 +181,17 @@ test('다른 탭에서 바뀐 추가 문의 초안은 덮어쓰지 않고 작성
   expect(calls).not.toContain('PUT /complaints/42/message-draft');
   await page.getByRole('button', { name: '서버 초안 불러오기', exact: true }).click();
   await expect(page.getByLabel('문의 내용', { exact: true })).toHaveValue('다른 탭의 초안');
+});
+
+test('전송 직전 다른 기기에서 바뀐 추가 문의 초안은 전송하지 않고 안내한다', async ({ page }) => {
+  await setup(page, { followUp: true, changedBeforeSend: true });
+  await analyze(page);
+  await page.getByRole('button', { name: '전송하기', exact: true }).click();
+  await page.getByRole('button', { name: '확인 후 전송', exact: true }).click();
+  await expect(page.getByText(/초안이 변경되어 전송하지 않았습니다/)).toBeVisible();
+  await expect(page).toHaveURL(/\/review$/);
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('teacher-hub.parent-sent-messages.101')!));
+  expect(stored[0].conversation ?? []).toHaveLength(0);
 });
 
 test('초안 불러오기 응답이 늦게 와도 그동안 입력한 내용을 덮어쓰지 않는다', async ({ page }) => {

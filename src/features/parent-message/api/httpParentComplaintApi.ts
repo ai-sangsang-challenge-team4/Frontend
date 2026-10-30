@@ -64,8 +64,8 @@ export const httpParentComplaintApi: ParentComplaintApi = {
   analyzeFollowUp: (complaintId, messageId, signal) =>
     apiClient.post<RiskSummaryResponse>(`/complaints/${complaintId}/messages/${messageId}/risk-analysis`, undefined, { signal }),
 
-  submitFollowUp: (complaintId, messageId, signal) =>
-    apiClient.post<ParentFollowUpResponse>(`/complaints/${complaintId}/messages/${messageId}/send`, undefined, { signal }),
+  submitFollowUp: (complaintId, messageId, request, signal) =>
+    apiClient.post<ParentFollowUpResponse>(`/complaints/${complaintId}/messages/${messageId}/send`, request, { signal }),
 
   getConversation: (complaintId, signal) =>
     apiClient.get<ParentConversationResponse>(`/complaints/${complaintId}/messages`, { signal }),
