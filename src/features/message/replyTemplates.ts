@@ -129,6 +129,12 @@ const serverVariableDefaults: Record<string, (thread: BoardThread, teacherName: 
   issueSummary: autoVariables.topic,
 };
 
+// Cut to 80 UTF-16 units without leaving half of a surrogate pair (an emoji) at the end.
+const truncateVariable = (text: string) => {
+  const cut = text.slice(0, 80);
+  return /[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut;
+};
+
 // Example wording only. Real wording must be confirmed against official policy and external review.
 export const replyTemplates: ReplyTemplate[] = [
   {
@@ -196,7 +202,7 @@ export function createReplyTemplateDraft(template: ReplyTemplate, thread: BoardT
         ? Object.fromEntries(Object.keys(template.teacherVariables).map((key) => [
           key,
           // Variables are capped at 80 characters, and a long inquiry title must not block saving.
-          (serverVariableDefaults[key]?.(thread, teacherName) ?? '').slice(0, 80),
+          truncateVariable(serverVariableDefaults[key]?.(thread, teacherName) ?? ''),
         ]))
         : { parentTitle: autoVariables.parentTitle(thread, teacherName), consultationSlot: '' }),
       ...compatible?.variables,

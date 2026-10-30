@@ -159,6 +159,13 @@ test('서버 템플릿은 서버 스레드의 유일한 답장 예시가 되고 
   });
 });
 
+test('긴 문의 제목 기본값은 80자로 자르되 이모지를 반으로 나누지 않는다', () => {
+  const template = toServerReplyTemplate(serverTemplate);
+  const target = thread({ title: `${'가'.repeat(79)}😀 뒤에 더 긴 제목`, serverTemplates: [template] });
+  const { issueSummary } = createReplyTemplateDraft(template, target, '담임').variables;
+  expect(issueSummary).toBe('가'.repeat(79));
+});
+
 test('상담 완료는 학부모 차례인 OPEN 민원만 서버에 요청한다', () => {
   expect(getServerCloseBlockReason(thread({ serverStatus: { status: 'OPEN', waitingFor: 'PARENT' } }))).toBeNull();
   expect(getServerCloseBlockReason(thread())).toContain('답변을 보낸 뒤');
