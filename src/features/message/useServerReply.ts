@@ -1,8 +1,9 @@
 import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { getApiErrorMessage, isApiError, REPLY_SEND_FAILED_MESSAGE } from '../../shared/api';
 import { teacherInboxApi, type TeacherResponseDraftResponse } from './api/teacherInboxApi';
-import { canGenerateReplyDraft, isReplyLocked } from './messageRules';
+import { canGenerateReplyDraft, canUseOfficialReplyTemplate, isReplyLocked } from './messageRules';
 import { getReplyDraftTab, selectReplyDraft } from './replyDrafts';
+import { getReplyTemplate } from './replyTemplates';
 import {
   applyServerSubmission,
   canRestoreServerDraft,
@@ -11,10 +12,12 @@ import {
   restoreServerDraft,
   setReplyDraftTabState,
   shouldRestoreServerDraft,
+  toServerReplyTemplate,
+  toTemplateAdoptionRequest,
 } from './serverReplies';
 import type { BoardThread } from './types';
 
-export type ServerReplyAction = 'loadingDraft' | 'generatingAiDraft' | 'saving' | 'sending';
+export type ServerReplyAction = 'loadingTemplates' | 'loadingDraft' | 'generatingAiDraft' | 'saving' | 'sending';
 type ServerReplyPending = { threadId: string; action: ServerReplyAction } | null;
 
 type UseServerReplyOptions = {
@@ -44,6 +47,8 @@ export function useServerReply({ setThreads, reloadDetail, onMessage }: UseServe
   const pendingRef = useRef<ServerReplyPending>(null);
   // Threads whose composer entry is still running, so reopening the composer does not repeat it.
   const initializingRef = useRef(new Set<string>());
+  // The last adopted template reply per thread, so retrying a failed send does not record it twice.
+  const adoptedRef = useRef(new Map<string, string>());
   const startPending = useCallback((threadId: string, action: ServerReplyAction) => {
     const value = { threadId, action };
     pendingRef.current = value;
@@ -92,20 +97,38 @@ export function useServerReply({ setThreads, reloadDetail, onMessage }: UseServe
     }
   }, [endPending, fail, refresh, startPending, updateThread]);
 
-  // On entering the composer: restores the saved server draft once per session, then opens the AI tab
+  // GET /response-templates for a High thread, once per session. The templates decide whether the manual
+  // tab is open, so they load before the server draft is restored. A failure leaves no templates, and the
+  // reply is written by hand.
+  const loadTemplates = useCallback(async (thread: BoardThread) => {
+    if (thread.serverTemplates !== undefined || !canUseOfficialReplyTemplate(thread)) return thread;
+    const request = startPending(thread.id, 'loadingTemplates');
+    let serverTemplates: BoardThread['serverTemplates'] = [];
+    try {
+      serverTemplates = (await teacherInboxApi.getResponseTemplates(thread.serverComplaintId!)).map(toServerReplyTemplate);
+    } catch (error) {
+      onMessage(getApiErrorMessage(error, '답장 예시를 불러오지 못했습니다. 직접 작성해 주세요.'));
+    } finally {
+      endPending(request);
+    }
+    updateThread(thread.id, (current) => ({ ...current, serverTemplates }));
+    return { ...thread, serverTemplates };
+  }, [endPending, onMessage, startPending, updateThread]);
+
+  // On entering the composer: loads the High templates, restores the saved server draft once per session, then opens the AI tab
   // and generates its draft when the tab has never been filled. Reopening the composer while this runs
   // does nothing, so the draft is not loaded twice and the AI draft is not requested twice.
   const initialize = useCallback(async (thread: BoardThread) => {
     if (!canReply(thread) || initializingRef.current.has(thread.id)) return;
     initializingRef.current.add(thread.id);
     try {
-      let next = thread;
+      let next = await loadTemplates(thread);
       let restored = false;
-      if (!thread.serverDraftChecked) {
+      if (!next.serverDraftChecked) {
         const request = startPending(thread.id, 'loadingDraft');
         let draft: TeacherResponseDraftResponse | null | undefined;
         try {
-          draft = await teacherInboxApi.getResponseDraft(thread.serverComplaintId!);
+          draft = await teacherInboxApi.getResponseDraft(next.serverComplaintId!);
         } catch (error) {
           if (isApiError(error) && error.code === 'RESPONSE_DRAFT_NOT_FOUND') draft = null;
           else onMessage(getApiErrorMessage(error, '임시저장한 답변을 불러오지 못했습니다.'));
@@ -113,10 +136,11 @@ export function useServerReply({ setThreads, reloadDetail, onMessage }: UseServe
           endPending(request);
         }
         if (draft !== undefined) {
-          restored = shouldRestoreServerDraft(thread, draft);
-          next = restoreServerDraft(thread, draft);
+          const checked = next;
+          restored = shouldRestoreServerDraft(checked, draft);
+          next = restoreServerDraft(checked, draft);
           updateThread(thread.id, (current) => restoreServerDraft(current, draft));
-          if (draft?.content.trim() && !canRestoreServerDraft(thread)) {
+          if (draft?.content.trim() && !canRestoreServerDraft(checked)) {
             onMessage('임시저장한 답변은 답장 예시 형식으로 되돌릴 수 없습니다. 예시를 다시 적용해 주세요.');
           }
         }
@@ -129,7 +153,7 @@ export function useServerReply({ setThreads, reloadDetail, onMessage }: UseServe
     } finally {
       initializingRef.current.delete(thread.id);
     }
-  }, [endPending, generateAiDraft, onMessage, startPending, updateThread]);
+  }, [endPending, generateAiDraft, loadTemplates, onMessage, startPending, updateThread]);
 
   // PUT /response-draft with the current tab only. The tab is the one saved even if the teacher switches
   // tabs before the response, so the "saved" mark follows the server copy.
@@ -149,11 +173,24 @@ export function useServerReply({ setThreads, reloadDetail, onMessage }: UseServe
   }, [endPending, fail, startPending, updateThread]);
 
   // POST /responses. Resolves true once the server stored the reply and handed the turn to the parent.
+  // A reply built from a server template is first recorded with POST /adoptions; if that fails nothing is sent.
   const submit = useCallback(async (thread: BoardThread, authorName: string) => {
     const content = thread.draftText.trim();
     if (!canReply(thread) || !content || pendingRef.current) return false;
     const request = startPending(thread.id, 'sending');
     try {
+      const template = getReplyTemplate(thread.appliedTemplate?.templateId, thread);
+      if (template?.serverVersionId !== undefined && thread.appliedTemplate) {
+        const adoptionKey = `${template.serverVersionId}:${content}`;
+        if (adoptedRef.current.get(thread.id) !== adoptionKey) {
+          await teacherInboxApi.adoptResponseTemplate(
+            thread.serverComplaintId!,
+            template.serverVersionId,
+            toTemplateAdoptionRequest(template, thread.appliedTemplate, content),
+          );
+          adoptedRef.current.set(thread.id, adoptionKey);
+        }
+      }
       const response = await teacherInboxApi.submitResponse(thread.serverComplaintId!, { content });
       updateThread(thread.id, (current) => applyServerSubmission(current, response, authorName));
       refresh(thread.id);

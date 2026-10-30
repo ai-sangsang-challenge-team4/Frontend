@@ -3,15 +3,18 @@ import type { TeacherHistoryResponse, TeacherRiskResponse } from '../../escalati
 import type { TeacherInboxApi } from './teacherInboxApiContract';
 import type {
   ComplaintPageResponse,
+  ResponseTemplateAdoptionResponse,
+  ResponseTemplateResponse,
   TeacherComplaintDetailResponse,
   TeacherConversationResponse,
   TeacherAiDraftResponse,
+  TeacherCloseResponse,
   TeacherOriginalViewResponse,
   TeacherResponseDraftResponse,
   TeacherResponseSubmissionResponse,
 } from './teacherInboxTypes';
 
-// Paths follow the backend TeacherComplaintController.
+// Paths follow the backend TeacherComplaintController and TeacherResponseTemplateController.
 export const httpTeacherInboxApi: TeacherInboxApi = {
   listComplaints: (query = {}, signal) =>
     apiClient.get<ComplaintPageResponse>('/teacher/complaints', {
@@ -37,10 +40,15 @@ export const httpTeacherInboxApi: TeacherInboxApi = {
   getHistory: (complaintId, signal) =>
     apiClient.get<TeacherHistoryResponse>(`/teacher/complaints/${complaintId}/history`, { signal }),
 
-  viewOriginal: (complaintId, signal) =>
-    apiClient.post<TeacherOriginalViewResponse>(`/teacher/complaints/${complaintId}/original-views`, undefined, {
-      signal,
-    }),
+  viewOriginal: (complaintId, messageId, signal) =>
+    apiClient.post<TeacherOriginalViewResponse>(
+      `/teacher/complaints/${complaintId}/messages/${messageId}/original-views`,
+      undefined,
+      { signal },
+    ),
+
+  closeComplaint: (complaintId) =>
+    apiClient.post<TeacherCloseResponse>(`/teacher/complaints/${complaintId}/close`),
 
   generateAiDraft: (complaintId) =>
     apiClient.post<TeacherAiDraftResponse>(`/teacher/complaints/${complaintId}/response/ai-draft`),
@@ -53,4 +61,13 @@ export const httpTeacherInboxApi: TeacherInboxApi = {
 
   submitResponse: (complaintId, request) =>
     apiClient.post<TeacherResponseSubmissionResponse>(`/teacher/complaints/${complaintId}/responses`, request),
+
+  getResponseTemplates: (complaintId, signal) =>
+    apiClient.get<ResponseTemplateResponse[]>(`/teacher/complaints/${complaintId}/response-templates`, { signal }),
+
+  adoptResponseTemplate: (complaintId, versionId, request) =>
+    apiClient.post<ResponseTemplateAdoptionResponse>(
+      `/teacher/complaints/${complaintId}/response-templates/${versionId}/adoptions`,
+      request,
+    ),
 };

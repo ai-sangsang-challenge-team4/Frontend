@@ -52,6 +52,17 @@ export function toServerComplaintNumber(threadId: string) {
   return Number.isSafeInteger(value) && value > 0 ? value : null;
 }
 
+// Conversation messages carry "message:{id}"; the original-view path takes the numeric id.
+export function toServerMessageNumber(replyId: string) {
+  const value = Number(replyId.replace(/^message:/, ''));
+  return Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+
+// The original opened without a chosen message: the latest parent message, which the latest analysis covers.
+export function getDefaultOriginalReplyId(thread: BoardThread) {
+  return [...thread.replies].reverse().find((reply) => reply.authorRole === 'parent')?.id;
+}
+
 function className(grade: number | null, classNo: number | null) {
   return grade === null || classNo === null ? '' : `${grade}학년 ${classNo}반`;
 }

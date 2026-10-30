@@ -95,11 +95,49 @@ export type TeacherConversationResponse = {
   messages: TeacherConversationMessage[];
 };
 
-// POST /teacher/complaints/{complaintId}/original-views. Every call records an ORIGINAL_VIEWED event.
+// POST /teacher/complaints/{complaintId}/messages/{messageId}/original-views. One sent message's original;
+// every call records an ORIGINAL_VIEWED event.
 export type TeacherOriginalViewResponse = {
   complaintId: number;
+  messageId: number;
   content: string;
   viewedAt: string;
+};
+
+// POST /teacher/complaints/{complaintId}/close answers { message } instead of a DTO. Only an OPEN complaint
+// waiting for the parent closes (else 409 INVALID_STATE); answering does not close it on its own.
+export type TeacherCloseResponse = {
+  message: string;
+};
+
+// GET /teacher/complaints/{complaintId}/response-templates. Latest active version of each High template.
+// An empty list when the complaint has no completed analysis; 409 RESPONSE_NOT_EDITABLE when the effective
+// level is not HIGH, the complaint is not waiting for the teacher, or the safety lock holds.
+// contentTemplate holds {{variable}} slots, listed in requiredVariables.
+export type ResponseTemplateResponse = {
+  templateId: number;
+  versionId: number;
+  code: string;
+  name: string;
+  version: number;
+  contentTemplate: string;
+  requiredVariables: string[];
+};
+
+// POST .../response-templates/{versionId}/adoptions (201). Every required variable needs a non-blank value;
+// finalContent @NotBlank @Size(max = 1500) is the reply the teacher confirmed.
+export type ResponseTemplateAdoptionRequest = {
+  variables: Record<string, string>;
+  finalContent: string;
+};
+
+export type ResponseTemplateAdoptionResponse = {
+  adoptionId: number;
+  complaintId: number;
+  templateVersionId: number;
+  renderedContent: string;
+  finalContent: string;
+  adoptedAt: string;
 };
 
 // Teacher reply DTOs (complaint/teacher/dto/reply). The server keeps one draft per complaint and teacher,

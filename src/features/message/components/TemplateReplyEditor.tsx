@@ -3,8 +3,9 @@ import {
   findCautionExpressions,
   getReplyTemplate,
   isConsultationDateTime,
+  isTeacherVariable,
   templateBlockText,
-  templateVariableLabels,
+  templateVariableLabel,
   templateVariableValue,
   type ReplyTemplate,
   type ReplyTemplateChange,
@@ -23,13 +24,14 @@ type TemplateReplyEditorProps = {
 };
 
 export function TemplateReplyEditor({ disabled, draft, onApply, onChange, teacherName, templates, thread }: TemplateReplyEditorProps) {
-  const template = getReplyTemplate(draft?.templateId);
+  const template = getReplyTemplate(draft?.templateId, thread);
+  const label = (key: string) => templateVariableLabel(key, template);
   const variableInput = (key: string, suffix = '') => {
     const isDateTime = key === 'consultationSlot';
     const value = draft?.variables[key] ?? '';
     const invalidDateTime = isDateTime && Boolean(value) && !isConsultationDateTime(value);
     return <input
-      aria-label={templateVariableLabels[key] ?? key}
+      aria-label={label(key)}
       aria-invalid={invalidDateTime || undefined}
       className={`board-template-variable${isDateTime ? ' board-template-datetime' : ''}`}
       disabled={disabled}
@@ -41,18 +43,18 @@ export function TemplateReplyEditor({ disabled, draft, onApply, onChange, teache
         const input = event.currentTarget;
         try { input.showPicker?.(); } catch { input.focus(); }
       } : undefined}
-      placeholder={templateVariableLabels[key]}
+      placeholder={label(key)}
       required
       step={isDateTime ? 60 : undefined}
       type={isDateTime ? 'datetime-local' : 'text'}
       value={invalidDateTime ? '' : value}
     />;
   };
-  const renderText = (text: string) => text.split(/(\{\{\w+\}\})/g).map((part, index) => {
-    const variable = part.match(/^\{\{(\w+)\}\}$/)?.[1];
+  const renderText = (text: string) => text.split(/(\{\{\s*[\w.-]+\s*\}\})/g).map((part, index) => {
+    const variable = part.match(/^\{\{\s*([\w.-]+)\s*\}\}$/)?.[1];
     if (!variable || !draft) return part;
-    if (variable === 'parentTitle' || variable === 'consultationSlot') return variableInput(variable, String(index));
-    return <span key={index}>{templateVariableValue(variable, thread, teacherName, draft)}</span>;
+    if (isTeacherVariable(variable, template)) return variableInput(variable, String(index));
+    return <span key={index}>{templateVariableValue(variable, thread, teacherName, draft, template)}</span>;
   });
 
   return (
@@ -116,15 +118,15 @@ export function TemplateReplyEditor({ disabled, draft, onApply, onChange, teache
                     <legend>마지막 안내를 골라 주세요</legend>
                     {block.options?.map((option, index) => {
                       const selected = draft.selectedOptions[block.blockId] === index;
-                      const variables = [...option.matchAll(/\{\{(\w+)\}\}/g)].map((match) => match[1]);
+                      const variables = [...option.matchAll(/\{\{\s*([\w.-]+)\s*\}\}/g)].map((match) => match[1]);
                       return (
                         <div className={`board-template-option${selected ? ' is-selected' : ''}`} key={index}>
                           <label>
                             <input checked={selected} name={`template-${thread.id}-${block.blockId}`} onChange={() => onChange({ type: 'option', blockId: block.blockId, index })} type="radio" />
-                            <span>{option.replace(/\{\{(\w+)\}\}/g, (_match, key: string) => templateVariableValue(key, thread, teacherName, draft) || `[${templateVariableLabels[key] ?? key}]`)}</span>
+                            <span>{option.replace(/\{\{\s*([\w.-]+)\s*\}\}/g, (_match, key: string) => templateVariableValue(key, thread, teacherName, draft, template) || `[${label(key)}]`)}</span>
                           </label>
-                          {selected ? variables.filter((key) => key === 'parentTitle' || key === 'consultationSlot').map((key) => (
-                            <label className="board-template-option-variable" key={key}><span>{templateVariableLabels[key]}</span>{variableInput(key)}</label>
+                          {selected ? variables.filter((key) => isTeacherVariable(key, template)).map((key) => (
+                            <label className="board-template-option-variable" key={key}><span>{label(key)}</span>{variableInput(key)}</label>
                           )) : null}
                         </div>
                       );

@@ -31,6 +31,10 @@ export type ReplyTemplateChange =
 
 export type ReplyTemplate = {
   approved: boolean;
+  // Server templates (GET /response-templates): the version to record on POST /adoptions, and the
+  // variables the teacher fills in, with their labels. Browser examples use the shared variables below.
+  serverVersionId?: number;
+  teacherVariables?: Record<string, string>;
   blocks: ReplyTemplateBlock[];
   description: string;
   matchFactorIds: string[];
@@ -40,7 +44,10 @@ export type ReplyTemplate = {
   version: number;
 };
 
-// Variables use {{key}}. Auto-filled keys are replaced; the rest stay as [label] chips the teacher must fill.
+// Variables use {{key}}, as the server writes them. Auto-filled keys are replaced; the rest stay as [label]
+// chips the teacher must fill.
+export const TEMPLATE_VARIABLE_PATTERN = /\{\{\s*([\w.-]+)\s*\}\}/g;
+
 const autoVariables: Record<string, (thread: BoardThread, teacherName: string) => string> = {
   parentTitle: (thread) => thread.parentName.replace(/\s*학부모$/, ''),
   studentName: (thread) => thread.studentName || '자녀분',
@@ -72,9 +79,23 @@ export function formatConsultationDateTime(value: string) {
   return isConsultationDateTime(value) ? formatMessageDate(`${value}:00+09:00`) : '';
 }
 
-export function templateVariableValue(key: string, thread: BoardThread, teacherName: string, draft: ReplyTemplateDraft) {
+export function isTeacherVariable(key: string, template?: ReplyTemplate) {
+  return template?.teacherVariables ? key in template.teacherVariables : key in teacherVariableLabels;
+}
+
+export function templateVariableLabel(key: string, template?: ReplyTemplate) {
+  return template?.teacherVariables?.[key] ?? templateVariableLabels[key] ?? key;
+}
+
+export function templateVariableValue(
+  key: string,
+  thread: BoardThread,
+  teacherName: string,
+  draft: ReplyTemplateDraft,
+  template?: ReplyTemplate,
+) {
   if (key === 'consultationSlot') return formatConsultationDateTime(draft.variables[key] ?? '');
-  if (Object.keys(teacherVariableLabels).includes(key)) return draft.variables[key] ?? '';
+  if (isTeacherVariable(key, template)) return draft.variables[key] ?? '';
   return autoVariables[key]?.(thread, teacherName) ?? '';
 }
 
@@ -83,11 +104,23 @@ export function templateBlockText(block: ReplyTemplateBlock, draft: ReplyTemplat
   return block.text ?? '';
 }
 
-function fillTemplateText(text: string, thread: BoardThread, teacherName: string, draft: ReplyTemplateDraft) {
-  return text.replace(/\{\{(\w+)\}\}/g, (_match, key: string) =>
-    templateVariableValue(key, thread, teacherName, draft).trim() || `[${templateVariableLabels[key] ?? key}]`,
+function fillTemplateText(
+  text: string,
+  thread: BoardThread,
+  teacherName: string,
+  draft: ReplyTemplateDraft,
+  template?: ReplyTemplate,
+) {
+  return text.replace(TEMPLATE_VARIABLE_PATTERN, (_match, key: string) =>
+    templateVariableValue(key, thread, teacherName, draft, template).trim() || `[${templateVariableLabel(key, template)}]`,
   );
 }
+
+// Server template variables filled in from the thread; the teacher can still change them.
+const serverVariableDefaults: Record<string, (thread: BoardThread, teacherName: string) => string> = {
+  parentName: autoVariables.parentTitle,
+  issueSummary: autoVariables.topic,
+};
 
 // Example wording only. Real wording must be confirmed against official policy and external review.
 export const replyTemplates: ReplyTemplate[] = [
@@ -128,7 +161,9 @@ export const replyTemplates: ReplyTemplate[] = [
 // Expressions that can read as a promise or a guarantee. Shown as a warning before sending.
 const cautionExpressions = ['반드시', '무조건', '책임지고', '약속드립니다', '보장합니다'];
 
+// A server thread uses only the server's templates; it has no browser examples.
 export function findReplyTemplates(thread: BoardThread) {
+  if (thread.serverComplaintId !== undefined) return thread.serverTemplates ?? [];
   const factorIds = new Set(thread.analysis?.riskFactors.map((factor) => factor.id) ?? []);
   return replyTemplates.filter((template) => (
     template.status === 'ACTIVE' && template.matchFactorIds.some((id) => factorIds.has(id))
@@ -139,8 +174,9 @@ export function findReplyTemplate(thread: BoardThread) {
   return findReplyTemplates(thread)[0];
 }
 
-export function getReplyTemplate(templateId?: string) {
-  return replyTemplates.find((template) => template.templateId === templateId);
+export function getReplyTemplate(templateId?: string, thread?: BoardThread) {
+  const templates = thread?.serverComplaintId !== undefined ? thread.serverTemplates ?? [] : replyTemplates;
+  return templates.find((template) => template.templateId === templateId);
 }
 
 export function createReplyTemplateDraft(template: ReplyTemplate, thread: BoardThread, teacherName: string, previous?: ReplyTemplateDraft): ReplyTemplateDraft {
@@ -149,8 +185,12 @@ export function createReplyTemplateDraft(template: ReplyTemplate, thread: BoardT
     templateId: template.templateId,
     version: template.version,
     variables: {
-      parentTitle: autoVariables.parentTitle(thread, teacherName),
-      consultationSlot: '',
+      ...(template.teacherVariables
+        ? Object.fromEntries(Object.keys(template.teacherVariables).map((key) => [
+          key,
+          serverVariableDefaults[key]?.(thread, teacherName) ?? '',
+        ]))
+        : { parentTitle: autoVariables.parentTitle(thread, teacherName), consultationSlot: '' }),
       ...compatible?.variables,
     },
     editableBlocks: {},
@@ -159,7 +199,7 @@ export function createReplyTemplateDraft(template: ReplyTemplate, thread: BoardT
   for (const block of template.blocks) {
     if (block.mode === 'EDITABLE') {
       draft.editableBlocks[block.blockId] = compatible?.editableBlocks[block.blockId]
-        ?? fillTemplateText(block.text ?? '', thread, teacherName, draft);
+        ?? fillTemplateText(block.text ?? '', thread, teacherName, draft, template);
     }
     if (block.mode === 'SELECT_ONE') {
       const previousOption = compatible?.selectedOptions[block.blockId];
@@ -171,7 +211,7 @@ export function createReplyTemplateDraft(template: ReplyTemplate, thread: BoardT
 
 // Only the fields allowed by the template can enter the serialized reply.
 export function changeReplyTemplateDraft(template: ReplyTemplate, draft: ReplyTemplateDraft, change: ReplyTemplateChange): ReplyTemplateDraft {
-  if (change.type === 'variable' && Object.keys(teacherVariableLabels).includes(change.key) && change.value.length <= 80) {
+  if (change.type === 'variable' && isTeacherVariable(change.key, template) && change.value.length <= 80) {
     return { ...draft, variables: { ...draft.variables, [change.key]: change.value } };
   }
   if (change.type === 'text') {
@@ -193,7 +233,7 @@ export function renderReplyTemplate(template: ReplyTemplate, thread: BoardThread
   return template.blocks
     .map((block) => block.mode === 'EDITABLE'
       ? (draft.editableBlocks[block.blockId] ?? '').trim()
-      : fillTemplateText(templateBlockText(block, draft), thread, teacherName, draft))
+      : fillTemplateText(templateBlockText(block, draft), thread, teacherName, draft, template))
     .join('\n\n');
 }
 
@@ -212,13 +252,13 @@ export function validateReplyTemplate(template: ReplyTemplate, draft: ReplyTempl
         errors.push('마지막 안내를 하나 골라 주세요.');
       }
       // Variables in an unselected option are intentionally not required.
-      for (const match of templateBlockText(block, draft).matchAll(/\{\{(\w+)\}\}/g)) {
+      for (const match of templateBlockText(block, draft).matchAll(TEMPLATE_VARIABLE_PATTERN)) {
         if (match[1] === 'consultationSlot') {
           if (!isConsultationDateTime(draft.variables.consultationSlot ?? '')) errors.push('상담 날짜와 시간을 선택해 주세요.');
           continue;
         }
-        const value = templateVariableValue(match[1], thread, teacherName, draft);
-        if (!value.trim() || value.length > 80) errors.push(`${templateVariableLabels[match[1]] ?? match[1]}을 입력해 주세요.`);
+        const value = templateVariableValue(match[1], thread, teacherName, draft, template);
+        if (!value.trim() || value.length > 80) errors.push(`${templateVariableLabel(match[1], template)}을 입력해 주세요.`);
       }
     }
   }

@@ -114,7 +114,8 @@ test('교사 메시지함 조회 API는 백엔드 경로와 목록 쿼리를 사
   await httpTeacherInboxApi.getConversation(1);
   await httpTeacherInboxApi.getRisk(1);
   await httpTeacherInboxApi.getHistory(1);
-  await httpTeacherInboxApi.viewOriginal(1);
+  await httpTeacherInboxApi.viewOriginal(1, 5);
+  await httpTeacherInboxApi.closeComplaint(1);
 
   expect(calls.map((call) => `${call.init.method} ${decodeURIComponent(call.url.replace('https://api.test', ''))}`)).toEqual([
     'GET /teacher/complaints?page=2&keyword=상담&status=OPEN&riskLevel=HIGH&sort=OLDEST',
@@ -123,7 +124,8 @@ test('교사 메시지함 조회 API는 백엔드 경로와 목록 쿼리를 사
     'GET /teacher/complaints/1/messages',
     'GET /teacher/complaints/1/risk',
     'GET /teacher/complaints/1/history',
-    'POST /teacher/complaints/1/original-views',
+    'POST /teacher/complaints/1/messages/5/original-views',
+    'POST /teacher/complaints/1/close',
   ]);
   expect(calls.every((call) => new Headers(call.init.headers).get('Authorization') === 'Bearer jwt')).toBe(true);
 });
