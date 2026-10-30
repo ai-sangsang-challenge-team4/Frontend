@@ -1,27 +1,11 @@
-import { useState, type ReactNode } from 'react';
-import { ChevronRight, Download, FileCheck2, Info, ShieldCheck, Trash2 } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { Download, Info, Trash2 } from 'lucide-react';
 import defaultProfileImage from '../../shared/assets/profile.png';
-import { Accordion, Badge, Button, ButtonLink, Modal, Tabs } from '../../shared/components/ui';
+import { Accordion, Badge, Button, ButtonLink, Tabs } from '../../shared/components/ui';
 import { ROLE_LABEL } from './authState';
 import { useAuth } from './useAuth';
 import './MyPagePanel.css';
-
-const consentItems = [
-  {
-    id: 'required',
-    title: '서비스 이용 동의',
-    requirement: '필수',
-    description: '서비스 이용에 필요한 동의 항목을 확인합니다.',
-    guidance: '서비스 이용에 필요한 항목입니다. 동의가 필요한 기능은 해당 항목에 동의한 뒤 이용할 수 있습니다.',
-  },
-  {
-    id: 'original-storage',
-    title: '원문 저장 동의',
-    requirement: '선택',
-    description: '작성한 메시지 원문의 저장 여부를 선택하는 항목입니다.',
-    guidance: '원문 저장 여부를 별도로 선택하는 항목입니다. 선택 동의를 거부해도 서비스를 계속 이용할 수 있어야 합니다.',
-  },
-] as const;
+import { PolicyConsentPanel } from './PolicyConsentPanel';
 
 function PanelHeading({ title, description, action }: {
   title: string;
@@ -50,7 +34,6 @@ function PreparationNotice({ children }: { children: ReactNode }) {
 
 export function MyPagePanel() {
   const { user } = useAuth();
-  const [guide, setGuide] = useState<typeof consentItems[number] | null>(null);
 
   if (!user) return null;
 
@@ -113,42 +96,7 @@ export function MyPagePanel() {
           {
             value: 'consents',
             label: '약관 및 동의',
-            content: (
-              <div className="mypage-tab-content">
-                <section aria-label="동의 현황" className="mypage-card">
-                  <PanelHeading
-                    title="동의 현황"
-                    description="필수 동의와 선택 동의를 항목별로 관리합니다."
-                    action={<Badge size="sm">준비 중</Badge>}
-                  />
-                  <PreparationNotice>동의 내역 조회와 변경 기능을 준비하고 있어요. 현재 동의 여부와 원문 저장 상태는 이 화면에서 확인할 수 없습니다.</PreparationNotice>
-                  <div className="mypage-consent-list">
-                    {consentItems.map((item) => (
-                      <div className="mypage-consent-row" key={item.id}>
-                        <span aria-hidden="true" className="mypage-item-icon"><FileCheck2 size={22} /></span>
-                        <div className="mypage-consent-copy">
-                          <h3>{item.title}<Badge size="sm" variant={item.requirement === '필수' ? 'brand' : 'neutral'}>{item.requirement}</Badge></h3>
-                          <p>{item.description}</p>
-                        </div>
-                        <Button aria-label={`${item.title} 안내`} onClick={() => setGuide(item)} rightIcon={<ChevronRight size={16} />} size="sm" variant="ghost">항목 안내</Button>
-                      </div>
-                    ))}
-                  </div>
-                  <dl className="mypage-consent-meta">
-                    <div><dt>동의한 정책 버전</dt><dd>확인 불가</dd></div>
-                    <div><dt>동의 시점</dt><dd>확인 불가</dd></div>
-                  </dl>
-                  <div className="mypage-card-footer">
-                    <p id="mypage-consent-unavailable">동의 내역을 확인할 수 있을 때 변경할 수 있어요.</p>
-                    <Button aria-describedby="mypage-consent-unavailable" disabled variant="outline">동의 변경</Button>
-                  </div>
-                </section>
-                <div className="mypage-policy-note">
-                  <ShieldCheck aria-hidden="true" size={22} />
-                  <div><h3>정책이 변경되면 다시 안내해 드려요</h3><p>재동의가 필요한 경우, 관련 기능을 이용하기 전에 변경된 항목을 안내하는 기능을 준비하고 있습니다.</p></div>
-                </div>
-              </div>
-            ),
+            content: <PolicyConsentPanel key={user.userId} />,
           },
           {
             value: 'data',
@@ -183,8 +131,8 @@ export function MyPagePanel() {
                   <Accordion
                     className="mypage-faq"
                     items={[
-                      { id: 'mypage-faq-consents', title: '동의 내역은 어디에서 확인하나요?', content: '약관 및 동의 탭에서 확인할 수 있도록 준비하고 있습니다. 현재는 항목 안내만 제공하며, 동의 상태와 정책 버전·시점은 아직 조회할 수 없습니다.' },
-                      { id: 'mypage-faq-original', title: '선택 동의와 원문 저장은 어떤 관계인가요?', content: '원문 저장 동의는 필수 동의와 별도로 관리하는 선택 항목입니다. 현재 계정의 원문 저장 여부는 동의 내역 조회 기능이 준비된 뒤 확인할 수 있습니다.' },
+                      { id: 'mypage-faq-consents', title: '동의 내역은 어디에서 확인하나요?', content: '약관 및 동의 탭에서 현재 정책의 동의 여부, 정책 버전과 동의 시각을 확인할 수 있습니다. 필수 동의를 확인하고 선택 동의를 변경한 뒤 저장할 수 있습니다.' },
+                      { id: 'mypage-faq-original', title: '선택 동의와 원문 저장은 어떤 관계인가요?', content: '원문 저장 동의는 필수 동의와 별도로 관리하는 선택 항목입니다. 현재 계정의 동의 여부는 약관 및 동의 탭에서 확인하고 변경할 수 있습니다.' },
                       { id: 'mypage-faq-data', title: '데이터 다운로드와 삭제는 어떻게 요청하나요?', content: '내 데이터 관리 탭에서 요청할 수 있도록 준비 중입니다. 지금은 요청을 접수하지 않으며, 기능이 준비되면 본인 확인과 처리 절차를 안내합니다.' },
                     ]}
                   />
@@ -201,21 +149,7 @@ export function MyPagePanel() {
         ]}
       />
 
-      <Modal
-        description="동의 항목에 대한 안내입니다. 이 화면에서는 동의를 저장하거나 변경하지 않습니다."
-        footer={<Button onClick={() => setGuide(null)} variant="outline">확인</Button>}
-        onOpenChange={(open) => { if (!open) setGuide(null); }}
-        open={guide !== null}
-        title={guide?.title ?? '동의 항목 안내'}
-      >
-        {guide ? (
-          <div className="mypage-consent-guide">
-            <Badge size="sm" variant={guide.requirement === '필수' ? 'brand' : 'neutral'}>{guide.requirement} 항목</Badge>
-            <p>{guide.guidance}</p>
-            <PreparationNotice>정식 약관과 보관·삭제 기준, 동의 변경 기능은 준비되는 대로 안내합니다.</PreparationNotice>
-          </div>
-        ) : null}
-      </Modal>
+
     </div>
   );
 }
