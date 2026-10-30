@@ -82,10 +82,13 @@ function isPositiveInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value > 0;
 }
 
+// A follow-up is addressed by complaintId and serverMessageId alone. Its teacherId is 0 when the inquiry came
+// from GET /complaints, which does not return the teacher's ID.
 function isServerDraft(value: unknown): value is ServerComplaintDraft {
   return isRecord(value) &&
-    isPositiveInteger(value.complaintId) && (value.studentId === undefined || isPositiveInteger(value.studentId)) && isPositiveInteger(value.teacherId) &&
-    (value.serverMessageId === undefined || isPositiveInteger(value.serverMessageId)) &&
+    isPositiveInteger(value.complaintId) && (value.studentId === undefined || isPositiveInteger(value.studentId)) &&
+    (value.serverMessageId === undefined ? isPositiveInteger(value.teacherId)
+      : isPositiveInteger(value.serverMessageId) && (value.teacherId === 0 || isPositiveInteger(value.teacherId))) &&
     (value.contentVersion === undefined || (typeof value.contentVersion === 'number' && Number.isInteger(value.contentVersion) && value.contentVersion >= 0)) &&
     typeof value.teacherName === 'string' && typeof value.title === 'string' && typeof value.content === 'string' &&
     (value.analysisId === null || isPositiveInteger(value.analysisId));
@@ -111,6 +114,7 @@ function isSentMessage(value: unknown): value is SentParentMessage {
         ['aiDraftGenerated', 'officialTemplateApplied'].every((field) => draft[field] === undefined || typeof draft[field] === 'boolean')
       )))) &&
     (value.consultationStatus === undefined || ['before', 'inProgress', 'complete'].includes(String(value.consultationStatus))) &&
+    (value.serverWaitingFor === undefined || ['PARENT', 'TEACHER', 'NONE'].includes(String(value.serverWaitingFor))) &&
     (value.conversation === undefined || (Array.isArray(value.conversation) && value.conversation.every((entry: unknown) => (
       isRecord(entry) && typeof entry.id === 'string' && typeof entry.body === 'string' &&
       (entry.serverMessageId === undefined || isPositiveInteger(entry.serverMessageId)) &&
@@ -240,4 +244,15 @@ export function updateSentMessage(userId: number, messageId: string, update: (me
   localStorage.setItem(sentKey(userId), JSON.stringify(messages));
   window.dispatchEvent(new Event('parent-messages-changed'));
   return message;
+}
+
+// Rewrites the whole list in one write, so a server sync refreshes the screens once. Unchanged lists are not written.
+export function updateSentMessages(userId: number, update: (messages: SentParentMessage[]) => SentParentMessage[]) {
+  const messages = readSentMessages(userId);
+  const next = update(messages);
+  const serialized = JSON.stringify(next);
+  if (serialized === JSON.stringify(messages)) return next;
+  localStorage.setItem(sentKey(userId), serialized);
+  window.dispatchEvent(new Event('parent-messages-changed'));
+  return next;
 }

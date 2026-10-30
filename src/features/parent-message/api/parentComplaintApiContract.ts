@@ -5,6 +5,8 @@ import type {
   ComplaintMessageResponse,
   ComplaintRecipientResponse,
   ComplaintResponse,
+  ParentComplaintDetailResponse,
+  ParentComplaintListQuery,
   ParentComplaintPageResponse,
   RiskRevisionResponse,
   RiskSummaryResponse,
@@ -18,7 +20,8 @@ import type {
 
 // New inquiries and follow-ups: server draft, masking, analysis, suggestions, and submission.
 export type ParentComplaintApi = {
-  listComplaints: (page: number, signal?: AbortSignal) => Promise<ParentComplaintPageResponse>;
+  listComplaints: (query?: ParentComplaintListQuery, signal?: AbortSignal) => Promise<ParentComplaintPageResponse>;
+  getComplaint: (complaintId: number, signal?: AbortSignal) => Promise<ParentComplaintDetailResponse>;
   // GET /users/me: the children come from its students.
   getMe: (signal?: AbortSignal) => Promise<UserInfoResponse>;
   listRecipients: (studentId: number, signal?: AbortSignal) => Promise<ComplaintRecipientResponse[]>;

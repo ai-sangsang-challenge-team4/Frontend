@@ -117,7 +117,8 @@ test.afterAll(() => {
 
 test('학부모 문의 API는 백엔드 경로·메서드·본문을 사용한다', async () => {
   mockFetch(() => json(200, {}));
-  await httpParentComplaintApi.listComplaints(1);
+  await httpParentComplaintApi.listComplaints({ page: 1, keyword: ' 상담 ', status: 'OPEN', sort: 'OLDEST' });
+  await httpParentComplaintApi.getComplaint(42);
   await httpParentComplaintApi.listRecipients(10);
   await httpParentComplaintApi.createDraft({ studentId: 10, teacherId: 20, title: '제목', content: '내용' });
   await httpParentComplaintApi.updateDraft(42, { content: '수정' });
@@ -134,7 +135,8 @@ test('학부모 문의 API는 백엔드 경로·메서드·본문을 사용한�
   await httpParentComplaintApi.getConversation(42);
 
   expect(calls.map(({ method, url, body }) => [method, url.replace('https://api.test', ''), body])).toEqual([
-    ['GET', '/complaints?page=1', undefined],
+    ['GET', `/complaints?page=1&keyword=${encodeURIComponent('상담')}&status=OPEN&sort=OLDEST`, undefined],
+    ['GET', '/complaints/42', undefined],
     ['GET', '/complaints/recipients?studentId=10', undefined],
     ['POST', '/complaints', { studentId: 10, teacherId: 20, title: '제목', content: '내용' }],
     ['PATCH', '/complaints/42', { content: '수정' }],

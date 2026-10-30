@@ -5,6 +5,7 @@ import type {
   ComplaintMessageResponse,
   ComplaintRecipientResponse,
   ComplaintResponse,
+  ParentComplaintDetailResponse,
   ParentComplaintPageResponse,
   RiskRevisionResponse,
   RiskSummaryResponse,
@@ -16,8 +17,20 @@ import type {
 
 // Paths follow the backend ParentComplaintController, RiskAnalysisController, and UserController (/users/me).
 export const httpParentComplaintApi: ParentComplaintApi = {
-  listComplaints: (page, signal) =>
-    apiClient.get<ParentComplaintPageResponse>('/complaints', { query: { page }, signal }),
+  listComplaints: (query = {}, signal) =>
+    apiClient.get<ParentComplaintPageResponse>('/complaints', {
+      query: {
+        page: query.page,
+        keyword: query.keyword?.trim() || undefined,
+        status: query.status,
+        riskLevel: query.riskLevel,
+        sort: query.sort,
+      },
+      signal,
+    }),
+
+  getComplaint: (complaintId, signal) =>
+    apiClient.get<ParentComplaintDetailResponse>(`/complaints/${complaintId}`, { signal }),
 
   getMe: (signal) =>
     apiClient.get<UserInfoResponse>('/users/me', { signal }),

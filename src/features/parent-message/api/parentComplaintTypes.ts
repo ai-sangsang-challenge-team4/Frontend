@@ -1,6 +1,6 @@
 import type { ComplaintStatus, MessageStatus, RiskFactorStatus, RiskLevel, WaitingFor } from '../../../shared/types';
 import type { DetectedFactorCode } from '../../escalation/escalationTypes';
-import type { ComplaintPageResponse } from '../../message/api/teacherInboxTypes';
+import type { ComplaintListQuery, ComplaintPageResponse } from '../../message/api/teacherInboxTypes';
 
 // Shapes in this file follow the backend parent complaint and risk analysis DTOs
 // (complaint/parent/dto/complaint, risk/dto/response). Do not add fields the backend does not define.
@@ -43,8 +43,27 @@ export type ComplaintRecipientResponse = {
   homeroomTeacher: boolean;
 };
 
-// GET /complaints: the same page shape as the teacher list; counterpartName is the teacher.
+// GET /complaints: the same query and page shape as the teacher list, but the parent's own DRAFT complaints
+// are listed too. counterpartName is the teacher, latestReceivedAt is the parent's latest sent message, and
+// aiSummary summarises that message.
+export type ParentComplaintListQuery = ComplaintListQuery;
 export type ParentComplaintPageResponse = ComplaintPageResponse;
+
+// GET /complaints/{id}. content is the initial inquiry; follow-ups and replies come from /messages.
+export type ParentComplaintDetailResponse = {
+  complaintId: number;
+  title: string;
+  studentId: number;
+  studentName: string;
+  parentName: string;
+  teacherName: string;
+  content: string;
+  status: ComplaintStatus;
+  waitingFor: WaitingFor;
+  riskLevel: RiskLevel | null;
+  createdAt: string;
+  updatedAt: string;
+};
 
 // POST /complaints/{id}/risk-analysis. Only the score; evidence and suggestions come from /findings.
 // One analysis per message: the same content returns the existing analysis, and different content after an

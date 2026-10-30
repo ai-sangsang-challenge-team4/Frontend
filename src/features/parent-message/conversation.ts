@@ -33,6 +33,9 @@ export function compareMessageTimes(left: string, right: string) {
 // Parent-side recheck: the teacher replied after the parent's last message and the parent has not confirmed it yet.
 export function needsParentReview(message: SentParentMessage) {
   const conversation = getConversation(message);
+  // The server list reports a teacher reply (waiting on the parent) before its conversation is loaded.
+  if (message.serverWaitingFor === 'PARENT' && message.consultationStatus !== 'complete' &&
+    conversation.at(-1)?.authorRole === 'parent') return true;
   const latestTeacherReply = conversation.filter((entry) => entry.authorRole === 'teacher').at(-1);
   const latestParentMessage = conversation.filter((entry) => entry.authorRole === 'parent').at(-1);
   if (!latestTeacherReply || (latestParentMessage && compareMessageTimes(latestParentMessage.sentAt, latestTeacherReply.sentAt) > 0)) return false;
