@@ -15,7 +15,7 @@ import {
 } from './icons';
 import './TeacherSidebar.css';
 
-export type SidebarItem = 'messages' | 'guide' | 'share' | 'mypage' | 'new' | 'history' | 'adminMessages';
+export type SidebarItem = 'messages' | 'guide' | 'share' | 'mypage' | 'new' | 'history' | 'adminMessages' | 'emergencyReviews';
 
 type SidebarProps = {
   activeItem?: SidebarItem;
@@ -63,6 +63,7 @@ const parentNavItems: SidebarNavItem[] = [
 
 const adminNavItems: SidebarNavItem[] = [
   { href: '/admin/messages', icon: SidebarShareIcon, key: 'adminMessages', label: '공유받은 메시지' },
+  { href: '/admin/emergency-reviews', icon: SidebarGuideIcon, key: 'emergencyReviews', label: '긴급 재검토 요청' },
 ];
 
 const sidebarVariants = {

@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AdminLayout } from '../../layouts/AdminLayout';
+import { AdminEmergencyReviewDetail, AdminEmergencyReviewList } from '../../features/admin/AdminEmergencyReviews';
 import { ParentLayout } from '../../layouts/ParentLayout';
 import { PublicLayout } from '../../layouts/PublicLayout';
 import { TeacherLayout } from '../../layouts/TeacherLayout';
@@ -85,6 +86,8 @@ export function AppRouter() {
         <Route index element={<Navigate to="/admin/messages" replace />} />
         <Route path="messages" element={<SharedMessageListPage />} />
         <Route path="messages/:escalationId" element={<SharedMessageDetailPage />} />
+        <Route path="emergency-reviews" element={<AdminEmergencyReviewList />} />
+        <Route path="emergency-reviews/:requestId" element={<AdminEmergencyReviewDetail />} />
         <Route path="mypage" element={<MyPage />} />
         <Route path="*" element={<Navigate to="/admin/messages" replace />} />
       </Route>

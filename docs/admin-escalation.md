@@ -28,9 +28,10 @@
 | 역할 | 경로 | 내용 |
 | --- | --- | --- |
 | TEACHER | `/teacher/messages/:id` → 위험 요소 탭 | 위험·긴급 메시지에 `관리자 공유` 섹션. 공유 버튼은 서버 `currentRiskLevel`이 EMERGENCY일 때만 활성. 공유 후 상태 칩, 현재 위험도, 위험도 변경 요청 상태 표시 |
-| TEACHER | 같은 탭 → 위험도 검토 | 1~7점 검토를 `risk-reviews`로 저장. 현재 EMERGENCY에서 점수를 바꾸면 공유 여부와 관계없이 Emergency 재검토 요청이 생기고 응답은 `PENDING_ADMIN_APPROVAL`·`safetyLock: true`·`emergencyReviewRequestId`(이때 `riskReviewId` 없음). 승인 대기 중이거나 잠금이 유지되는 동안(EMERGENCY 기준)은 안내 문구와 함께 저장·재검토 요청 버튼을 막습니다(서버 409 `EMERGENCY_REVIEW_DUPLICATE`) |
+| TEACHER | 같은 탭 → 위험도 검토 | 일반 위험도 검토는 `risk-reviews`로 저장하고, 긴급 하향은 `emergency-review`로 요청합니다. 현재 EMERGENCY에서 점수를 바꾸면 공유 여부와 관계없이 Emergency 재검토 요청이 생기고 요청 응답은 `status: PENDING_ADMIN_APPROVAL`·`safetyLock: true`·`requestId`를 포함합니다(`risk-reviews`를 경유하는 경우에는 `emergencyReviewRequestId`). 승인 대기 중에는 중복 요청을 막습니다. 반려 후에는 안전 잠금이 유지되어도 다시 요청할 수 있습니다. 최근 요청 상세는 `emergency-review/current`로 조회합니다. |
 | TEACHER | 같은 탭 → 관리자 공유 섹션 | 공유 상태, 현재 위험도, 재검토 요청 상태, 안전 잠금 표시. 서버 `safetyLock`이 true면 답변 작성 잠금 유지 |
 | TEACHER | `/teacher/admin-share` | 내가 공유한 목록. **mock 전용** (대응 API 없음, http 모드에서는 안내 문구) |
+| ADMIN | `/admin/emergency-reviews` 및 `/:requestId` | 나에게 지정된 긴급 재검토 목록·상세, 승인·거부·안전 잠금 해제. 공유 여부와 독립 |
 | ADMIN | `/admin/messages` | 공유받은 목록. 상태 탭(전체·확인 대기·검토 중·처리 완료), 위험도 필터 |
 | ADMIN | `/admin/messages/:escalationId` | 처리 상태(검토 시작·처리 완료), Emergency 재검토 요청 내용(이전→요청 위험도, 사유)과 승인/거부, 안전 잠금 해제, 공유 내용, 위험 분석, 처리 기록 |
 
@@ -75,7 +76,7 @@
 - 교사의 "내가 공유한 목록" API가 없습니다(`/teacher/admin-share`는 mock 전용). **엔드포인트 추가 필요.**
 - 미공유 상태 응답은 `escalationId`가 `null`이고, 재검토 요청이 없으면 `emergencyReviewRequestId`·`riskReviewStatus`도 `null`입니다. 완료된 분석이 없으면 `currentRiskScore`·`currentRiskLevel`도 `null`입니다(백엔드 dev 코드로 확인).
 - `SHARED → COMPLETED` 직접 완료는 불가합니다(백엔드 코드로 확인). 재검토 결정은 공유 상태와 무관합니다.
-- 관리자 화면은 공유받은 건의 상세에서만 재검토 요청을 보여 줍니다. 공유되지 않은 민원의 재검토 요청(지정 검토자 = 첫 관리자)을 볼 화면은 아직 없습니다(`listAdminEmergencyReviews`는 어댑터에만 있음).
+- `/admin/emergency-reviews`에서 지정 검토자의 전체 재검토 요청을 조회합니다. 공유되지 않은 민원도 `/admin/emergency-reviews/:requestId`에서 요청 상세 확인, 승인·거부 및 별도 안전 잠금 해제가 가능합니다.
 - 관리자 목록·상세 응답에 민원 제목·학생·학급 정보가 없어 `민원 #{complaintId}`와 공유 교사(`sharedBy`)만 표시합니다.
 - 관리자 처리 메모·결정 사유는 응답에 없고 `/history`의 `reason`으로만 확인됩니다. 처리 이력의 빈 필드는 `null`이 아니라 생략됩니다(`@JsonInclude(NON_NULL)`).
 - 위험 점수는 0~70점(LOW ≤20·MEDIUM ≤40·HIGH ≤60·EMERGENCY)입니다. 교사는 1~7점을 고르고 서버가 10을 곱해 저장합니다. 검토·재검토 응답은 선택값(`*Scale`, 1~7)과 환산 점수(`*Score`, 10~70)를 함께 줍니다. 화면은 모든 점수를 교사 슬라이더와 같은 7점 기준으로 보여 줍니다(`toDisplayRiskScore`: 10으로 나눠 올림, 1~7로 제한). 등급 경계가 2·4·6점으로 맞고, 교사 선택값은 그대로 보입니다. 등급 판정은 서버가 하며, 프론트 슬라이더 미리보기와 mock 서버만 같은 기준을 흉내 냅니다.
@@ -104,3 +105,5 @@ localStorage.removeItem('teacher-hub.escalations.v4');
 localStorage.removeItem('teacher-hub.emergency-reviews.v2');
 location.reload();
 ```
+
+정책 동의·미공유 재검토·교사 반려 후 재요청의 HTTP 화면 검증: `npx playwright test --config=playwright.integration-http.config.ts` (명세 fixture 사용).

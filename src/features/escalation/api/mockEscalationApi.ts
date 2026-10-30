@@ -100,9 +100,9 @@ function latestReview(reviews: StoredEmergencyReview[], complaintId: ComplaintId
   return reviews.filter((review) => review.complaintId === String(complaintId)).at(-1) ?? null;
 }
 
-// TeacherRiskResponse and an applied TeacherRiskReviewResponse report any request still holding the lock.
+// Current safety lock belongs to the latest request, including after a rejection and retry.
 function isSafetyLocked(reviews: StoredEmergencyReview[], complaintId: ComplaintId) {
-  return reviews.some((review) => review.complaintId === String(complaintId) && review.safetyLock);
+  return latestReview(reviews, complaintId)?.safetyLock ?? false;
 }
 
 function toEmergencyReview(review: StoredEmergencyReview): EmergencyReviewResponse {
@@ -257,12 +257,11 @@ function createEmergencyReview(
 
   const reviews = readReviews();
   const forComplaint = reviews.filter((review) => review.complaintId === String(complaintId));
-  // An approved request that still holds the lock also blocks a new one.
-  if (forComplaint.some((review) => review.status === 'PENDING_ADMIN_APPROVAL' || review.safetyLock)) {
+  if (forComplaint.some((review) => review.status === 'PENDING_ADMIN_APPROVAL')) {
     throw new ApiError({
       status: 409,
       code: 'EMERGENCY_REVIEW_DUPLICATE',
-      message: '이미 처리 중이거나 안전 잠금이 유지 중인 Emergency 재검토 요청이 있습니다.',
+      message: '이미 처리 중인 Emergency 재검토 요청이 있습니다.',
     });
   }
 

@@ -29,9 +29,9 @@ import {
 import { getApiErrorMessage, type ApiError } from '../../shared/api';
 import { AsyncContent } from '../../shared/components/feedback';
 import { useAuth } from '../auth';
-import { canSendEscalationRequest, getEscalationState, submitRiskReview } from '../escalation/api';
-import { canRequestEmergencyReview, toDisplayRiskScore } from '../escalation/escalationRules';
-import type { EscalationStateResponse } from '../escalation/escalationTypes';
+import { canSendEscalationRequest, getCurrentEmergencyReview, getEscalationState, requestEmergencyReview, submitRiskReview } from '../escalation/api';
+import { canRequestEmergencyReview, formatEscalationTime, riskReviewStatusLabel, toDisplayRiskScore } from '../escalation/escalationRules';
+import type { EscalationStateResponse, TeacherRiskReviewResponse } from '../escalation/escalationTypes';
 import { useEscalationRequest } from '../escalation/useEscalationRequest';
 import { AiJudgmentNotice } from '../safety/AiJudgmentNotice';
 import { AdminShareSection } from './components/AdminShareSection';
@@ -1148,19 +1148,30 @@ function RiskAnalysisPanel({
     [isLinked, thread],
   );
   const escalation = useEscalationRequest(loadEscalationState);
+  const currentRequestId = escalation.data?.emergencyReviewRequestId;
+  const currentStatus = escalation.data?.riskReviewStatus;
+  const currentLock = escalation.data?.safetyLock;
+  const loadCurrentReview = useCallback(
+    (signal: AbortSignal) => isLinked && thread.analysis
+      ? getCurrentEmergencyReview(thread.id, { signal }) : Promise.resolve(null),
+    // Refetch details after the summary changes, including decisions made elsewhere.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isLinked, thread.id, Boolean(thread.analysis), currentRequestId, currentStatus, currentLock],
+  );
+  const currentReview = useEscalationRequest(loadCurrentReview);
   useEffect(() => {
     if (escalation.data) onServerStateLoaded(thread.id, escalation.data);
   }, [escalation.data, onServerStateLoaded, thread.id]);
-  const serverReviewStatus = escalation.data?.riskReviewStatus ?? null;
-  const serverSafetyLock = escalation.data?.safetyLock ?? false;
-  const isEmergencyReference = riskScoreToLevel(initialReviewScore) === 'emergency';
-  // A pending request, or a held lock on a still-EMERGENCY score, makes the server answer 409.
+  const serverReviewStatus = currentReview.data?.status ?? escalation.data?.riskReviewStatus ?? null;
+  const serverSafetyLock = currentReview.data?.safetyLock ?? escalation.data?.safetyLock ?? false;
   const reviewNotice = !isLinked
     ? '서버에 등록된 민원이 아니어서 위험도 검토를 저장할 수 없습니다.'
-    : serverReviewStatus === 'PENDING_ADMIN_APPROVAL'
+    : currentReview.isLoading || escalation.isLoading
+      ? '현재 재검토 상태를 확인하고 있습니다.'
+    : currentReview.error
+      ? '현재 재검토 상태를 확인하지 못했습니다. 최근 요청 상세에서 다시 불러와 주세요.'
+    : !canRequestEmergencyReview(serverReviewStatus)
       ? '긴급 위험도 하향 요청이 관리자 승인 대기 중입니다. 관리자가 승인하거나 거부한 뒤 다시 검토할 수 있습니다.'
-      : isEmergencyReference && !canRequestEmergencyReview(serverReviewStatus, serverSafetyLock)
-        ? '안전 잠금이 유지 중이라 긴급 위험도 하향을 다시 요청할 수 없습니다. 관리자가 잠금을 해제한 뒤 요청해 주세요.'
         : null;
 
   useEffect(() => {
@@ -1391,6 +1402,21 @@ function RiskAnalysisPanel({
           threadId={thread.id}
         />
       ) : null}
+
+      {isLinked ? <details className="board-risk-workflow-panel">
+        <summary>최근 긴급 재검토 요청 상세</summary>
+        {currentReview.error ? <div role="alert"><p>{getApiErrorMessage(currentReview.error, '최근 재검토 요청을 불러오지 못했습니다.')}</p><button className="board-outline-button" onClick={currentReview.retry} type="button">다시 불러오기</button></div>
+          : currentReview.isInitialLoading ? <p role="status">최근 요청을 불러오고 있습니다.</p>
+          : currentReview.data ? <dl className="admin-share-summary">
+            <div><dt>상태</dt><dd>{riskReviewStatusLabel[currentReview.data.status]}</dd></div>
+            <div><dt>요청 위험도</dt><dd>{toDisplayRiskScore(currentReview.data.previousRiskScore)}점 → {toDisplayRiskScore(currentReview.data.requestedRiskScore)}점</dd></div>
+            <div><dt>요청 사유</dt><dd>{currentReview.data.reason}</dd></div>
+            <div><dt>지정 검토자</dt><dd>{currentReview.data.reviewerName}</dd></div>
+            <div><dt>요청 시각</dt><dd>{formatEscalationTime(currentReview.data.requestedAt)}</dd></div>
+            <div><dt>결정 시각</dt><dd>{currentReview.data.decidedAt ? formatEscalationTime(currentReview.data.decidedAt) : '미결정'}</dd></div>
+            <div><dt>안전 잠금</dt><dd>{serverSafetyLock ? '유지 중' : '해제됨'}</dd></div>
+          </dl> : <p>긴급 재검토 요청 내역이 없습니다.</p>}
+      </details> : null}
 
       {replyLocked || thread.riskReviewRequired ? (
         <section className="board-risk-lock-review">
@@ -2889,11 +2915,21 @@ export function TeacherMessages({
     const reviewReason = review.reason.trim();
     // The server decides the resulting level and whether admin approval is needed;
     // the saved state below only uses its response.
-    const result = await submitRiskReview(
-      threadId,
-      { reason: reviewReason || null, riskScore: review.score },
-      { snapshot: createEscalationSnapshot(target) },
-    );
+    let result: TeacherRiskReviewResponse;
+    if (getThreadRiskLevel(target) === 'emergency' && review.score < 7) {
+      const request = await requestEmergencyReview(threadId, { reason: reviewReason, riskScore: review.score }, { snapshot: createEscalationSnapshot(target) });
+      result = {
+        complaintId: request.complaintId, riskAnalysisId: request.riskAnalysisId,
+        emergencyReviewRequestId: request.requestId, previousScale: request.previousRiskScale,
+        previousScore: request.previousRiskScore, previousLevel: request.previousRiskLevel,
+        reviewScale: request.requestedRiskScale, riskScore: request.requestedRiskScore,
+        riskLevel: request.requestedRiskLevel, direction: 'LOWERED', reason: request.reason,
+        reviewedBy: user?.name ?? '담당 교사', reviewedAt: request.requestedAt,
+        status: request.status, safetyLock: request.safetyLock,
+      };
+    } else {
+      result = await submitRiskReview(threadId, { reason: reviewReason || null, riskScore: review.score }, { snapshot: createEscalationSnapshot(target) });
+    }
     const modifiedAt = formatNow();
     const beforeLevel = systemRiskLevelFromApi[result.previousLevel];
     const afterLevel = systemRiskLevelFromApi[result.riskLevel];
