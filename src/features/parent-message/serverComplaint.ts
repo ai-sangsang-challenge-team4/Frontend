@@ -88,6 +88,9 @@ export function toServerAnalysis(revision: RiskRevisionResponse, maskedContent: 
   };
 }
 
+// A slow catalog must not hold the parent back from the review screen; the local names are used instead.
+const RISK_TAG_WAIT_MS = 1500;
+
 const failedAnalysis: ParentMessageAnalysis = { status: 'failed', revisedText: null, risks: [], meaningWarning: null };
 
 // 409 on /risk-analysis when this message was already analyzed with other content: no new suggestions,
@@ -220,7 +223,8 @@ export async function analyzeServerDraft(
   };
   try {
     const [findings, tagNames] = await Promise.all([
-      parentComplaintApi.getFindings(analysisId, signal), getRiskTagNames(signal),
+      parentComplaintApi.getFindings(analysisId, signal),
+      Promise.race([getRiskTagNames(signal), new Promise<RiskTagNames>((resolve) => setTimeout(() => resolve({}), RISK_TAG_WAIT_MS))]),
     ]);
     return { server, analysis: { ...toServerAnalysis(findings, maskedContent, tagNames), ...metadata } };
   } catch (error) {

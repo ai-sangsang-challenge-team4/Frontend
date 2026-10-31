@@ -73,15 +73,7 @@ async function login(input: LoginInput): Promise<AuthSession> {
 
 async function getCurrentUser(accessToken: string) {
   await waitForRequest('getCurrentUser');
-  const session = readIssuedSessions().find((entry) => entry.accessToken === accessToken);
-
-  if (!session) {
-    throw unauthorized('INVALID_TOKEN', '인증 정보가 유효하지 않습니다. 다시 로그인해 주세요.');
-  }
-  if (session.expiresAt <= Date.now()) {
-    throw unauthorized('TOKEN_EXPIRED', '세션이 만료되었습니다. 다시 로그인해 주세요.');
-  }
-
+  const session = requireIssuedSession(accessToken);
   const account = readAccounts().find((entry) => entry.userId === session.userId);
   if (!account) {
     throw unauthorized('USER_NOT_FOUND', '사용자 정보를 찾을 수 없습니다. 다시 로그인해 주세요.');
@@ -155,11 +147,18 @@ async function signup(input: SignupInput): Promise<User> {
       ? { child: { schoolId, schoolClassId, studentId, studentName } }
       : { schoolId, employeeNo: employeeNo ?? '' }),
   };
-  writeStoredJson(ACCOUNT_STORAGE_KEY, [...accounts, account]);
-  writeStoredJson(`teacher-hub.policy-consent.${account.userId}`, {
+  // Consent goes first: removing it cannot fail, so a failed signup leaves no account or consent behind.
+  const consentKey = `teacher-hub.policy-consent.${account.userId}`;
+  writeStoredJson(consentKey, {
     consentId: account.userId, policyVersion: 'mock-v1', agreedAt: new Date().toISOString(),
     requiredAgreed: request.requiredAgreed, optionalAgreed: request.optionalAgreed,
   } satisfies PolicyConsentResponse);
+  try {
+    writeStoredJson(ACCOUNT_STORAGE_KEY, [...accounts, account]);
+  } catch (error) {
+    removeStoredValue(consentKey);
+    throw error;
+  }
   removeStoredValue(SIGNUP_VERIFICATION_STORAGE_KEY);
   return toUser(account);
 }
@@ -188,20 +187,18 @@ export const mockAuthApi: AuthApi = {
   verifyEmailCode,
   async getCurrentPolicyConsent() {
     await waitForRequest('getCurrentPolicyConsent');
-    const session = readAuthSession();
-    if (!session) throw unauthorized('UNAUTHORIZED', '로그인이 필요합니다.');
-    return readStoredJson<PolicyConsentResponse>(`teacher-hub.policy-consent.${session.user.userId}`)
+    const { userId } = requireStoredSession();
+    return readStoredJson<PolicyConsentResponse>(`teacher-hub.policy-consent.${userId}`)
       ?? { consentId: null, policyVersion: 'mock-v1', agreedAt: null, requiredAgreed: false, optionalAgreed: false };
   },
   async agreeToCurrentPolicy({ optionalAgreed }) {
     await waitForRequest('agreeToCurrentPolicy');
-    const session = readAuthSession();
-    if (!session) throw unauthorized('UNAUTHORIZED', '로그인이 필요합니다.');
+    const { userId } = requireStoredSession();
     const consent: PolicyConsentResponse = {
-      consentId: session.user.userId, policyVersion: 'mock-v1', agreedAt: new Date().toISOString(),
+      consentId: userId, policyVersion: 'mock-v1', agreedAt: new Date().toISOString(),
       requiredAgreed: true, optionalAgreed,
     };
-    writeStoredJson(`teacher-hub.policy-consent.${session.user.userId}`, consent);
+    writeStoredJson(`teacher-hub.policy-consent.${userId}`, consent);
     return consent;
   },
 };
@@ -228,6 +225,23 @@ function readIssuedSessions(): IssuedSession[] {
     typeof entry.userId === 'number' &&
     typeof entry.expiresAt === 'number' && Number.isFinite(entry.expiresAt),
   );
+}
+
+function requireIssuedSession(accessToken: string) {
+  const session = readIssuedSessions().find((entry) => entry.accessToken === accessToken);
+  if (!session) {
+    throw unauthorized('INVALID_TOKEN', '인증 정보가 유효하지 않습니다. 다시 로그인해 주세요.');
+  }
+  if (session.expiresAt <= Date.now()) {
+    throw unauthorized('TOKEN_EXPIRED', '세션이 만료되었습니다. 다시 로그인해 주세요.');
+  }
+  return session;
+}
+
+function requireStoredSession() {
+  const session = readAuthSession();
+  if (!session) throw unauthorized('UNAUTHORIZED', '로그인이 필요합니다.');
+  return requireIssuedSession(session.accessToken);
 }
 
 function readVerification(key: string): StoredVerification | null {

@@ -111,6 +111,20 @@ async function analyze(page: Page) {
   await expect(page).toHaveURL(/\/review$/);
 }
 
+test('태그 명칭 응답이 지연되어도 검토 화면과 상세 탐지 결과를 먼저 표시한다', async ({ page }) => {
+  await setup(page, { finding: true });
+  await page.route((url) => url.pathname === '/api/risk-tags', () => new Promise<void>(() => {}));
+  await analyze(page);
+  await page.getByRole('tab', { name: '원문', exact: true }).click();
+  const expand = page.getByRole('button', { name: '주의 표현 목록 펼치기', exact: true });
+  if (await expand.count()) await expand.click();
+  await expect(page.getByRole('region', { name: '탐지된 위험 표현 목록 (1)' }).getByText('위험·협박', { exact: true })).toBeVisible();
+  const results = page.getByRole('region', { name: '위험 분석 결과' });
+  await results.getByText('상세 탐지 결과 보기', { exact: true }).click();
+  await expect(results.getByRole('button', { name: '위험·협박 경계', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '전송하기', exact: true })).toBeEnabled();
+});
+
 for (const tagFailure of [false, true]) {
   test(`태그 명칭 조회 ${tagFailure ? '실패 시 기본 이름으로 분석을 유지한다' : '성공 시 검토 화면에도 서버 이름을 표시한다'}`, async ({ page }) => {
     await setup(page, { finding: true, tagFailure });

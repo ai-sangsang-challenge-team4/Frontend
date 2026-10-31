@@ -1164,12 +1164,15 @@ function RiskAnalysisPanel({
   }, [escalation.data, onServerStateLoaded, thread.id]);
   const serverReviewStatus = currentReview.data?.status ?? escalation.data?.riskReviewStatus ?? null;
   const serverSafetyLock = currentReview.data?.safetyLock ?? escalation.data?.safetyLock ?? false;
+  // Same condition as handleReviewComplete's emergency-review route. A failed lookup only blocks that
+  // request; other reviews go to submitRiskReview, and the server summary still reports a pending approval.
+  const isEmergencyReviewRequest = getThreadRiskLevel(thread) === 'emergency' && reviewScore < 7;
   const reviewNotice = !isLinked
     ? '서버에 등록된 민원이 아니어서 위험도 검토를 저장할 수 없습니다.'
     : currentReview.isLoading || escalation.isLoading
       ? '현재 재검토 상태를 확인하고 있습니다.'
-    : currentReview.error
-      ? '현재 재검토 상태를 확인하지 못했습니다. 최근 요청 상세에서 다시 불러와 주세요.'
+    : currentReview.error && isEmergencyReviewRequest
+      ?'현재 재검토 상태를 확인하지 못했습니다. 최근 요청 상세에서 다시 불러와 주세요.'
     : !canRequestEmergencyReview(serverReviewStatus)
       ? '긴급 위험도 하향 요청이 관리자 승인 대기 중입니다. 관리자가 승인하거나 거부한 뒤 다시 검토할 수 있습니다.'
         : null;

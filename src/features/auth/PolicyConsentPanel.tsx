@@ -69,7 +69,7 @@ export function PolicyConsentPanel() {
             </label>
             <label className="mypage-consent-row">
               <input checked={optional} disabled={saving} onChange={(event) => { setOptional(event.target.checked); setSaved(false); }} type="checkbox" />
-              <span className="mypage-consent-copy">메시지 원문 저장 동의 <Badge size="sm">선택</Badge></span>
+              <span className="mypage-consent-copy">서비스 개선을 위한 메시지 활용 동의 <Badge size="sm">선택</Badge></span>
             </label>
           </div>
           <p className="mypage-muted">선택 동의는 거부해도 서비스를 이용할 수 있습니다. 필수 동의를 확인한 뒤 저장해 주세요.</p>

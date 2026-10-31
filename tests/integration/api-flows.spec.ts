@@ -61,17 +61,17 @@ test('동의 조회 실패 재시도와 명시적 필수 동의, 선택 동의 �
   await expect(save).toBeDisabled();
   expect(writes).toBe(0);
   await page.getByRole('checkbox', { name: /서비스 이용약관/ }).check();
-  await page.getByRole('checkbox', { name: /메시지 원문 저장/ }).check();
+  await page.getByRole('checkbox', { name: /메시지 활용/ }).check();
   await save.click();
   await expect(page.getByRole('alert')).toBeVisible();
   await save.click();
   await expect(page.getByText('동의 내용이 저장되었습니다.')).toBeVisible();
-  await page.getByRole('checkbox', { name: /메시지 원문 저장/ }).uncheck();
+  await page.getByRole('checkbox', { name: /메시지 활용/ }).uncheck();
   await save.click();
   await expect(page.getByText('동의 내용이 저장되었습니다.')).toBeVisible();
   await page.reload();
   await page.getByRole('tab', { name: '약관 및 동의' }).click();
-  await expect(page.getByRole('checkbox', { name: /메시지 원문 저장/ })).not.toBeChecked();
+  await expect(page.getByRole('checkbox', { name: /메시지 활용/ })).not.toBeChecked();
   await expect(page.getByRole('checkbox', { name: /서비스 이용약관/ })).toBeChecked();
 });
 
@@ -106,25 +106,50 @@ test('공유되지 않은 긴급 재검토 요청을 목록에서 발견해 승�
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
+function teacherComplaintJson(key: string, current: typeof review): unknown {
+  switch (key) {
+    case 'GET /teacher/complaints': return { content: [{ complaintId: 12, title: '긴급 문의', studentName: '학생', counterpartName: '학부모', status: 'OPEN', waitingFor: 'TEACHER', riskLevel: 'EMERGENCY', aiSummary: '문의 요약', latestReceivedAt: '2026-10-30T09:00:00', grade: 3, classNo: 1 }], page: 0, size: 10, totalElements: 1, totalPages: 1, hasNext: false };
+    case 'GET /teacher/complaints/12': return { complaintId: 12, title: '긴급 문의', studentName: '학생', parentName: '학부모', status: 'OPEN', waitingFor: 'TEACHER', riskLevel: 'EMERGENCY', submittedAt: '2026-10-30T09:00:00', grade: 3, classNo: 1 };
+    case 'GET /teacher/complaints/12/messages': return { complaintId: 12, allowedActions: [], messages: [{ messageId: 'message:1', senderRole: 'PARENT', senderName: '학부모', content: '문의 요약', sentAt: '2026-10-30T09:00:00', summarized: true }] };
+    case 'GET /teacher/complaints/12/risk': return { complaintId: 12, riskAnalysisId: 4, riskScore: 70, riskLevel: 'EMERGENCY', currentRiskScore: 70, currentRiskLevel: 'EMERGENCY', reviewScale: null, reviewScore: null, reviewLevel: null, latestReview: null, analyzedAt: '2026-10-30T09:00:00', safetyLock: true, detectedFactors: [] };
+    case 'GET /teacher/complaints/12/history': return { complaintId: 12, events: [], logComplete: true };
+    case 'GET /teacher/complaints/12/escalation': return { escalationId: null, emergencyReviewRequestId: current.requestId, escalationStatus: 'NOT_SHARED', riskReviewStatus: current.status, currentRiskScore: 70, currentRiskLevel: 'EMERGENCY', safetyLock: true };
+    default: return undefined;
+  }
+}
+
+test('긴급 재검토 조회 실패는 일반 검토를 막지 않고 긴급 하향 요청만 막는다', async ({ page }) => {
+  const current = { ...review, status: 'REJECTED', decidedAt: '2026-10-30T11:00:00' as string | null };
+  await setup(page, 'TEACHER', async (route, key) => {
+    if (key === 'GET /teacher/complaints/12/emergency-review/current') {
+      await route.fulfill({ status: 503, json: { message: '조회 지연' } }); return true;
+    }
+    const json = teacherComplaintJson(key, current);
+    if (json === undefined) return false;
+    await route.fulfill({ json }); return true;
+  });
+  await page.goto('/teacher/messages/12');
+  await page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name: '위험 요소', exact: true }).click();
+  await expect(page.getByRole('button', { name: '검토 완료', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: '5점 위험', exact: true }).click();
+  await page.getByPlaceholder('하향 수정 사유를 입력해주세요.').fill('추가 근거를 확인했습니다.');
+  await expect(page.getByRole('button', { name: '확인 요청', exact: true })).toBeDisabled();
+  await expect(page.getByText('현재 재검토 상태를 확인하지 못했습니다.', { exact: false })).toBeVisible();
+});
+
 test('최신 거부 요청의 잠금이 유지되어도 교사가 재요청하며 승인 대기 중에는 중복을 막는다', async ({ page }) => {
   let current = { ...review, status: 'REJECTED', decidedAt: '2026-10-30T11:00:00' as string | null };
   const calls: string[] = [];
   await setup(page, 'TEACHER', async (route, key) => {
     calls.push(key);
-    let json: unknown;
+    let json = teacherComplaintJson(key, current);
     switch (key) {
-      case 'GET /teacher/complaints': json = { content: [{ complaintId: 12, title: '긴급 문의', studentName: '학생', counterpartName: '학부모', status: 'OPEN', waitingFor: 'TEACHER', riskLevel: 'EMERGENCY', aiSummary: '문의 요약', latestReceivedAt: '2026-10-30T09:00:00', grade: 3, classNo: 1 }], page: 0, size: 10, totalElements: 1, totalPages: 1, hasNext: false }; break;
-      case 'GET /teacher/complaints/12': json = { complaintId: 12, title: '긴급 문의', studentName: '학생', parentName: '학부모', status: 'OPEN', waitingFor: 'TEACHER', riskLevel: 'EMERGENCY', submittedAt: '2026-10-30T09:00:00', grade: 3, classNo: 1 }; break;
-      case 'GET /teacher/complaints/12/messages': json = { complaintId: 12, allowedActions: [], messages: [{ messageId: 'message:1', senderRole: 'PARENT', senderName: '학부모', content: '문의 요약', sentAt: '2026-10-30T09:00:00', summarized: true }] }; break;
-      case 'GET /teacher/complaints/12/risk': json = { complaintId: 12, riskAnalysisId: 4, riskScore: 70, riskLevel: 'EMERGENCY', currentRiskScore: 70, currentRiskLevel: 'EMERGENCY', reviewScale: null, reviewScore: null, reviewLevel: null, latestReview: null, analyzedAt: '2026-10-30T09:00:00', safetyLock: true, detectedFactors: [] }; break;
-      case 'GET /teacher/complaints/12/history': json = { complaintId: 12, events: [], logComplete: true }; break;
-      case 'GET /teacher/complaints/12/escalation': json = { escalationId: null, emergencyReviewRequestId: current.requestId, escalationStatus: 'NOT_SHARED', riskReviewStatus: current.status, currentRiskScore: 70, currentRiskLevel: 'EMERGENCY', safetyLock: true }; break;
       case 'GET /teacher/complaints/12/emergency-review/current': json = current; break;
       case 'POST /teacher/complaints/12/emergency-review':
         expect(route.request().postDataJSON()).toEqual({ reason: '추가 근거를 확인했습니다.', riskScore: 5 });
         current = { ...current, requestId: 10, status: 'PENDING_ADMIN_APPROVAL', decidedAt: null };
         json = current; break;
-      default: return false;
+      default: if (json === undefined) return false;
     }
     await route.fulfill({ json }); return true;
   });
