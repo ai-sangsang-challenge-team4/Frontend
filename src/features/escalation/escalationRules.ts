@@ -58,7 +58,10 @@ export const historyEventLabel: Record<HistoryEventType, string> = {
   RISK_REVIEWED: '교사 위험도 검토',
   ORIGINAL_VIEWED: '원문 열람',
   AI_DRAFT_GENERATED: 'AI 답변 초안 생성',
+  RESPONSE_BLOCKED_BY_SAFETY_LOCK: '안전 잠금으로 답변 차단',
+  RESPONSE_TEMPLATE_ADOPTED: '답변 템플릿 채택',
   MESSAGE_SENT: '메시지 전송',
+  MESSAGE_READ: '메시지 읽음',
   ESCALATION_SHARED: '관리자 공유',
   ESCALATION_REVIEW_STARTED: '관리자 검토 시작',
   // Deprecated on the backend; only past events carry these.
@@ -118,9 +121,9 @@ export function canReleaseSafetyLock(
   return requestId !== null && safetyLock && riskReviewStatus !== 'PENDING_ADMIN_APPROVAL';
 }
 
-// Teacher side: a pending request or a held lock makes the server answer 409 EMERGENCY_REVIEW_DUPLICATE.
-export function canRequestEmergencyReview(riskReviewStatus: RiskReviewStatus | null, safetyLock: boolean) {
-  return riskReviewStatus !== 'PENDING_ADMIN_APPROVAL' && !safetyLock;
+// Only a pending request blocks another request. A rejected request may retain its safety lock.
+export function canRequestEmergencyReview(riskReviewStatus: RiskReviewStatus | null) {
+  return riskReviewStatus !== 'PENDING_ADMIN_APPROVAL';
 }
 
 export const SHARE_REASON_MAX_LENGTH = 500;

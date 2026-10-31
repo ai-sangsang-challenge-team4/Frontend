@@ -55,7 +55,8 @@ type AdminSharedMessageDetailProps = {
 };
 
 // History events omit empty fields (@JsonInclude(NON_NULL)), so a score may be undefined as well as null.
-function riskText(level: RiskLevel, score: number | null | undefined) {
+function riskText(level: RiskLevel | null, score: number | null | undefined) {
+  if (!level) return '-';
   return score == null ? riskLabel[apiRiskTone[level]] : `${riskLabel[apiRiskTone[level]]}(${toDisplayRiskScore(score)}점)`;
 }
 

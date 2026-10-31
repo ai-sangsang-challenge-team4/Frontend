@@ -5,6 +5,7 @@ import { parentComplaintApi, type ComplaintRecipientResponse, type ParentFollowU
 import { appendFollowUp, findSentSubmission } from './conversation';
 import { storeSentMessage, type MessageDraft, type ServerComplaintDraft } from './messageDraft';
 import { OFFICIAL_MEANING_WARNING } from './parentMessageApi';
+import { getRiskTagNames, type RiskTagNames } from '../risk-analysis/riskTagCatalog';
 import {
   getSelectedMessage,
   validateFinalMessage,
@@ -35,7 +36,7 @@ export function toServerRecipients(recipients: ComplaintRecipientResponse[]): Se
   }));
 }
 
-// Names follow the backend risk_tags seed (GET /risk-tags).
+// Local presentation kinds and fallback names when the risk-tag catalog is unavailable.
 export const riskTags: Record<DetectedFactorCode, { kind: RiskExpressionKind; title: string }> = {
   PROFANITY: { kind: 'profanity', title: '욕설' },
   INSULT: { kind: 'insult', title: '인격 모욕' },
@@ -56,7 +57,7 @@ function expressionLines(text: string) {
 }
 
 // One expression per evidence line, plus suggestion lines that are not among the evidence.
-export function toServerAnalysis(revision: RiskRevisionResponse, maskedContent: string): ParentMessageAnalysis {
+export function toServerAnalysis(revision: RiskRevisionResponse, maskedContent: string, tagNames: RiskTagNames = {}): ParentMessageAnalysis {
   const risks: RiskExpression[] = revision.findings.flatMap((finding) => {
     const tag = riskTags[finding.code];
     if (!tag) return [];
@@ -70,7 +71,7 @@ export function toServerAnalysis(revision: RiskRevisionResponse, maskedContent: 
       return {
         id: `${finding.code}-${index}`,
         kind: tag.kind,
-        title: tag.title,
+        title: tagNames[finding.code] ?? tag.title,
         excerpt,
         explanation: suggestion?.reason.trim() || DEFAULT_RISK_EXPLANATION,
         ...(suggestion?.suggestedExpression.trim() ? { suggestion: suggestion.suggestedExpression.trim() } : {}),
@@ -86,6 +87,9 @@ export function toServerAnalysis(revision: RiskRevisionResponse, maskedContent: 
     meaningWarning: revision.findings.some((finding) => finding.code === 'LEGAL') ? OFFICIAL_MEANING_WARNING : null,
   };
 }
+
+// A slow catalog must not hold the parent back from the review screen; the local names are used instead.
+const RISK_TAG_WAIT_MS = 1500;
 
 const failedAnalysis: ParentMessageAnalysis = { status: 'failed', revisedText: null, risks: [], meaningWarning: null };
 
@@ -218,7 +222,11 @@ export async function analyzeServerDraft(
     ...(masking ? { maskingContentVersion: masking.contentVersion } : {}),
   };
   try {
-    return { server, analysis: { ...toServerAnalysis(await parentComplaintApi.getFindings(analysisId, signal), maskedContent), ...metadata } };
+    const [findings, tagNames] = await Promise.all([
+      parentComplaintApi.getFindings(analysisId, signal),
+      Promise.race([getRiskTagNames(signal), new Promise<RiskTagNames>((resolve) => setTimeout(() => resolve({}), RISK_TAG_WAIT_MS))]),
+    ]);
+    return { server, analysis: { ...toServerAnalysis(findings, maskedContent, tagNames), ...metadata } };
   } catch (error) {
     if (signal.aborted || isAbortError(error)) throw error;
     // The analysis is stored, so the parent can still send; only the suggestions are missing.

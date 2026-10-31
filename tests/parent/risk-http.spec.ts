@@ -17,7 +17,7 @@ const thread = {
   sentAt: '2026-10-29T10:00:00Z', auditLog: [], consultationStatus: 'inProgress',
 };
 
-async function setup(page: Page, options: { followUp?: boolean; maskFailure?: boolean; detectorFailure?: boolean; conflict?: boolean; localOnly?: boolean; failFollowUpSendOnce?: boolean; changedBeforeSend?: boolean } = {}) {
+async function setup(page: Page, options: { tagFailure?: boolean; finding?: boolean; followUp?: boolean; maskFailure?: boolean; detectorFailure?: boolean; conflict?: boolean; localOnly?: boolean; failFollowUpSendOnce?: boolean; changedBeforeSend?: boolean } = {}) {
   const calls: string[] = [];
   let content = maskedContent;
   let savedFollowUp = false;
@@ -35,6 +35,7 @@ async function setup(page: Page, options: { followUp?: boolean; maskFailure?: bo
     let json: unknown;
     let status = 200;
     switch (key) {
+      case 'GET /risk-tags': status = options.tagFailure ? 503 : 200; json = options.tagFailure ? { code: 'INTERNAL_SERVER_ERROR' } : [{ id: 1, code: 'THREAT', name: '서버에서 관리하는 협박 명칭', defaultScore: 30 }]; break;
       case 'GET /complaints': json = { content: [{ studentId: 10, studentName: 'Demo Student' }], hasNext: false, totalPages: 1 }; break;
       case 'GET /users/me': json = { userId: 101, email: 'parent@example.com', name: 'Demo Parent', role: 'PARENT', students: [{ studentId: 10, name: 'Demo Student', studentNo: '1' }] }; break;
       case 'GET /complaints/recipients': json = [{ teacherId: 20, teacherName: 'Demo Teacher', homeroomTeacher: true }]; break;
@@ -51,7 +52,7 @@ async function setup(page: Page, options: { followUp?: boolean; maskFailure?: bo
       case 'POST /complaints/42/messages/101/risk-analysis':
         json = { analysisId: options.followUp ? 8 : 7, complaintId: 42, riskScore: 30, riskLevel: 'HIGH' }; break;
       case 'GET /risk-analyses/7/findings':
-      case 'GET /risk-analyses/8/findings': json = { findings: [], finalRevision: { content: '상담 가능한 시간을 안내해 주세요.', reason: '요청을 구체적이고 부드럽게 표현했습니다.' } }; break;
+      case 'GET /risk-analyses/8/findings': json = { findings: options.finding ? [{ code: 'THREAT', evidences: ['상담 시간을 알려 주세요.'], revisionSuggestions: [] }] : [], finalRevision: { content: '상담 가능한 시간을 안내해 주세요.', reason: '요청을 구체적이고 부드럽게 표현했습니다.' } }; break;
       case 'GET /risk-analyses/7/detector-results':
       case 'GET /risk-analyses/8/detector-results':
         status = failDetector ? 500 : 200;
@@ -110,6 +111,33 @@ async function analyze(page: Page) {
   await expect(page).toHaveURL(/\/review$/);
 }
 
+test('태그 명칭 응답이 지연되어도 검토 화면과 상세 탐지 결과를 먼저 표시한다', async ({ page }) => {
+  await setup(page, { finding: true });
+  await page.route((url) => url.pathname === '/api/risk-tags', () => new Promise<void>(() => {}));
+  await analyze(page);
+  await page.getByRole('tab', { name: '원문', exact: true }).click();
+  const expand = page.getByRole('button', { name: '주의 표현 목록 펼치기', exact: true });
+  if (await expand.count()) await expand.click();
+  await expect(page.getByRole('region', { name: '탐지된 위험 표현 목록 (1)' }).getByText('위험·협박', { exact: true })).toBeVisible();
+  const results = page.getByRole('region', { name: '위험 분석 결과' });
+  await results.getByText('상세 탐지 결과 보기', { exact: true }).click();
+  await expect(results.getByRole('button', { name: '위험·협박 경계', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '전송하기', exact: true })).toBeEnabled();
+});
+
+for (const tagFailure of [false, true]) {
+  test(`태그 명칭 조회 ${tagFailure ? '실패 시 기본 이름으로 분석을 유지한다' : '성공 시 검토 화면에도 서버 이름을 표시한다'}`, async ({ page }) => {
+    await setup(page, { finding: true, tagFailure });
+    await analyze(page);
+    await page.getByRole('tab', { name: '원문', exact: true }).click();
+    const expand = page.getByRole('button', { name: '주의 표현 목록 펼치기', exact: true });
+    if (await expand.count()) await expand.click();
+    const expected = tagFailure ? '위험·협박' : '서버에서 관리하는 협박 명칭';
+    await expect(page.getByRole('region', { name: '탐지된 위험 표현 목록 (1)' }).getByText(expected, { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: '전송하기', exact: true })).toBeEnabled();
+  });
+}
+
 test('HTTP 새 문의에서 마스킹·분석·findings·상세 탐지를 호출하고 점수와 수정 이유를 표시한다', async ({ page }) => {
   const calls = await setup(page);
   await analyze(page);
@@ -117,14 +145,14 @@ test('HTTP 새 문의에서 마스킹·분석·findings·상세 탐지를 호출
   await expect(results).toContainText('위험 점수: 3점');
   await expect(results).toContainText('요청을 구체적이고 부드럽게 표현했습니다.');
   await results.getByText('상세 탐지 결과 보기', { exact: true }).click();
-  await results.getByRole('button', { name: '위험·협박 경계', exact: true }).click();
+  await results.getByRole('button', { name: '서버에서 관리하는 협박 명칭 경계', exact: true }).click();
   await expect(results).toContainText('규칙 분석');
   await expect(results).toContainText('신뢰도: 0%');
   await expect(results).toContainText('신뢰도: 65%');
   await expect(results.getByText('상담 시간을 알려 주세요.', { exact: true })).toBeVisible();
   await expect(results).toContainText('test-detector');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  expect(calls).toEqual(expect.arrayContaining(['POST /complaints/42/mask', 'POST /complaints/42/risk-analysis', 'GET /risk-analyses/7/findings', 'GET /risk-analyses/7/detector-results']));
+  expect(calls).toEqual(expect.arrayContaining(['GET /risk-tags', 'POST /complaints/42/mask', 'POST /complaints/42/risk-analysis', 'GET /risk-analyses/7/findings', 'GET /risk-analyses/7/detector-results']));
 });
 
 test('HTTP 모드에서 서버 ID가 없는 로컬 문의는 mock 분석으로 진행하지 않는다', async ({ page }) => {
@@ -168,7 +196,7 @@ test('상세 탐지만 실패하면 수정안을 유지하고 해당 조회를 �
   const beforeRetry = calls.filter((call) => call === 'GET /risk-analyses/7/detector-results').length;
   await page.route('**/risk-analyses/7/detector-results', (route) => route.fulfill({ json: detector }));
   await page.getByRole('button', { name: '다시 불러오기', exact: true }).click();
-  await expect(page.getByRole('button', { name: '위험·협박 경계', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '서버에서 관리하는 협박 명칭 경계', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '전송하기', exact: true })).toBeEnabled();
   expect(beforeRetry).toBeGreaterThanOrEqual(1);
 });

@@ -174,6 +174,46 @@ test('로그인 후 원래 요청한 역할 내부 페이지로 돌아간다', a
   await expect(page).toHaveURL(/\/parent\/messages$/);
 });
 
+for (const failingKey of ['teacher-hub.policy-consent.', 'teacher-hub.auth-accounts']) {
+  test(`${failingKey} 저장에 실패한 회원가입은 계정과 동의를 남기지 않는다`, async ({ page }) => {
+    await page.addInitScript((failingKey) => {
+      const setItem = Storage.prototype.setItem;
+      Storage.prototype.setItem = function (key: string, value: string) {
+        if (key.startsWith(failingKey)) throw new DOMException('full', 'QuotaExceededError');
+        setItem.call(this, key, value);
+      };
+    }, failingKey);
+    await page.goto('/signup?role=PARENT');
+    await page.locator('input[name="name"]').fill('테스트 사용자');
+    await requestVerification(page, 'rollback@example.com');
+    await page.locator('input[name="verificationCode"]').fill('123456');
+    await page.getByRole('button', { name: '인증하기', exact: true }).click();
+    await expect(page.getByRole('button', { name: '인증 완료', exact: true })).toBeVisible();
+    await page.locator('input[name="password"]').fill('newpassword123');
+    await page.locator('input[name="passwordConfirmation"]').fill('newpassword123');
+    await fillChildInformation(page);
+    await page.getByRole('checkbox', { name: /서비스 이용약관/ }).check();
+    await page.getByRole('button', { name: '회원가입', exact: true }).click();
+    await expect(page.getByText('브라우저 저장소를 사용할 수 없습니다.', { exact: false })).toBeVisible();
+    const stored = await page.evaluate(() => Object.keys(localStorage).map((key) => [key, localStorage.getItem(key)]));
+    expect(stored.some(([key]) => key?.startsWith('teacher-hub.policy-consent.'))).toBe(false);
+    expect(stored.some(([key, value]) => key === 'teacher-hub.auth-accounts' && value?.includes('rollback@example.com'))).toBe(false);
+  });
+}
+
+test('만료된 세션은 동의 내역을 조회하지 못한다', async ({ page }) => {
+  await loginAs(page, accounts[2]);
+  await page.goto('/admin/mypage');
+  const consentTab = page.getByRole('tab', { name: '약관 및 동의' });
+  await consentTab.waitFor();
+  await page.evaluate((key) => {
+    const sessions = JSON.parse(localStorage.getItem(key) ?? '[]');
+    localStorage.setItem(key, JSON.stringify(sessions.map((entry: object) => ({ ...entry, expiresAt: Date.now() - 1000 }))));
+  }, ISSUED_KEY);
+  await consentTab.click();
+  await expect(page.getByText('세션이 만료되었습니다.', { exact: false })).toBeVisible();
+});
+
 test('회원가입 필수값, 이메일 형식, 비밀번호 불일치를 표시한다', async ({ page }) => {
   await page.goto('/signup?role=TEACHER');
   await page.getByRole('button', { name: '회원가입', exact: true }).click();

@@ -219,6 +219,38 @@ test('위험 분석이 없으면 분석 실패로 표시하고 답변 차례가 
   expect(thread.analysis).toMatchObject({ status: 'failed', canReviewRisk: false });
 });
 
+test('분석 없이 전송된 민원의 빈 위험 응답(200)은 위험 없음이 아니라 분석 실패로 표시한다', () => {
+  const thread = mergeServerDetail(toListThread({ ...listItem, riskLevel: null }), bundle({
+    detail: { ...bundle().detail, riskLevel: null },
+    risk: {
+      complaintId: risk.complaintId,
+      riskAnalysisId: null,
+      riskScore: null,
+      riskLevel: null,
+      reviewScale: null,
+      reviewScore: null,
+      reviewLevel: null,
+      currentRiskScore: null,
+      currentRiskLevel: null,
+      safetyLock: false,
+      analyzedAt: null,
+      latestReview: null,
+      detectedFactors: [],
+    },
+  }));
+  expect(thread.analysis?.status).toBe('failed');
+  expect(thread.analysis?.riskClassifications).toBeUndefined();
+});
+
+test('이력 이벤트 전체에 한글 라벨이 있어 코드값이 그대로 노출되지 않는다', () => {
+  const logs = toActivityLogs([
+    { eventId: 'e:1', type: 'MESSAGE_READ', occurredAt: '2026-10-29T10:42:17' },
+    { eventId: 'e:2', type: 'RESPONSE_TEMPLATE_ADOPTED', occurredAt: '2026-10-29T10:42:17' },
+    { eventId: 'e:3', type: 'RESPONSE_BLOCKED_BY_SAFETY_LOCK', occurredAt: '2026-10-29T10:42:17' },
+  ]);
+  expect(logs.map((log) => log.action)).toEqual(['안전 잠금으로 답변 차단', '답변 템플릿 채택', '메시지 읽음']);
+});
+
 test('새 위험 응답의 상태를 유지하고, 원문 하이라이트가 가능하도록 첫 근거 구간만 교사 화면에 쓴다', () => {
   const thread = mergeServerDetail(toListThread(listItem), bundle({
     risk: {

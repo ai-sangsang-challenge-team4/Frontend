@@ -197,7 +197,8 @@ function toAnalysis(
     summary: { status: 'ready', text: latestParent?.summarized ? latestParent.content : '' },
     systemRiskLevel: systemRiskLevelFromApi[risk?.riskLevel ?? detail.riskLevel ?? 'LOW'],
   };
-  if (!risk) return { ...base, status: 'failed' };
+  // Without a completed analysis the factors are unknown; toClassifications would mark them all ABSENT.
+  if (!risk || risk.riskAnalysisId === null) return { ...base, status: 'failed' };
   return {
     ...base,
     status: 'ready',
