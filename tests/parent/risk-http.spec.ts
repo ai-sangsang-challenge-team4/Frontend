@@ -111,6 +111,25 @@ async function analyze(page: Page) {
   await expect(page).toHaveURL(/\/review$/);
 }
 
+test('새 문의의 자녀·대상·제목·내용은 같은 시작선에 표시되고 작은 버튼으로 작성한다', async ({ page }, testInfo) => {
+  await setup(page);
+  await expect(page.getByLabel('자녀', { exact: true })).toBeEnabled();
+  await expect(page.locator('.parent-write-field .ui-field-control')).toHaveCount(4);
+  for (const width of [1440, 1240, 980, 620, 375, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    const starts = await page.locator('.parent-write-field .ui-field-control').evaluateAll((controls) => controls.map((control) => {
+      const style = getComputedStyle(control);
+      return control.getBoundingClientRect().left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft);
+    }));
+    expect(Math.max(...starts) - Math.min(...starts), `${width}px input text alignment`).toBeLessThanOrEqual(1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  await page.getByRole('heading', { name: '새 문의 작성', exact: true }).click();
+  await page.locator('.parent-write-form').screenshot({ path: testInfo.outputPath('parent-form-mobile.png') });
+  await page.setViewportSize({ width: 1440, height: 1100 });
+  await page.locator('.parent-write-form').screenshot({ path: testInfo.outputPath('parent-form-desktop.png') });
+});
+
 test('태그 명칭 응답이 지연되어도 검토 화면과 상세 탐지 결과를 먼저 표시한다', async ({ page }) => {
   await setup(page, { finding: true });
   await page.route((url) => url.pathname === '/api/risk-tags', () => new Promise<void>(() => {}));

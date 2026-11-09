@@ -451,9 +451,9 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
                 />
               ) : null}
               <div className="parent-write-actions">
-                <Button className="parent-write-save" leftIcon={<Save size={22} />} onClick={handleSaveDraft} size="lg" variant="outline">임시저장</Button>
+                <Button className="parent-write-save" leftIcon={<Save size={18} />} onClick={handleSaveDraft} size="md" variant="outline">임시저장</Button>
                 <Button className="parent-write-analyze" disabled={teacherOptions.length === 0 || maskingFailed}
-                  leftIcon={<Send size={22} />} size="lg" type="submit">AI 분석 시작</Button>
+                  leftIcon={<Send size={18} />} size="md" type="submit">AI 분석 시작</Button>
               </div>
             </form>
           </>

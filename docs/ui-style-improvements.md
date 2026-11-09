@@ -48,9 +48,9 @@
 
 독립 리뷰에서 확인한 중첩 Tooltip Escape, 비활성 자식의 설명 접근, page hover specificity, 잘못 연결된 panel id를 보완했다. 부모 화면의 기존 하이라이트 → Accordion focus 연동을 위해 기존 DOM id 형식을 보존했다.
 
-## 검증 결과
+## 초판 구현 검증 결과 (`11b4113`)
 
-최종 실행 결과는 PR 본문 및 아래 표에 기록한다. HTTP 테스트는 실제 HTTP 어댑터와 가로챈 응답을 사용하며, 실서버 검증과 구분한다.
+초판 구현의 전체 실행 결과는 아래 표에 기록한다. 후속 학부모 화면 수정의 검증은 다음 절에서 구분한다. HTTP 테스트는 실제 HTTP 어댑터와 가로챈 응답을 사용하며, 실서버 검증과 구분한다.
 
 | 검증 | 결과 |
 | --- | --- |
@@ -85,6 +85,24 @@
 
 화면 depth 축소, SidePanel 도입, 위험 분석·관리자 검토 화면의 기능별 UX 재설계, 상세 nav의 전면 Tabs 전환, Toast 정책 변경, API·백엔드·risk 판정·권한·safetyLock·전송 정책 변경, bundle 분리 및 폰트 self-host는 제외했다. 실제 공통화 필요가 확인되지 않은 Card 추상화도 추가하지 않았다.
 
+## 학부모 작성 화면 피드백 반영
+
+- 공통 md shell 규칙과 페이지 textarea 규칙의 우선순위 차이로 텍스트 시작선에 **40px 차이**가 발생했다. 수정 전 회귀 테스트에서 이를 재현했다.
+- 페이지의 `--parent-field-inset`을 기존 spacing token에 연결해 Select·TextField·Textarea의 좌우 시작선을 통일했다. 기본은 `--space-6`(24px), 620px 이하에서는 `--space-4`(16px)이다.
+- 이 화면의 기본 테두리는 `--color-border-default`(#a2a2a2), hover는 `--color-border-control`(#888888)을 재사용했다. 기존 shadow를 유지하고 focus의 brand 경계·shadow와 오류의 readable danger 표시를 보존한다. 전역 토큰 값은 변경하지 않았다.
+- 임시저장·AI 분석 버튼은 공통 `size="md"`(47px/16px)를 사용한다. 67px 높이·24px 글자·208/217px 최소 폭의 페이지 override를 제거하고 아이콘을 18px로 맞췄다. 모바일도 44px 이상의 조작 영역을 유지한다.
+- 자녀 선택을 포함한 HTTP 4개 field와 mock 작성 화면을 320~1440px에서 점검했다. 자동 측정으로 텍스트 시작선 차이가 1px 이내인지, 버튼이 기본 높이를 유지하는지, 가로 넘침이 없는지 확인한다.
+
+| 후속 검증 | 결과 |
+| --- | --- |
+| `npm run build` / `npm run lint` / `git diff --check` | 통과 |
+| 학부모 작성·문의 내역·검토·공통 UI Playwright | 80건 통과 (desktop/mobile) |
+| 학부모 HTTP Playwright | 26건 통과 (자녀 포함 4개 field 정렬·시각 확인 포함) |
+
+이번 후속 수정은 학부모 작성 CSS·버튼 표현에 한정해 관련 테스트를 재실행했다. 초판 전체 테스트 460건과 다른 HTTP 구성 20건은 이번 수정 후 다시 실행하지 않았다.
+
+시각 결과: `/tmp/issue72-followup-before.png`, `/tmp/issue72-followup-after.png`, `/tmp/issue72-followup-mobile.png`. HTTP 4개 field의 desktop/mobile screenshot은 `/tmp/issue72-followup-http-results`에 보관했다.
+
 ## 수정 파일 목록
 
 - `README.md`
@@ -104,6 +122,7 @@
 - `src/features/message/messages/MessagesPage.shared.css`
 - `src/features/message/messages/MessagesPage.templates.css`
 - `src/features/parent-message/ParentMessageComposer.css`
+- `src/features/parent-message/ParentMessageComposer.tsx`
 - `src/features/parent-message/ParentMessageHistory.css`
 - `src/features/parent-message/ParentMessageReview.css`
 - `src/index.css`
@@ -124,7 +143,9 @@
 - `src/shared/styles/teacher-prototype.css`
 - `tests/auth/common-ui.spec.ts`
 - `tests/auth/parent-message-history.spec.ts`
+- `tests/auth/parent-message-write.spec.ts`
 - `tests/auth/ui-layout.spec.ts`
 - `tests/fixtures/common-ui.html`
 - `tests/fixtures/common-ui.tsx`
+- `tests/parent/risk-http.spec.ts`
 - `tsconfig.playwright.json`

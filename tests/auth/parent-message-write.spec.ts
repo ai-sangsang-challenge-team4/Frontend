@@ -182,3 +182,21 @@ test('다른 계정의 임시저장 내용과 손상된 데이터를 불러오�
   await expect(page.getByLabel('문의 제목', { exact: true })).toHaveValue('');
   await expect(page.getByLabel('문의 내용', { exact: true })).toHaveValue('');
 });
+
+test('학부모 작성 field의 텍스트 시작선은 같은 열에 맞춰지고 주요 버튼은 기본 크기를 유지한다', async ({ page }) => {
+  await openComposer(page);
+  for (const width of [1440, 1240, 980, 820, 620, 375, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    const starts = await page.locator('.parent-write-field .ui-field-control').evaluateAll((controls) => controls.map((control) => {
+      const style = getComputedStyle(control);
+      return control.getBoundingClientRect().left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft);
+    }));
+    expect(Math.max(...starts) - Math.min(...starts), `${width}px input text alignment`).toBeLessThanOrEqual(1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    for (const action of await page.locator('.parent-write-actions .ui-button').all()) {
+      // The shell animates its padding across breakpoints; measure after it settles.
+      await expect.poll(async () => (await action.boundingBox())!.height).toBeLessThanOrEqual(48);
+      expect((await action.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    }
+  }
+});
