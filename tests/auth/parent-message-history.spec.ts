@@ -482,5 +482,5 @@ test('문의 내역, 상세, 추가 문의, 새 문의의 헤더 위치가 같�
     await expect.poll(headerPosition).toEqual({ x: 200, y: expected.y });
   }
   await page.goto('/parent/messages/new');
-  await expect(page.locator('.parent-write-notice-heading svg')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^문의 작성 시 유의사항/ })).toHaveAttribute('aria-expanded', 'false');
 });

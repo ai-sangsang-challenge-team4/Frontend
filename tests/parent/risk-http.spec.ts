@@ -111,17 +111,24 @@ async function analyze(page: Page) {
   await expect(page).toHaveURL(/\/review$/);
 }
 
-test('분석 전에는 공통 제한을 예고하고 분석 후에는 잠긴 입력을 한 번 설명한다', async ({ page }, testInfo) => {
+test('분석 버튼 곁의 안내는 분석 전후에 유지되고 입력 잠금 조건을 보존한다', async ({ page }, testInfo) => {
   await setup(page);
-  await expect(page.locator('.parent-write-notice')).toContainText('AI 분석을 시작하면 자녀·문의 대상·제목을 변경할 수 없습니다.');
-  await expect(page.locator('.parent-write-lock-notice')).toHaveCount(0);
+  const notice = page.locator('.parent-write-analysis-note');
+  const noticeText = 'AI 분석을 시작하면 자녀·문의 대상·제목은 변경할 수 없습니다. 문의 내용은 계속 수정할 수 있습니다.';
+  const analyzeButton = page.getByRole('button', { name: 'AI 분석 시작', exact: true });
+  await expect(notice).toHaveText(noticeText);
+  await expect(analyzeButton).toHaveAccessibleDescription(noticeText);
+  await expect(page.locator('.parent-write-notice')).not.toContainText('AI 분석');
+  await expect(page.getByLabel('자녀', { exact: true })).toBeEnabled();
+  await expect(page.getByLabel('문의 대상', { exact: true })).toBeEnabled();
+  await expect(page.getByLabel('문의 제목', { exact: true })).toBeEditable();
   await analyze(page);
   await page.getByRole('button', { name: '문의 작성으로 돌아가기', exact: true }).click();
-  const notice = page.locator('.parent-write-lock-notice');
-  await expect(notice).toHaveText('AI 분석을 시작해 자녀·문의 대상·제목은 변경할 수 없습니다. 문의 내용은 계속 수정할 수 있습니다.');
+  await expect(notice).toHaveText(noticeText);
+  await expect(analyzeButton).toHaveAccessibleDescription(noticeText);
   await expect(page.locator('.parent-write-field .ui-field-message')).toHaveCount(0);
   for (const name of ['자녀', '문의 대상', '문의 제목']) {
-    await expect(page.getByLabel(name, { exact: true })).toHaveAttribute('aria-describedby', 'parent-message-lock-description');
+    await expect(page.getByLabel(name, { exact: true })).toHaveAttribute('aria-describedby', 'parent-message-analysis-description');
   }
   await expect(page.getByLabel('자녀', { exact: true })).toBeDisabled();
   await expect(page.getByLabel('문의 대상', { exact: true })).toBeDisabled();
@@ -130,6 +137,11 @@ test('분석 전에는 공통 제한을 예고하고 분석 후에는 잠긴 입
   for (const width of [320, 375, 1440]) {
     await page.setViewportSize({ width, height: 1100 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    // Wait for the shell's padding transition and measure both elements in one frame.
+    await expect.poll(() => notice.evaluate((element) => {
+      const button = document.querySelector('.parent-write-analyze')!;
+      return button.getBoundingClientRect().top - element.getBoundingClientRect().bottom;
+    })).toBeLessThanOrEqual(16);
   }
   await page.locator('.parent-write-form').screenshot({ path: testInfo.outputPath('parent-locked-fields-desktop.png') });
   await page.setViewportSize({ width: 375, height: 812 });
@@ -139,7 +151,7 @@ test('분석 전에는 공통 제한을 예고하고 분석 후에는 잠긴 입
 
 test('추가 문의는 분석 여부 대신 기존 대상·제목을 유지하는 이유를 설명한다', async ({ page }) => {
   await setup(page, { followUp: true });
-  await expect(page.locator('.parent-write-lock-notice')).toHaveText('추가 문의는 기존 문의의 대상과 제목을 그대로 사용합니다. 이어서 전달할 내용을 작성해 주세요.');
+  await expect(page.locator('.parent-write-analysis-note')).toHaveText('추가 문의는 기존 문의의 대상과 제목을 그대로 사용합니다. 이어서 전달할 내용을 작성해 주세요.');
   await expect(page.locator('.parent-write-notice')).not.toContainText('AI 분석을 시작하면');
   await expect(page.getByLabel('문의 대상', { exact: true })).toHaveAttribute('readonly', '');
   await expect(page.getByLabel('문의 제목', { exact: true })).toHaveAttribute('readonly', '');

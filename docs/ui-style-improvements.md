@@ -170,6 +170,38 @@
 - 동의 전후 화면: `/tmp/issue72-consent-before.png`, `/tmp/issue72-consent-after-desktop.png`, `/tmp/issue72-consent-after-mobile-full.png`. HTTP 화면은 `/tmp/issue72-consent-http-results`, `/tmp/issue72-consent-parent-results`에 보관한다. 최종 모바일 전체 화면은 `/tmp/issue72-consent-final-shots`, `/tmp/issue72-parent-final-shots`에 보관한다.
 - HTTP 검증은 응답 interception 기반이다. 실서버·실기기·화면낭독기 검증은 실행하지 않았다.
 
+## 새 문의 작성의 점진적 안내 개선
+
+앞 절의 상단 공통 안내·잠금 박스 배치를 아래 구성으로 개선했다. 기존 안내의 의미와 입력·분석·마스킹·전송 조건은 유지한다.
+
+| 영역 | 변경 전 | 최종 적용 |
+| --- | --- | --- |
+| 유의사항 | 모든 내용을 담은 큰 회색 카드 | 기존 공통 Accordion 재사용, 기본 접힘. `문의 작성 시 유의사항`과 `문의는 전송 후 수정하거나 삭제할 수 없습니다.`는 항상 표시 |
+| 세부 안내 | 배려·폭언/욕설·금융사기 안내를 항상 표시 | 펼친 영역의 3개 항목으로 유지. 마우스·Enter·Space로 조작, 공통 focus·hover·expanded 아이콘 재사용 |
+| AI 변경 제한 | 상단 유의사항과 입력 위 잠금 박스 | 분석 버튼 위 12px 간격의 14px inline 안내. 배경·padding·외곽선을 제거하고 Info/Lock 아이콘과 기존 readable muted 사용 |
+| 간격 | 안내-폼 48px, field gap 32px 및 추가 문의의 별도 큰 간격 | 안내-폼·field gap 24px, footer 내부 12px, Accordion padding 16px. 기존 spacing token 재사용 |
+| 최종 확인 | 제목·마스킹된 최종 내용·수정/삭제 불가 안내·취소/확인 후 전송이 있는 공통 Modal | 기존 구현을 그대로 재사용. 취소 후 내용 유지·전송 미실행을 테스트로 확인 |
+
+- HTTP 새 문의에는 분석 전후 모두 `AI 분석을 시작하면 자녀·문의 대상·제목은 변경할 수 없습니다. 문의 내용은 계속 수정할 수 있습니다.`를 표시한다. 실제 잠금은 기존처럼 서버 초안 생성 중/생성 후 적용되며, 분석 실패로 작성 화면에 돌아와도 유지한다.
+- 실제 제한이 없는 mock 새 문의에는 위 문구를 표시하지 않는다. 추가 문의는 기존 대상·제목을 유지한다는 별도 안내를 같은 footer에 표시한다. 입력·분석 버튼의 설명 id는 실제 inline 안내에 연결했다.
+- 임시저장, 입력값·분석 결과, 활성/비활성 조건, API 및 개인정보 마스킹 함수는 변경하지 않았다. 공통 Accordion/Modal의 Props와 구현에도 변경이 없다. 새 디자인 토큰은 추가하지 않았다.
+- 1440px 실제 Chromium에서 기본 접힘 높이 83px을 확인했다. 375px 접힘·펼침과 키보드 focus, Enter·Space 조작을 시각 확인했다. 320~1440px 가로 넘침과 분석 버튼 가까이의 안내 배치는 회귀에서도 확인한다.
+- 모달 확인에서는 제목과 실제 선택·마스킹 문장을 검증하고, 취소 시 editor 값 유지·전송 내역 미생성, 다시 확인 후 전송 시 중복 전송 방지를 확인한다.
+- 변경 전후 화면: `/tmp/issue72-disclosure-before.png`, `/tmp/issue72-disclosure-after.png`, `/tmp/issue72-disclosure-expanded.png`, `/tmp/issue72-disclosure-mobile.png`, `/tmp/issue72-disclosure-mobile-expanded.png`. HTTP 분석 전후 화면은 `/tmp/issue72-disclosure-http-results`에 보관한다.
+
+### 최종 검증
+
+| 검증 | 결과 |
+| --- | --- |
+| build·lint·diff 검사 | 통과. 기존 500kB chunk 안내 유지 |
+| 인증·UI 전체 Playwright | mock 모드를 명시한 격리 서버에서 **478건 통과** (desktop/mobile) |
+| HTTP 통합·학부모·관리자 | 8 + 30 + 12 = **50건 통과** |
+| 합계 | 최종 코드 기준 **528건 통과** |
+
+최초 전체 실행에서는 기존 교사 검토 2건이 상태 대기에서 실패했다(476건 통과). 코드 변경 없이 단독 재실행 2건과 최종 격리 전체 478건이 모두 통과했다. 간헐 실패의 정확한 원인은 확정하지 않았으며 교사 검토·안전 정책 코드는 변경하지 않았다. 중간 격리 실행은 `.env.local`의 HTTP 설정을 읽은 것이 확인되어 중단하고 검증에 집계하지 않았다. 최종 실행은 브라우저 제공 환경의 AUTH/MESSAGE/ESCALATION 모드가 모두 mock임을 확인한 뒤 수행했다.
+
+키보드 테스트는 실제 Tab 이동으로 focus-visible을 확인한다. 화면 폭 전환 시 간격은 기존 shell padding transition이 끝날 때까지 기다린 뒤 같은 frame에서 측정한다. 최종 전체 로그는 `/tmp/issue72-disclosure-auth-verified.log`, HTTP 로그는 `/tmp/issue72-disclosure-{integration,http,admin}.log`에 보관한다. 실서버·실기기·화면낭독기 검증은 실행하지 않았다.
+
 ## 수정 파일 목록
 
 - `README.md`
@@ -214,6 +246,7 @@
 - `tests/auth/auth-flow.spec.ts`
 - `tests/auth/common-ui.spec.ts`
 - `tests/auth/parent-message-history.spec.ts`
+- `tests/auth/parent-message-review.spec.ts`
 - `tests/auth/parent-message-write.spec.ts`
 - `tests/auth/ui-layout.spec.ts`
 - `tests/auth/ui-review-regressions.spec.ts`

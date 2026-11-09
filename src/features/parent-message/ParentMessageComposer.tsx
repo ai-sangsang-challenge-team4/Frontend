@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { ChevronDown, LockKeyhole, Save, Send } from 'lucide-react';
+import { ChevronDown, Info, LockKeyhole, Save, Send } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import analysisIllustration from '../../shared/assets/parent/message-analysis.svg';
 import { getApiErrorMessage, isApiError } from '../../shared/api';
-import { Button, EmptyState, Select, TextareaField, TextField, Toast } from '../../shared/components/ui';
+import { Accordion, Button, EmptyState, Select, TextareaField, TextField, Toast } from '../../shared/components/ui';
 import { COMPLAINT_TITLE_MAX_LENGTH, parentComplaintApi, parentMessageApiMode } from './api/parentComplaintApi';
 import {
   findSentMessage, mockConnectedTeachers, readMessageDraft, readMessageDrafts, saveMessageDraft,
@@ -375,10 +375,10 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
         : <Button onClick={() => navigate('/parent/messages')}>문의 내역</Button>} /></main>
   </>;
 
-  const lockedFieldsNotice = threadId
+  const analysisNotice = threadId
     ? '추가 문의는 기존 문의의 대상과 제목을 그대로 사용합니다. 이어서 전달할 내용을 작성해 주세요.'
-    : serverLocked ? 'AI 분석을 시작해 자녀·문의 대상·제목은 변경할 수 없습니다. 문의 내용은 계속 수정할 수 있습니다.' : undefined;
-  const lockedFieldsDescriptionId = lockedFieldsNotice ? 'parent-message-lock-description' : undefined;
+    : isServer ? 'AI 분석을 시작하면 자녀·문의 대상·제목은 변경할 수 없습니다. 문의 내용은 계속 수정할 수 있습니다.' : undefined;
+  const analysisDescriptionId = analysisNotice ? 'parent-message-analysis-description' : undefined;
   const childHelper = serverLocked ? undefined
     : children.isLoading ? '자녀 정보를 불러오고 있어요.'
       : children.error ? <>{getApiErrorMessage(children.error, '자녀 정보를 불러오지 못했어요.')} <button className="parent-write-retry" onClick={children.retry} type="button">다시 시도</button></>
@@ -412,42 +412,39 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
           </section>
         ) : (
           <>
-            <section className="parent-write-notice" aria-labelledby="parent-write-notice-title">
-              <div className="parent-write-notice-heading">
-                <h2 id="parent-write-notice-title">문의 전 확인해 주세요</h2>
-              </div>
-              <ul>
-                {isServer && !serverLocked ? <li>AI 분석을 시작하면 자녀·문의 대상·제목을 변경할 수 없습니다. 분석 전에 입력한 정보를 확인해 주세요.</li> : null}
-                <li>작성한 문의는 전송 후 수정하거나 삭제할 수 없습니다. 전송하기 전에 제목과 내용을 다시 한번 확인해 주세요.</li>
-                <li>서로를 배려하는 표현으로 문의를 작성해 주세요.<br />폭언, 욕설 등 부적절한 표현은 관련 법령에 따라 문제가 될 수 있습니다.</li>
+            <Accordion className="parent-write-notice" items={[{
+              id: 'parent-write-guidelines',
+              title: <span className="parent-write-notice-copy">
+                <span className="parent-write-notice-title">문의 작성 시 유의사항</span>
+                <span className="parent-write-notice-summary">문의는 전송 후 수정하거나 삭제할 수 없습니다.</span>
+              </span>,
+              content: <ul>
+                <li>서로를 배려하는 표현으로 문의를 작성해 주세요.</li>
+                <li>폭언, 욕설 등 부적절한 표현은 관련 법령에 따라 문제가 될 수 있습니다.</li>
                 <li>개인정보나 계좌번호·카드번호·비밀번호 등 금융정보를 요구받으면 금융사기일 수 있으니 주의해 주세요.</li>
-              </ul>
-            </section>
+              </ul>,
+            }]} />
 
             <form className="parent-write-form" noValidate onSubmit={handleAnalyze}>
-              {lockedFieldsNotice ? <p className="parent-write-lock-notice" id={lockedFieldsDescriptionId} role="status">
-                <LockKeyhole aria-hidden="true" size={18} />
-                <span>{lockedFieldsNotice}</span>
-              </p> : null}
               {canReloadServerDraft ? <div role="alert">
                 <p>다른 곳에서 저장한 초안과 내용이 다릅니다. 서버 초안을 불러오면 현재 입력한 내용이 서버의 내용으로 바뀝니다.</p>
                 <Button onClick={() => { void reloadServerFollowUp(); }} variant="outline">서버 초안 불러오기</Button>
               </div> : null}
               {isServer && !isServerFollowUp ? <Select containerClassName="parent-write-field" disabled={serverLocked || childOptions.length === 0}
-                aria-describedby={lockedFieldsDescriptionId}
+                aria-describedby={analysisDescriptionId}
                 error={errors.studentId} helperText={childHelper} id="parent-message-studentId" label="자녀" name="studentId"
                 onChange={(event) => selectChild(event.target.value)} options={childOptions}
                 placeholder="자녀를 선택해 주세요." required value={studentId ? String(studentId) : ''} /> : null}
               {threadId ? <TextField containerClassName="parent-write-field" error={errors.teacherId} id="parent-message-teacherId"
-                aria-describedby={lockedFieldsDescriptionId}
+                aria-describedby={analysisDescriptionId}
                 label="문의 대상" readOnly value={initial.thread?.teacherName ?? ''} title="기존 문의의 선생님께 이어서 전달됩니다." trailingIcon={<ChevronDown size={20} />} /> : <Select containerClassName="parent-write-field" error={errors.teacherId}
                 disabled={serverLocked || (isServer && teacherOptions.length === 0)} helperText={teacherHelper}
-                aria-describedby={lockedFieldsDescriptionId}
+                aria-describedby={analysisDescriptionId}
                 id="parent-message-teacherId" label="문의 대상" name="teacherId"
                 onChange={(event) => updateField('teacherId', event.target.value)}
                 options={teacherOptions} placeholder="선생님을 선택해 주세요." required value={draft.teacherId} />}
               <TextField containerClassName="parent-write-field" error={errors.title}
-                aria-describedby={lockedFieldsDescriptionId}
+                aria-describedby={analysisDescriptionId}
                 id="parent-message-title" label="문의 제목" maxLength={COMPLAINT_TITLE_MAX_LENGTH} name="title"
                 onChange={(event) => updateField('title', event.target.value)}
                 placeholder="문의 제목을 입력해 주세요." readOnly={Boolean(threadId) || serverLocked} required value={draft.title} />
@@ -462,10 +459,16 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
                     : { status: 'ready', ...maskContactInfo(`제목: ${draft.title}\n\n내용: ${draft.body}`) }}
                 />
               ) : null}
-              <div className="parent-write-actions">
-                <Button className="parent-write-save" leftIcon={<Save size={18} />} onClick={handleSaveDraft} size="md" variant="outline">임시저장</Button>
-                <Button className="parent-write-analyze" disabled={teacherOptions.length === 0 || maskingFailed}
-                  leftIcon={<Send size={18} />} size="md" type="submit">AI 분석 시작</Button>
+              <div className="parent-write-footer">
+                {analysisNotice ? <p className="parent-write-analysis-note" id={analysisDescriptionId}>
+                  {serverLocked || threadId ? <LockKeyhole aria-hidden="true" size={18} /> : <Info aria-hidden="true" size={18} />}
+                  <span>{analysisNotice}</span>
+                </p> : null}
+                <div className="parent-write-actions">
+                  <Button className="parent-write-save" leftIcon={<Save size={18} />} onClick={handleSaveDraft} size="md" variant="outline">임시저장</Button>
+                  <Button aria-describedby={analysisDescriptionId} className="parent-write-analyze" disabled={teacherOptions.length === 0 || maskingFailed}
+                    leftIcon={<Send size={18} />} size="md" type="submit">AI 분석 시작</Button>
+                </div>
               </div>
             </form>
           </>
