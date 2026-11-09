@@ -69,8 +69,19 @@
   border-radius: var(--radius-sm) var(--radius-sm) 0 0;
 }
 
-.parent-write-notice .ui-accordion-trigger:not(:disabled):hover {
-  background: var(--color-primary-subtle);
+.parent-write-notice .ui-accordion-trigger:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.parent-write-notice .ui-accordion-trigger:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -2px;
+}
+
+@media (hover: hover) {
+  .parent-write-notice .ui-accordion-trigger:not(:disabled):hover {
+    background: color-mix(in srgb, var(--color-bg-canvas) 65%, var(--color-border-divider));
+  }
 }
 
 .parent-write-notice-copy {
@@ -129,10 +140,9 @@
 
 .parent-write-analysis-note {
   display: flex;
-  align-items: flex-start;
-  justify-content: flex-end;
-  justify-self: stretch;
-  gap: var(--space-2);
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-1);
   color: var(--color-text-muted-readable);
   font-size: var(--font-size-helper);
   line-height: var(--line-height-body);
@@ -142,15 +152,37 @@
 
 .parent-write-analysis-note > svg {
   flex: 0 0 auto;
-  margin-top: 2px;
 }
 
-.parent-write-footer {
-  display: grid;
-  gap: var(--space-3);
+.parent-write-analysis-info {
+  flex: 0 0 auto;
+}
+
+.parent-write-analysis-info .ui-popover-content {
+  font-size: var(--font-size-helper);
+}
+
+.parent-write-analysis-action {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.parent-write-analysis-action > .ui-button {
+  flex: 0 0 auto;
+}
+
+.parent-write-form > .privacy-masking-notice {
+  margin-top: 0;
 }
 
 .parent-write-footer .parent-write-actions {
+  align-items: flex-end;
+  gap: var(--space-6);
   margin-top: 0;
 }
 
@@ -388,7 +420,13 @@
   }
   .parent-write-breadcrumb svg { width: 14px; height: 14px; }
   .parent-write-form { --parent-field-inset: var(--space-4); margin-top: var(--space-6); }
-  .parent-write-analysis-note { justify-content: flex-start; }
+  .parent-write-footer .parent-write-actions {
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  .parent-write-analysis-action { display: grid; gap: var(--space-2); }
+  .parent-write-footer .ui-button { width: 100%; flex: 0 0 auto; }
   .parent-write-actions { gap: 12px; }
   .parent-write-actions .ui-button { flex: 1; padding-inline: var(--space-3); }
   .parent-analysis-illustration { width: 210px; height: 210px; }

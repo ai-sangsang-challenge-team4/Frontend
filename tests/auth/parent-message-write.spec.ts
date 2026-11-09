@@ -52,13 +52,28 @@ test('유의사항은 기본 접힘이며 핵심 안내를 유지하고 키보�
   await expect(details).toContainText('금융사기일 수 있으니 주의해 주세요.');
   await page.keyboard.press('Space');
   await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  await title.click();
   await trigger.click();
   await expect(details).toBeVisible();
+  await expect(trigger).toHaveCSS('outline-style', 'none');
+  await trigger.hover();
+  await expect(trigger).not.toHaveCSS('background-color', 'rgb(235, 239, 251)');
+  await details.hover();
+  await expect(details).toHaveCSS('background-color', 'rgb(248, 248, 248)');
+  // Expanded is conveyed by content and the chevron, without a persistent blue fill.
+  await expect(trigger).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(title).toHaveValue(titleValue);
   await expect(body).toHaveValue(bodyValue);
   await trigger.click();
   for (const width of [320, 375, 620, 980, 1440]) {
     await page.setViewportSize({ width, height: 1100 });
+    for (const expanded of [false, true]) {
+      await expect(trigger).toHaveAttribute('aria-expanded', String(expanded));
+      await expect.poll(() => notice.evaluate((element) => (
+        document.querySelector('.parent-write-form')!.getBoundingClientRect().top - element.getBoundingClientRect().bottom
+      ))).toBe(width <= 620 ? 24 : 32);
+      await trigger.click();
+    }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
   await page.screenshot({ path: testInfo.outputPath('parent-disclosure-desktop.png'), fullPage: true });

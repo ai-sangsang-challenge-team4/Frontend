@@ -113,11 +113,25 @@ async function analyze(page: Page) {
 
 test('분석 버튼 곁의 안내는 분석 전후에 유지되고 입력 잠금 조건을 보존한다', async ({ page }, testInfo) => {
   await setup(page);
-  const notice = page.locator('.parent-write-analysis-note');
-  const noticeText = 'AI 분석을 시작하면 자녀·문의 대상·제목은 변경할 수 없습니다. 문의 내용은 계속 수정할 수 있습니다.';
+  const notice = page.locator('#parent-message-analysis-description');
+  const noticeText = '분석 시작 후 자녀·문의 대상·제목은 변경할 수 없습니다.';
+  const detailText = 'AI 분석을 시작하면 자녀·문의 대상·제목은 변경할 수 없으며, 문의 내용은 계속 수정할 수 있습니다.';
+  const info = page.getByRole('button', { name: 'AI 분석 변경 제한 안내', exact: true });
+  const detail = page.getByRole('dialog', { name: 'AI 분석 변경 제한 안내', exact: true });
   const analyzeButton = page.getByRole('button', { name: 'AI 분석 시작', exact: true });
   await expect(notice).toHaveText(noticeText);
   await expect(analyzeButton).toHaveAccessibleDescription(noticeText);
+  await info.focus();
+  await page.keyboard.press('Enter');
+  await expect(detail).toHaveText(detailText);
+  await expect(detail).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(detail).toHaveCount(0);
+  await expect(info).toBeFocused();
+  await page.keyboard.press('Space');
+  await expect(detail).toBeVisible();
+  await page.getByRole('heading', { name: '새 문의 작성', exact: true }).click();
+  await expect(detail).toHaveCount(0);
   await expect(page.locator('.parent-write-notice')).not.toContainText('AI 분석');
   await expect(page.getByLabel('자녀', { exact: true })).toBeEnabled();
   await expect(page.getByLabel('문의 대상', { exact: true })).toBeEnabled();
@@ -137,15 +151,38 @@ test('분석 버튼 곁의 안내는 분석 전후에 유지되고 입력 잠금
   for (const width of [320, 375, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: 1100 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    // Wait for the shell's padding transition and measure both elements in one frame.
-    await expect.poll(() => notice.evaluate((element) => {
-      const button = document.querySelector('.parent-write-analyze')!;
-      return button.getBoundingClientRect().top - element.getBoundingClientRect().bottom;
-    })).toBeLessThanOrEqual(16);
+    await expect.poll(() => page.locator('.parent-write-footer').evaluate((element) => (
+      element.getBoundingClientRect().top - document.querySelector('.privacy-masking-notice')!.getBoundingClientRect().bottom
+    ))).toBe(24);
+    const layout = await notice.evaluate((element) => ({
+      note: element.getBoundingClientRect().toJSON(),
+      button: document.querySelector('.parent-write-analyze')!.getBoundingClientRect().toJSON(),
+      save: document.querySelector('.parent-write-save')!.getBoundingClientRect().toJSON(),
+    }));
+    if (width <= 620) {
+      expect(layout.note.bottom).toBeLessThanOrEqual(layout.button.top);
+      expect(layout.button.top - layout.note.bottom).toBeLessThanOrEqual(32);
+      expect(layout.save.bottom).toBeLessThanOrEqual(layout.note.top);
+    } else {
+      expect(layout.save.right).toBeLessThanOrEqual(layout.button.left);
+      expect(layout.save.bottom).toBeCloseTo(layout.button.bottom, 0);
+    }
+    await info.click();
+    await expect(detail).toHaveText(detailText);
+    const detailBox = await detail.boundingBox();
+    expect(detailBox!.x).toBeGreaterThanOrEqual(0);
+    expect(detailBox!.x + detailBox!.width).toBeLessThanOrEqual(width);
+    if (width === 375 || width === 1440) {
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.screenshot({ path: testInfo.outputPath(`parent-analysis-info-${width}.png`), fullPage: true, animations: 'disabled' });
+    }
+    await page.keyboard.press('Escape');
+    await page.getByRole('heading', { name: '새 문의 작성', exact: true }).click();
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({ path: testInfo.outputPath(`parent-layout-${width}.png`), fullPage: true, animations: 'disabled' });
     if (width === 1440) {
-      expect(await notice.locator('span').evaluate((element) => {
+      expect(layout.note.right).toBeLessThanOrEqual(layout.button.left);
+      expect(await notice.evaluate((element) => {
         const range = document.createRange();
         range.selectNodeContents(element);
         return range.getClientRects().length;

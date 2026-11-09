@@ -221,6 +221,35 @@
 - 비교 화면: `/tmp/issue72-spacing-before-1440.png`, `/tmp/issue72-spacing-after-1440.png`, `/tmp/issue72-spacing-after-expanded-1440.png`, `/tmp/issue72-spacing-after-375.png`.
 - 네 폭의 최종 HTTP 화면: `/tmp/issue72-spacing-after-{375,768,1024,1440}-http.png`. 로그는 `/tmp/issue72-spacing-{build,lint,auth,after}.log`, 회귀 artifact는 `/tmp/issue72-spacing-auth-results`, `/tmp/issue72-spacing-after-results`에 보관한다. HTTP는 응답 interception 기반이며 실서버·실기기 검증은 실행하지 않았다.
 
+## 아코디언 상태·AI 분석 작업 그룹 후속 개선
+
+이번 변경은 작성 화면 TSX·CSS, 기존 회귀 테스트 2개, 이 결과 문서의 총 5개 파일에 한정했다. 공통 Accordion·Popover 구현과 기능/API 코드는 변경하지 않았다.
+
+| 영역 | 변경 전 | 개선 결과 |
+| --- | --- | --- |
+| 아코디언 Hover | 포인터가 헤더에 머무르면 파란 배경이 남아 Expanded와 혼동 | canvas와 divider 토큰을 혼합한 연한 중립색을 Hover 가능한 기기의 Trigger에만 적용 |
+| Focus·Expanded | 전역 focus-visible 외곽선과 Hover가 겹침 | 마우스 Focus에는 외곽선을 추가하지 않고, 키보드 focus-visible에는 기존 2px 브랜드색 표시를 헤더 안쪽에 유지. Expanded는 화살표 회전과 콘텐츠 노출로 표현 |
+| 카드 연결 | 파란 Trigger와 회색 Panel이 분리되어 보임 | 기존 canvas·1px divider·8px radius 유지, Panel에는 Hover 없음. 접힘·펼침 모두 폼과 desktop 32px·mobile 24px 간격 |
+| AI 안내 | 두 문장의 설명이 버튼 위 별도 행에 표시 | `분석 시작 후 자녀·문의 대상·제목은 변경할 수 없습니다.`를 항상 표시하고 정보 아이콘·분석 버튼과 같은 작업 그룹으로 배치 |
+| 상세 설명 | 항상 노출 | 기존 Popover로 `AI 분석을 시작하면 자녀·문의 대상·제목은 변경할 수 없으며, 문의 내용은 계속 수정할 수 있습니다.` 제공. 클릭·Enter·Space로 열고 Escape·바깥 클릭으로 닫음 |
+| 하단 간격 | Grid gap과 개인정보 카드의 top margin이 중복 | 작성 폼 안에서만 카드 margin을 제거. 폼-카드·카드-작업 영역은 각각 24px. 개인정보 카드의 내용·의미·형태 유지 |
+| 반응형 | 안내와 버튼이 별개 행 | desktop은 저장 왼쪽·분석 작업 그룹 오른쪽, 충분한 폭에서는 설명도 한 줄. 620px 이하에서는 저장·안내·분석 버튼을 세로 배치하고 버튼 전체 폭·47px 높이·정보 버튼 44px 터치 영역 유지 |
+| 모바일 헤더 | 직전 수정의 제목/crumb 세로 배치 | 기존 12px 간격과 정렬을 재검증하고 유지. desktop 헤더 변경 없음 |
+
+[IBM Carbon Accordion 가이드](https://www.carbondesignsystem.com/building-blocks/core/components/accordion/guidelines)의 헤더 클릭 영역, Hover/Focus와 펼침 상태의 구분, 화살표·콘텐츠로 상태를 표현하는 패턴을 참고했다. 서비스의 색상과 토큰은 `DESIGN.md`를 우선했다. 신규 토큰은 없으며, helper 14px·readable muted·space 4/8/12/24/32px·canvas·divider·focus·radius 토큰을 재사용한다.
+
+제한 안내는 기존 HTTP 새 문의에만 표시한다. 실제 잠금은 기존대로 서버 초안 생성 중/생성 후 적용되며 분석 실패 후에도 유지된다. 추가 문의는 기존 대상·제목을 유지하는 별도 안내를 보존하고, 제한이 없는 mock 새 문의에는 잘못된 잠금 안내를 표시하지 않는다. 입력과 분석 버튼의 `aria-describedby`는 항상 노출된 핵심 문구에 연결한다. 임시저장·입력값·분석 결과·마스킹·전송·확인 모달·권한·위험도·안전 정책은 변경하지 않았다.
+
+### 이번 검증과 비교 자료
+
+- build·lint·diff 검사 통과. 기존 500kB chunk 안내는 유지된다.
+- 회귀 검사를 먼저 변경해 기존 구현에서 짧은 핵심 안내/정보 버튼 검사가 실패함을 확인한 뒤 수정했다. Accordion 마우스/키보드·접힘/펼침 간격과 Popover 열기/닫기·Focus 복귀·분석 전후 잠금·다섯 폭의 배치/넘침 검사를 통과했다.
+- 375·768·1024·1440px의 HTTP 화면을 시각 확인하고 320px도 자동 점검한다. 1440px 설명 한 줄은 텍스트 Range로 확인한다. Popover는 375/1440px에서 시각 확인하고 모든 폭에서 화면 안에 표시되는지 검사한다.
+- 변경 전 자료: `/tmp/issue72-action-before-hover.png`, `/tmp/issue72-action-before-{375,1440}.png`. 변경 후: `/tmp/issue72-action-accordion-{hover,expanded,keyboard}.png`, `/tmp/issue72-action-after-{375,768,1024,1440}.png`, `/tmp/issue72-action-info-{375,1440}.png`. 원본은 `/tmp/issue72-action-final-visual-results`에 보관한다.
+- 최종 인증/UI 전체 **478건 통과** + HTTP 학부모 30건·API 통합 8건·관리자 12건의 **50건 통과** = 현재 코드 기준 **528건 통과**. 최초 인증/UI 전체 실행은 **477건 통과·1건 실패**였다. 기존 `admin-escalation.spec.ts`의 공유하지 않은 긴급 메시지 승인 대기 표시 검사가 실패했고, 코드 변경 없이 desktop/mobile 단독 재실행 **2건 통과** 및 다른 HTTP 실행 종료 후 전체 **478건 통과**를 확인했다. 간헐 실패의 정확한 원인은 확정하지 않았고 해당 기능·정책 코드는 수정하지 않았다.
+- 로그: `/tmp/issue72-action-{build,lint,final-lint,auth,auth-final,http,integration,admin-http,admin-recheck}.log`. 최종 시각 검사 2건과 테스트 TypeScript 검사도 통과했다.
+- HTTP 검증은 응답 interception 기반이다. 실서버·실기기·화면낭독기·200% 실제 확대·자동 픽셀 diff는 미실행이다. 변경 전후 스크린샷은 직접 비교했다.
+
 ## 수정 파일 목록
 
 - `README.md`
