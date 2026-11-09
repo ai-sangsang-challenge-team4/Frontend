@@ -24,8 +24,10 @@ export function Tooltip({ children, className, content, disabled = false, placem
   const hide = () => { clearTimeout(closeTimer.current); setOpen(false); };
   const scheduleHide = () => {
     clearTimeout(closeTimer.current);
-    if (rootRef.current?.contains(document.activeElement)) return;
-    closeTimer.current = setTimeout(() => setOpen(false), 140);
+    closeTimer.current = setTimeout(() => {
+      if (!rootRef.current?.matches(':hover') && !contentRef.current?.matches(':hover') &&
+        !rootRef.current?.contains(document.activeElement)) hide();
+    }, 140);
   };
 
   useLayoutEffect(() => {
@@ -36,11 +38,12 @@ export function Tooltip({ children, className, content, disabled = false, placem
       .find((element) => element.tabIndex >= 0 && !element.matches(':disabled') &&
         element.getClientRects().length > 0 && getComputedStyle(element).visibility !== 'hidden') ?? root;
     if (trigger === root) root.tabIndex = 0;
-    const previous = trigger.getAttribute('aria-describedby');
-    if (visible) trigger.setAttribute('aria-describedby', [previous, tooltipId].filter(Boolean).join(' '));
+    const describedBy = trigger.getAttribute('aria-describedby')?.split(/\s+/).filter(Boolean) ?? [];
+    if (visible) trigger.setAttribute('aria-describedby', [...new Set([...describedBy, tooltipId])].join(' '));
     return () => {
-      if (previous === null) trigger.removeAttribute('aria-describedby');
-      else trigger.setAttribute('aria-describedby', previous);
+      const remaining = trigger.getAttribute('aria-describedby')?.split(/\s+/).filter((id) => id && id !== tooltipId) ?? [];
+      if (remaining.length) trigger.setAttribute('aria-describedby', remaining.join(' '));
+      else trigger.removeAttribute('aria-describedby');
       if (trigger === root) root.removeAttribute('tabindex');
     };
   }, [children, disabled, tooltipId, visible]);
@@ -92,7 +95,8 @@ export function Tooltip({ children, className, content, disabled = false, placem
   if (disabled) return <>{children}</>;
   return (
     <span className={classNames('ui-tooltip', `ui-tooltip--${placement}`, className)} ref={rootRef}
-      onMouseEnter={show} onMouseLeave={scheduleHide} onFocus={show} onBlur={hide}
+      onMouseEnter={show} onMouseLeave={scheduleHide}
+      onFocus={show} onBlur={scheduleHide}
       onPointerDown={(event) => { touchOpen.current = event.pointerType === 'touch' ? visible : null; }}
       onClick={() => { if (touchOpen.current === null) show(); else setOpen(!touchOpen.current); }}>
       {children}

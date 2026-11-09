@@ -280,11 +280,14 @@ test('로그아웃 서비스 오류가 발생해도 로컬 세션만 먼저 제�
 test('응답 지연 중에는 로딩을 표시하고 중복 로그인 요청을 막는다', async ({ page }) => {
   await page.goto('/login');
   await configureMock(page, { delayMs: 1000 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await fillLogin(page, accounts[0].email, accounts[0].password);
-  const button = page.getByRole('button', { name: '로그인', exact: true });
+  const button = page.locator('.auth-form button[type="submit"]');
   await button.click();
   await expect(button).toBeDisabled();
   await expect(button).toHaveAttribute('aria-busy', 'true');
+  await expect(button).toHaveText('로그인 중');
+  await expect(button.locator('.ui-button-spinner')).toHaveCSS('animation-duration', '0s');
   await page.locator('input[name="password"]').press('Enter');
   await expect(page).toHaveURL(/\/parent\/messages\/new$/);
   expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? '[]').length, ISSUED_KEY)).toBe(1);

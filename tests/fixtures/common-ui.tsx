@@ -9,6 +9,51 @@ import '../../src/index.css';
 import '../../src/features/message/TeacherMessages.css';
 import '../../src/features/parent-message/ParentMessageComposer.css';
 
+function PortalDialogCase() {
+  const [open, setOpen] = useState(false);
+  return <>
+    <Button onClick={() => setOpen(true)}>포털 창 열기</Button>
+    <Modal open={open} onOpenChange={setOpen} title="포털 확인">
+      <TextField autoFocus label="포털 입력" />
+      <Button onClick={() => setOpen(false)}>포털 창 닫기</Button>
+    </Modal>
+  </>;
+}
+
+function ReviewCases() {
+  const [controlledOpen, setControlledOpen] = useState(false);
+  const [hasError, setHasError] = useState(false);
+  const [lowerOpen, setLowerOpen] = useState(false);
+  const [upperOpen, setUpperOpen] = useState(false);
+  const [selectOpen, setSelectOpen] = useState(false);
+  return <>
+    <Popover ariaLabel="제어 설명" open={controlledOpen} onOpenChange={setControlledOpen} trigger="제어 설명 열기">
+      <TextField label="제어 설명 입력" />
+    </Popover>
+    <Button onClick={() => setControlledOpen(false)}>설명 밖 작업</Button>
+    <Popover ariaLabel="포털 설명" trigger="포털 설명 열기"><PortalDialogCase /></Popover>
+    <Tooltip content="입력 형식 설명">
+      <TextField id="tooltip-validating-field" label="설명 입력 필드" helperText="도움말" error={hasError ? '오류 안내' : undefined} />
+    </Tooltip>
+    <Button onClick={() => setHasError((current) => !current)}>입력 오류 전환</Button>
+    <Button onClick={() => setLowerOpen(true)}>아래 창 열기</Button>
+    <Modal open={lowerOpen} onOpenChange={setLowerOpen} title="아래 창">
+      <Button onClick={() => setUpperOpen(true)}>위 창 열기</Button>
+      <TextField label="아래 창 입력" />
+    </Modal>
+    <Modal open={upperOpen} onOpenChange={setUpperOpen} title="위 창">
+      <Button onClick={() => setLowerOpen(false)}>아래 창만 닫기</Button>
+      <Button onClick={() => setUpperOpen(false)}>위 창만 닫기</Button>
+    </Modal>
+    <Button onClick={() => setSelectOpen(true)}>선택 창 열기</Button>
+    <Modal open={selectOpen} onOpenChange={setSelectOpen} title="선택 확인">
+      <Dropdown ariaLabel="대화상자 값 선택" defaultValue="a" options={[
+        { label: '선택 첫 항목', value: 'a' }, { label: '선택 마지막 항목', value: 'b' },
+      ]} />
+    </Modal>
+  </>;
+}
+
 export function Fixture() {
   const [dialog, setDialog] = useState<'common' | 'board' | null>(null);
   const [count, setCount] = useState(0);
@@ -43,6 +88,7 @@ export function Fixture() {
       <Badge variant="danger">오류 안내</Badge><Badge variant="critical">긴급</Badge>
       <StatusChip status="progress" label="아주 긴 한국어 상담 진행 상태입니다" />
     </div>
+    <ReviewCases />
     <Button onClick={() => setDialog('common')}>일반 확인창</Button>
     <Button onClick={() => setDialog('board')}>업무 확인창</Button>
     <Modal open={dialog === 'common'} title="공통 확인" onOpenChange={() => setDialog(null)} footer={<Button onClick={() => setDialog(null)}>확인</Button>}>

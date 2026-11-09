@@ -103,6 +103,32 @@
 
 시각 결과: `/tmp/issue72-followup-before.png`, `/tmp/issue72-followup-after.png`, `/tmp/issue72-followup-mobile.png`. HTTP 4개 field의 desktop/mobile screenshot은 `/tmp/issue72-followup-http-results`에 보관했다.
 
+## CodeRabbit 리뷰 반영
+
+첨부 8개와 채팅의 2개 리뷰를 대조했다. 포털 자손 리뷰가 첨부에서 3회 반복되어, 중복 2개를 합친 **8개 고유 항목을 모두 반영**했다. 미반영 항목은 없다.
+
+| 항목 | 반영 내용 |
+| --- | --- |
+| Popover 제어된 닫힘의 focus 복귀 | `open=false` 전환 시 내부 focus를 trigger로 복귀한다. 외부 클릭·Tab으로 이미 이동한 focus는 유지한다. |
+| Popover 포털 자손 | React capture 이벤트로 포털 자손의 pointerdown·focus를 내부 동작으로 인식한다. blur 판정은 새 focus 이동이 끝난 뒤 처리하며, 포털 모달의 Escape는 해당 모달이 처리한다. |
+| Tooltip 설명 id 갱신 | cleanup에서 현재 `aria-describedby` 중 Tooltip 소유 id만 제거한다. 렌더링으로 갱신된 오류·도움말 id를 보존한다. |
+| Tooltip pointer/focus 유지 | 실제 trigger·Tooltip의 hover와 현재 focus를 함께 확인한다. Tab으로 focus가 나가도 포인터가 설명 위에 있으면 표시를 유지한다. |
+| 중첩 모달 inert·scroll 복원 | 활성 모달들이 최초 배경 상태를 공유한다. 아래 창을 먼저 닫아도 잠금을 유지하며, 마지막 창이 닫힐 때 원래 inert·scroll 상태를 복원한다. |
+| 최상위 모달 Escape | 활성 모달 순서를 추적해 최상위 창만 키보드를 처리한다. 아래 창 종료가 위 창의 focus를 가져가지 않는다. |
+| 마지막 Dropdown 옵션의 Tab | 음수 tabIndex로 focus된 옵션에서도 다음 Tab 정지점을 찾거나 처음으로 순환한다. 역방향 이동도 유지한다. |
+| 모션 축소와 로그인 로딩 | 기존 정지 spinner와 `aria-busy`·중복 요청 차단을 유지하면서 요청 중 버튼 문구를 `로그인 중`으로 표시한다. |
+
+새 회귀 테스트는 제어된 닫힘과 외부 Tab 이동, 자동 focus가 있는 포털 Modal, pointerdown, 오류 설명 id 갱신, pointer/focus 독립 유지, 모달 두 종료 순서와 원래 inert/scroll 복원, 최상위 Escape, Dropdown의 양방향 Tab을 확인한다. 기존 로그인 지연 테스트에는 reduced motion과 로딩 문구 검증을 추가했다.
+
+| 최신 리뷰 수정 검증 | 결과 |
+| --- | --- |
+| 관련 UI·로그인 회귀 | 36건 통과 (desktop/mobile) |
+| 전체 Playwright | 476건 통과 (desktop/mobile) |
+| HTTP 통합·학부모·관리자 | 8 + 26 + 12 = 46건 통과. 최신 전체 검증 합계 522건 |
+| build·lint·diff 검사 | 통과 (기존 chunk 크기 안내 유지) |
+
+위 변경은 공통 UI 상호작용과 로그인 표시 문구에 한정했다. 이전에 조정한 학부모 입력 정렬·테두리·버튼 크기와 위험 판정·권한·API·safetyLock·전송 정책은 유지한다.
+
 ## 수정 파일 목록
 
 - `README.md`
@@ -129,6 +155,7 @@
 - `src/layouts/AdminLayout.tsx`
 - `src/layouts/ParentLayout.tsx`
 - `src/layouts/TeacherLayout.tsx`
+- `src/pages/common/LoginPage.tsx`
 - `src/shared/components/teacher-shell/TeacherSidebar.css`
 - `src/shared/components/ui/Accordion.tsx`
 - `src/shared/components/ui/Dropdown.tsx`
@@ -141,10 +168,12 @@
 - `src/shared/components/ui/index.ts`
 - `src/shared/components/ui/useModalFocus.ts`
 - `src/shared/styles/teacher-prototype.css`
+- `tests/auth/auth-flow.spec.ts`
 - `tests/auth/common-ui.spec.ts`
 - `tests/auth/parent-message-history.spec.ts`
 - `tests/auth/parent-message-write.spec.ts`
 - `tests/auth/ui-layout.spec.ts`
+- `tests/auth/ui-review-regressions.spec.ts`
 - `tests/fixtures/common-ui.html`
 - `tests/fixtures/common-ui.tsx`
 - `tests/parent/risk-http.spec.ts`
