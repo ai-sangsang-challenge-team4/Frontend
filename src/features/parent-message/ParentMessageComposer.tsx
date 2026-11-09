@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { ChevronDown, Info, LockKeyhole, Save, Send } from 'lucide-react';
+import { ChevronDown, LockKeyhole, Save, Send } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import analysisIllustration from '../../shared/assets/parent/message-analysis.svg';
 import { getApiErrorMessage, isApiError } from '../../shared/api';
-import { Accordion, Button, EmptyState, Select, TextareaField, TextField, Toast } from '../../shared/components/ui';
+import { Accordion, Button, EmptyState, InformationTooltip, Select, TextareaField, TextField, Toast } from '../../shared/components/ui';
 import { COMPLAINT_TITLE_MAX_LENGTH, parentComplaintApi, parentMessageApiMode } from './api/parentComplaintApi';
 import {
   findSentMessage, mockConnectedTeachers, readMessageDraft, readMessageDrafts, saveMessageDraft,
@@ -377,8 +377,10 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
 
   const analysisNotice = threadId
     ? '추가 문의는 기존 문의의 대상과 제목을 그대로 사용합니다. 이어서 전달할 내용을 작성해 주세요.'
-    : isServer ? 'AI 분석은 문의를 전송하지 않습니다. 분석 시작 후 자녀·문의 대상·제목은 변경할 수 없으며, 문의 내용은 계속 수정할 수 있습니다.'
-      : 'AI 분석은 문의를 전송하지 않습니다. 분석 결과를 확인한 뒤 전송할 수 있습니다.';
+    : 'AI 분석은 문의를 전송하지 않습니다.';
+  const analysisDetail = threadId ? undefined
+    : isServer ? '분석 시작 후 자녀·문의 대상·제목은 변경할 수 없으며, 문의 내용은 계속 수정할 수 있습니다.'
+      : '분석 결과를 확인한 뒤 문의를 전송할 수 있습니다.';
   const analysisDescriptionId = 'parent-message-analysis-description';
   const childHelper = serverLocked ? undefined
     : children.isLoading ? '자녀 정보를 불러오고 있어요.'
@@ -455,6 +457,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
                 placeholder={threadId ? '추가로 문의할 내용을 작성해 주세요.' : '선생님께 전달할 문의 내용을 작성해 주세요.'} required rows={6} value={draft.body} />
               {maskingFailed || draft.body.trim() || draft.title.trim() ? (
                 <PrivacyMaskingNotice
+                  compact
                   onRetry={() => handleAnalyze()}
                   result={maskingFailed ? { status: 'failed', text: null, count: null }
                     : { status: 'ready', ...maskContactInfo(`제목: ${draft.title}\n\n내용: ${draft.body}`) }}
@@ -462,8 +465,12 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
               ) : null}
               <div className="parent-write-footer">
                 <div className="parent-write-analysis-note">
-                  {threadId ? <LockKeyhole aria-hidden="true" size={18} /> : <Info aria-hidden="true" size={18} />}
-                  <p id={analysisDescriptionId}>{analysisNotice}</p>
+                  {threadId ? <LockKeyhole aria-hidden="true" size={18} /> : null}
+                  <p id={analysisDescriptionId}>
+                    <span>{analysisNotice}</span>
+                    {analysisDetail ? <span className="sr-only"> {analysisDetail}</span> : null}
+                  </p>
+                  {analysisDetail ? <InformationTooltip label="AI 분석 안내" content={analysisDetail} /> : null}
                 </div>
                 <div className="parent-write-actions">
                   <Button className="parent-write-save" leftIcon={<Save size={18} />} onClick={handleSaveDraft} size="md" variant="outline">임시저장</Button>

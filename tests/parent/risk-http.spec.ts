@@ -111,6 +111,33 @@ async function analyze(page: Page) {
   await expect(page).toHaveURL(/\/review$/);
 }
 
+async function checkInformationTooltip(page: Page, label: string, content: string, touch: boolean, screenshotPath?: string) {
+  const trigger = page.getByRole('button', { name: label, exact: true });
+  const tooltip = page.getByRole('tooltip');
+  await trigger.scrollIntoViewIfNeeded();
+  await trigger.focus();
+  await expect(tooltip).toHaveText(content);
+  const box = (await tooltip.boundingBox())!;
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+  expect(box.y + box.height).toBeLessThanOrEqual(page.viewportSize()!.height);
+  await page.keyboard.press('Escape');
+  await expect(tooltip).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  if (touch) await trigger.tap();
+  else {
+    await page.mouse.move(0, 0);
+    await trigger.hover();
+  }
+  await expect(tooltip).toHaveText(content);
+  if (screenshotPath) await page.screenshot({ path: screenshotPath, animations: 'disabled' });
+  const outside = page.getByRole('heading', { name: '새 문의 작성', exact: true });
+  if (touch) await outside.tap();
+  else await outside.click();
+  await expect(tooltip).toHaveCount(0);
+}
+
 test('분석 버튼 곁의 안내는 분석 전후에 유지되고 입력 잠금 조건을 보존한다', async ({ page }, testInfo) => {
   const calls = await setup(page);
   const notice = page.locator('#parent-message-analysis-description');
@@ -119,11 +146,16 @@ test('분석 버튼 곁의 안내는 분석 전후에 유지되고 입력 잠금
   await expect(notice).toHaveText(noticeText);
   await expect(analyzeButton).toHaveAccessibleDescription(noticeText);
   await expect(page.getByText(noticeText, { exact: true })).toHaveCount(1);
-  await expect(page.getByRole('button', { name: 'AI 분석 변경 제한 안내', exact: true })).toHaveCount(0);
+  await expect(notice.locator('span').first()).toHaveText('AI 분석은 문의를 전송하지 않습니다.');
+  await expect(notice.locator('.sr-only')).toHaveCSS('clip-path', 'inset(50%)');
+  await expect(page.getByRole('button', { name: 'AI 분석 안내', exact: true })).toHaveCount(1);
   await expect(page.locator('.parent-write-notice')).not.toContainText('AI 분석');
   await expect(page.getByLabel('자녀', { exact: true })).toBeEnabled();
   await expect(page.getByLabel('문의 대상', { exact: true })).toBeEnabled();
   await expect(page.getByLabel('문의 제목', { exact: true })).toBeEditable();
+  for (const name of ['자녀', '문의 대상']) {
+    await expect(page.getByLabel(name, { exact: true }).locator('..')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  }
   await analyze(page);
   expect(calls).not.toContain('POST /complaints/42/send');
   await page.getByRole('button', { name: '문의 작성으로 돌아가기', exact: true }).click();
@@ -136,6 +168,9 @@ test('분석 버튼 곁의 안내는 분석 전후에 유지되고 입력 잠금
   }
   await expect(page.getByLabel('자녀', { exact: true })).toBeDisabled();
   await expect(page.getByLabel('문의 대상', { exact: true })).toBeDisabled();
+  for (const name of ['자녀', '문의 대상']) {
+    await expect(page.getByLabel(name, { exact: true }).locator('..')).toHaveCSS('background-color', 'rgb(238, 240, 245)');
+  }
   await expect(page.getByLabel('문의 제목', { exact: true })).toHaveAttribute('readonly', '');
   await expect(page.getByLabel('문의 내용', { exact: true })).toBeEditable();
   for (const width of [320, 375, 768, 1024, 1440]) {
@@ -149,7 +184,7 @@ test('분석 버튼 곁의 안내는 분석 전후에 유지되고 입력 잠금
       element.getBoundingClientRect().top - document.querySelector('.privacy-masking-notice')!.getBoundingClientRect().bottom
     ))).toBe(24);
     const layout = await notice.evaluate((element) => ({
-      note: element.getBoundingClientRect().toJSON(),
+      note: element.parentElement!.getBoundingClientRect().toJSON(),
       button: document.querySelector('.parent-write-analyze')!.getBoundingClientRect().toJSON(),
       save: document.querySelector('.parent-write-save')!.getBoundingClientRect().toJSON(),
     }));
@@ -157,12 +192,20 @@ test('분석 버튼 곁의 안내는 분석 전후에 유지되고 입력 잠금
       expect(button.height).toBeGreaterThanOrEqual(44);
       expect(button.height).toBeLessThanOrEqual(48);
     }
-    expect(layout.button.top - layout.note.bottom).toBeGreaterThanOrEqual(12);
-    expect(layout.button.top - layout.note.bottom).toBeLessThanOrEqual(16);
+    if (width <= 820) {
+      expect(layout.button.top - layout.note.bottom).toBeGreaterThanOrEqual(12);
+      expect(layout.button.top - layout.note.bottom).toBeLessThanOrEqual(16);
+    } else {
+      expect(layout.note.right).toBeLessThanOrEqual(layout.save.left);
+      expect(layout.note.top).toBeLessThan(layout.button.bottom);
+      expect(layout.note.bottom).toBeGreaterThan(layout.button.top);
+    }
     expect(layout.button.left - layout.save.right).toBeGreaterThanOrEqual(8);
     expect(layout.button.left - layout.save.right).toBeLessThanOrEqual(12);
     expect(layout.save.top).toBeCloseTo(layout.button.top, 0);
     expect(layout.save.bottom).toBeCloseTo(layout.button.bottom, 0);
+    await checkInformationTooltip(page, 'AI 분석 안내', '분석 시작 후 자녀·문의 대상·제목은 변경할 수 없으며, 문의 내용은 계속 수정할 수 있습니다.',
+      testInfo.project.name === 'mobile', [375, 1440].includes(width) ? testInfo.outputPath(`analysis-tooltip-${width}.png`) : undefined);
   }
   await page.locator('.parent-write-form').screenshot({ path: testInfo.outputPath('parent-locked-fields-desktop.png') });
   await page.setViewportSize({ width: 375, height: 812 });
@@ -187,7 +230,9 @@ test('새 문의의 자녀·대상·제목·내용은 같은 시작선에 표시
   await expect(privacy).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('parent-empty.png'), fullPage: true, animations: 'disabled' });
   await title.fill('HTTP 분석 확인');
-  await expect(privacy).toContainText('탐지된 전화번호·이메일·주민등록번호가 없습니다.');
+  await expect(privacy).toContainText('개인정보를 확인해 주세요.');
+  await expect(privacy).not.toContainText('없습니다.');
+  await expect(privacy).not.toContainText('이름·주소');
   await expect(privacy).not.toHaveClass(/has-personal-info|is-failed/);
   await expect(privacy).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(privacy).toHaveCSS('border-top-width', '0px');
@@ -238,6 +283,10 @@ test('새 문의의 자녀·대상·제목·내용은 같은 시작선에 표시
     expect(geometry.privacy.left).toBeCloseTo(geometry.body.left + (width > 820 ? (width > 1240 ? 160 : 140) + 24 : 0), 0);
     expect(geometry.analyze.right).toBeCloseTo(geometry.form.right, 0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    if ([375, 768, 1024, 1440].includes(width)) {
+      await checkInformationTooltip(page, '개인정보 확인 범위', '전화번호·이메일·주민등록번호를 자동으로 확인합니다. 이름·주소 등 다른 개인정보가 포함되어 있는지도 직접 확인해 주세요.',
+        testInfo.project.name === 'mobile', [375, 1440].includes(width) ? testInfo.outputPath(`privacy-tooltip-${width}.png`) : undefined);
+    }
   }
   await page.getByRole('heading', { name: '새 문의 작성', exact: true }).click();
   await page.locator('.parent-write-form').screenshot({ path: testInfo.outputPath('parent-form-mobile.png') });

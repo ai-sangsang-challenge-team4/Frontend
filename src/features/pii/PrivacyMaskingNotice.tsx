@@ -1,11 +1,12 @@
-import { LockKeyhole, ShieldCheck, ShieldAlert } from 'lucide-react';
-import { Badge, Button } from '../../shared/components/ui';
+import { LockKeyhole, Shield, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { Badge, Button, InformationTooltip } from '../../shared/components/ui';
 import type { MaskingResult } from './masking';
 import './PrivacyMaskingNotice.css';
 
-export function PrivacyMaskingNotice({ result, onRetry }: {
+export function PrivacyMaskingNotice({ result, onRetry, compact = false }: {
   result: MaskingResult;
   onRetry?: () => void;
+  compact?: boolean;
 }) {
   if (result.status === 'failed') {
     return (
@@ -21,24 +22,29 @@ export function PrivacyMaskingNotice({ result, onRetry }: {
   }
 
   const hasPersonalInfo = result.count > 0;
-  const Icon = hasPersonalInfo ? LockKeyhole : ShieldCheck;
+  const Icon = hasPersonalInfo ? LockKeyhole : compact ? Shield : ShieldCheck;
+  const title = hasPersonalInfo ? '개인정보가 포함되어 있습니다.'
+    : compact ? '개인정보를 확인해 주세요.' : '탐지된 전화번호·이메일·주민등록번호가 없습니다.';
   return (
     <section aria-label="개인정보 마스킹 상태" className={`privacy-masking-notice${hasPersonalInfo ? ' has-personal-info' : ''}`}>
       <div className="privacy-masking-heading">
         <Icon aria-hidden="true" size={22} />
-        <strong>{hasPersonalInfo ? '개인정보가 포함되어 있습니다.' : '탐지된 전화번호·이메일·주민등록번호가 없습니다.'}</strong>
+        {compact ? <span className="privacy-masking-description">
+          <strong>{title}</strong>
+          <InformationTooltip label="개인정보 확인 범위" content="전화번호·이메일·주민등록번호를 자동으로 확인합니다. 이름·주소 등 다른 개인정보가 포함되어 있는지도 직접 확인해 주세요." />
+        </span> : <strong>{title}</strong>}
         {hasPersonalInfo ? <Badge variant="warning">{result.count}건 마스킹</Badge> : null}
       </div>
-      <p>{hasPersonalInfo
+      {hasPersonalInfo || !compact ? <p>{hasPersonalInfo
         ? 'AI 분석과 전송에는 전화번호·이메일·주민등록번호를 가린 아래 문장을 사용합니다.'
-        : '이름·주소 등 다른 개인정보가 포함되어 있는지도 직접 확인해 주세요.'}</p>
+        : '이름·주소 등 다른 개인정보가 포함되어 있는지도 직접 확인해 주세요.'}</p> : null}
       {hasPersonalInfo ? (
         <>
           <details className="privacy-masking-preview">
             <summary>마스킹 결과 보기</summary>
             <p>{result.text}</p>
           </details>
-          <p className="privacy-masking-hint">현재 자동 탐지 대상은 전화번호, 이메일, 주민등록번호입니다. 이름·주소 등 다른 개인정보는 직접 확인해 주세요.</p>
+          {!compact ? <p className="privacy-masking-hint">현재 자동 탐지 대상은 전화번호, 이메일, 주민등록번호입니다. 이름·주소 등 다른 개인정보는 직접 확인해 주세요.</p> : null}
         </>
       ) : null}
     </section>

@@ -252,7 +252,7 @@
 
 ## 새 문의 작성의 균형·단일 안내·액션 그룹 정리
 
-이번 수정은 Composer TSX/CSS·기존 학부모 HTTP 회귀 테스트·결과 문서의 총 4개 파일에 한정했다. 공통 컴포넌트·전역 CSS·API·입력/저장/분석/마스킹/전송 함수는 변경하지 않았다.
+이 절은 `9250ae5` 시점의 변경·검증 기록이다. 하단 안내와 툴팁의 최종 표시는 다음 절에서 조정했다. 당시 수정은 Composer TSX/CSS·기존 학부모 HTTP 회귀 테스트·결과 문서의 총 4개 파일에 한정했다. 공통 컴포넌트·전역 CSS·API·입력/저장/분석/마스킹/전송 함수는 변경하지 않았다.
 
 | 요소 | 최종 적용 |
 | --- | --- |
@@ -273,6 +273,27 @@ HTTP 새 문의 안내는 다음 한 문장 블록으로 표시한다.
 - 집중 회귀 4건 통과: 단일 안내·분석 후 전송 API 미호출·입력 잠금/본문 수정 가능 여부·설명 id, 빈 입력/0건/탐지 상태·미리보기, 라벨 폭·중앙 정렬·필드 시작선·입력창 높이·간격·오른쪽 버튼 그룹을 확인했다.
 - 375·768·1024·1440px를 시각 확인했고, 320·620·820·980·1240px도 자동 점검한다. 최종 화면: `/tmp/issue72-balance-{375,768,1024,1440}.png`(분석 후 잠금), `/tmp/issue72-balance-form-{375,768,1024,1440}.png`(편집 가능). 빈 입력·0건 상태는 `/tmp/issue72-balance-parent-{empty,privacy-neutral}.png`에 보관한다. 원본은 `/tmp/issue72-balance-http-results`와 `/tmp/issue72-balance-final-visual-results`에 있다.
 - 최종 `npx tsc -b`·`npm run lint`·`npm run build`·diff 검사 통과. 기존 500kB chunk 안내는 유지된다. 인증/UI 전체 **478건** + HTTP 학부모 **30건**·API 통합 **8건**·관리자 **12건** = 현재 코드 기준 **528건 통과**. 앞선 단일 안내 단계의 결과는 합산하지 않았다. 로그: `/tmp/issue72-balance-{typecheck,lint,build,auth,http,integration,admin}.log`.
+- HTTP는 응답 interception 기반이다. 실서버·실기기·화면낭독기 검증은 미실행이다.
+
+## 작성 화면 하단 안내와 정보 툴팁
+
+전체 폼·textarea·간격 토큰은 유지하고 하단의 설명 밀도를 줄였다. 변경 파일은 Composer TSX/CSS, 기존 `PrivacyMaskingNotice.tsx`, 학부모 HTTP 회귀 테스트, 이 문서의 총 5개다. 기존 `InformationTooltip`을 재사용하며 Tooltip 자체·전역 CSS·검사/저장/API 로직은 변경하지 않았다.
+
+| 영역 | 적용 |
+| --- | --- |
+| 개인정보 안내 | textarea 바로 아래 기존 인라인 위치 유지. 작성 화면에서만 `compact` 표시를 사용하며, 입력이 없으면 안내 없음·0건 작성 단계는 `개인정보를 확인해 주세요.`와 중립 Shield 아이콘 표시. 검사 완료/성공을 암시하는 문구 제거 |
+| 개인정보 툴팁 | `전화번호·이메일·주민등록번호를 자동으로 확인합니다. 이름·주소 등 다른 개인정보가 포함되어 있는지도 직접 확인해 주세요.` 제공. 기존 두 번째 줄과 반복된 보조 설명을 정보 아이콘으로 이동 |
+| 실제 탐지/실패 | 탐지 경고·건수 Badge·마스킹 문장 사용 안내·결과 미리보기 유지. 실패의 alert·전송/분석 중단 안내·재시도도 유지. `compact` 기본값은 false여서 검토 화면의 기존 결과 표시는 보존 |
+| AI 안내 | 화면에는 `AI 분석은 문의를 전송하지 않습니다.`만 표시. 인접한 정보 아이콘에서 `분석 시작 후 자녀·문의 대상·제목은 변경할 수 없으며, 문의 내용은 계속 수정할 수 있습니다.` 확인. 잠금이 없는 mock에는 전송 절차 설명만 제공하고 추가 문의의 기존 안내는 보존 |
+| 레이아웃 | desktop은 안내 왼쪽·기존 outline/primary 버튼 오른쪽의 한 행. 820px 이하에서는 안내를 버튼 위에 배치. 개인정보-하단 gap 24px·모바일 안내-버튼 gap 16px·버튼 gap 12px 유지 |
+| Select | 실제 disabled 조건과 표시를 대조. 활성 shell은 white, 분석 후 잠금/선택 항목 없음은 기존 disabled canvas 유지. 임의로 활성화하거나 색상만 바꾸지 않음 |
+
+툴팁은 기존 44px 정보 버튼·hover·focus·터치·Escape·바깥 pointer 닫기·화면 경계 보정을 재사용한다. 버튼과 필드의 `aria-describedby`가 읽는 전체 잠금 설명은 기존 `sr-only`로 보존한다. 화면에는 짧은 문구만 보이고 상세 설명은 요청할 때 확인할 수 있다. 분석과 최종 전송은 기존처럼 별도 단계이며 분석만 실행했을 때 전송 API가 호출되지 않는지 재검증했다.
+
+- 집중 회귀 4건 통과: 두 툴팁의 focus/hover/터치·Escape·외부 클릭, 320~1440px 화면 경계·배치, Select 활성/disabled의 실제 색상, 빈 입력·중립/탐지·마스킹 미리보기·분석 전후 잠금/본문 수정 가능 여부를 확인했다. 모바일 외부 터치 닫기도 전체 HTTP 회귀에서 검증한다.
+- 375·768·1024·1440px 시각 비교: `/tmp/issue72-footer-{375,768,1024,1440}.png`, 0건 중립 표시: `/tmp/issue72-footer-neutral.png`. 툴팁: `/tmp/issue72-footer-{analysis,privacy}-tooltip-{375,1440}.png`. 원본은 `/tmp/issue72-footer-final-visual-results`에 보관한다.
+- Lint·앱 typecheck·Build 통과. 최종 인증/UI 전체 478건 + HTTP 학부모 30건/통합 8건/관리자 12건의 50건 = 현재 코드 기준 **528건 통과**. 첫 인증/UI 전체 실행은 476건 통과·2건 실패였다. 교사 위험도 검토의 완료 상태 표시 검사와 학부모 추가 문의 대화 흐름의 30초 제한 초과는 코드 변경 없이 각각 desktop/mobile 단독 재실행 2건씩 및 최종 전체 478건을 통과했다. 정확한 간헐 실패 원인은 확정하지 않았고 관련 기능·안전 정책은 수정하지 않았다. 로그: `/tmp/issue72-footer-{typecheck,lint-final,build,auth,auth-final,teacher-recheck,history-recheck,http,integration,admin}.log`. 이전 단계의 실행 건수는 이번 결과에 합산하지 않는다.
+- React 스킬 기준으로 새 효과/상태 없이 기존 컴포넌트·파생 값을 사용하고, optional Props의 기본 동작과 native button·focus·설명 id를 유지했는지 검토했다.
 - HTTP는 응답 interception 기반이다. 실서버·실기기·화면낭독기 검증은 미실행이다.
 
 ## 수정 파일 목록
@@ -299,6 +320,7 @@ HTTP 새 문의 안내는 다음 한 문장 블록으로 표시한다.
 - `src/features/parent-message/ParentMessageComposer.tsx`
 - `src/features/parent-message/ParentMessageHistory.css`
 - `src/features/parent-message/ParentMessageReview.css`
+- `src/features/pii/PrivacyMaskingNotice.tsx`
 - `src/index.css`
 - `src/layouts/AdminLayout.tsx`
 - `src/layouts/ParentLayout.tsx`

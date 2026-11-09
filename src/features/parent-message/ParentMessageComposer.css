@@ -147,8 +147,8 @@
 .parent-write-analysis-note {
   display: flex;
   min-width: 0;
-  align-items: flex-start;
-  gap: var(--space-2);
+  align-items: center;
+  gap: var(--space-1);
   color: var(--color-text-muted-readable);
   font-size: var(--font-size-helper);
   line-height: var(--line-height-body);
@@ -163,7 +163,9 @@
 
 .parent-write-footer {
   display: grid;
-  gap: var(--space-4);
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-6);
   margin-left: calc(var(--parent-label-width) + var(--space-6));
 }
 
@@ -179,7 +181,23 @@
 }
 
 .parent-write-form > .privacy-masking-notice .privacy-masking-heading {
+  flex-wrap: nowrap;
   gap: var(--space-2);
+}
+
+.parent-write-form .privacy-masking-description {
+  display: inline-flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--space-1);
+  word-break: keep-all;
+}
+
+.parent-write-analysis-note > .ui-tooltip,
+.parent-write-form .privacy-masking-description > .ui-tooltip,
+.parent-write-form .privacy-masking-heading > .ui-badge {
+  flex: 0 0 auto;
 }
 
 .parent-write-form > .privacy-masking-notice .privacy-masking-heading > svg {
@@ -422,6 +440,7 @@
   .parent-write-field .ui-textarea-control { height: 200px; min-height: 160px; }
   .parent-write-main .parent-write-form > .privacy-masking-notice,
   .parent-write-footer { margin-left: 0; }
+  .parent-write-footer { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
   .parent-write-actions { margin-top: 12px; }
   .parent-analysis { padding-top: 24px; }
   .parent-analysis-title { margin-top: 32px; }
