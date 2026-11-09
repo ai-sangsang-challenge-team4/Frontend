@@ -10,8 +10,8 @@
 
 .parent-write-back {
   display: grid;
-  width: 28px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   flex: 0 0 auto;
   place-items: center;
   padding: 0;
@@ -35,7 +35,7 @@
 }
 
 .parent-write-breadcrumb a {
-  color: var(--color-text-muted);
+  color: var(--color-text-muted-readable);
 }
 
 .parent-write-breadcrumb a:hover {
@@ -82,8 +82,8 @@
 
 .parent-write-form {
   display: grid;
-  gap: 44px;
-  margin-top: 58px;
+  gap: var(--space-8);
+  margin-top: var(--space-12);
 }
 
 .parent-write-field.ui-field {
@@ -104,7 +104,7 @@
 .parent-write-field .ui-select-shell {
   min-height: 52px;
   padding: 0 60px;
-  border-color: transparent;
+  border-color: var(--color-border-control);
   box-shadow: var(--shadow-sm);
 }
 
@@ -122,6 +122,18 @@
 .parent-write-field .ui-textarea-control:focus {
   border-color: var(--color-border-focus);
   box-shadow: var(--shadow-focus);
+}
+
+.parent-write-field.is-invalid .ui-input-shell,
+.parent-write-field.is-invalid .ui-select-shell,
+.parent-write-field.is-invalid .ui-textarea-control {
+  border-color: var(--color-text-danger-readable);
+}
+
+.parent-write-field.is-disabled .ui-input-shell,
+.parent-write-field.is-disabled .ui-select-shell,
+.parent-write-field.is-disabled .ui-textarea-control {
+  background: var(--color-bg-disabled);
 }
 
 .parent-write-field .ui-field-control {
@@ -147,7 +159,7 @@
 .parent-write-field .ui-textarea-control {
   min-height: 316px;
   padding: 24px 60px;
-  border: 1px solid transparent;
+  border: var(--border-control);
   box-shadow: var(--shadow-sm);
   resize: vertical;
 }

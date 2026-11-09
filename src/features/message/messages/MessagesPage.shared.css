@@ -61,7 +61,7 @@
   min-height: 37px;
   padding: 4px 12px;
   border: 0.7px solid var(--color-border-default);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--color-bg-surface);
   color: var(--color-text-primary);
   font-size: 16px;
@@ -121,7 +121,7 @@
 
 .board-send-confirm-summary span,
 .board-activity-list span {
-  color: var(--color-text-muted);
+  color: var(--color-text-muted-readable);
   font-size: 14px;
   line-height: 20px;
 }
@@ -136,8 +136,36 @@
 
 .board-consultation-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 20px 0; }
 .board-consultation-controls > .ui-button:first-of-type { margin-left: auto; }
-.board-follow-up-notice { padding: 16px 20px; margin-bottom: 24px; border-radius: 8px; background: var(--color-primary-subtle); color: var(--color-primary); font-size: 16px; }
+.board-follow-up-notice { padding: 16px 20px; margin-bottom: 24px; border-radius: var(--radius-sm); background: var(--color-primary-subtle); color: var(--color-primary); font-size: 16px; }
 @media (max-width: 620px) {
   .board-consultation-controls { gap: 8px; }
   .board-consultation-controls > .ui-button { padding: 8px 12px; font-size: 13px; }
+}
+
+/* Existing domain cards stay in place; shared interaction rules do not affect policy. */
+.board-card-meta-label { display: inline-flex; align-items: center; gap: var(--space-1); }
+.board-card-meta-label .ui-information-trigger { width: 44px; height: 44px; }
+.board-thread-button,
+.board-thread-star-button,
+.board-outline-button,
+.board-primary-button,
+.board-risk-action-button,
+.board-composer-action-button,
+.board-confirm-modal-action {
+  transition: background-color var(--transition-control), border-color var(--transition-control), color var(--transition-control);
+}
+.board-thread-star-button:hover,
+.board-back-button:hover,
+.board-outline-button:not(:disabled):hover,
+.board-risk-action-button:not(:disabled):hover { background: var(--color-bg-canvas); }
+.board-primary-button:not(:disabled):hover,
+.board-composer-action-button--primary:not(:disabled):hover { background: var(--color-primary-hover); }
+.board-primary-button:not(:disabled):active,
+.board-composer-action-button--primary:not(:disabled):active { background: var(--color-primary-active); }
+.board-outline-button:not(:disabled):active,
+.board-risk-action-button:not(:disabled):active { background: var(--color-primary-subtle); }
+
+@media (pointer: coarse) {
+  .board-primary-button, .board-outline-button, .board-reference-button,
+  .board-risk-action-button, .board-composer-action-button { min-height: 44px; height: auto; }
 }

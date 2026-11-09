@@ -22,3 +22,5 @@ npm run dev
 현재 인증은 백엔드 없이 Mock API로 동작합니다. 테스트 계정, 자동 테스트 실행 방법, 만료·오류 재현 방법은 [인증 테스트 가이드](docs/auth-mock-testing.md)를 참고하세요.
 
 개인정보 마스킹·안전 상태 UI와 실패 재현 방법은 [개인정보 및 안전 UI 가이드](docs/privacy-safety-ui.md)를 참고하세요.
+
+공통 UI의 디자인 기준은 [DESIGN.md](DESIGN.md), Issue #72의 적용 내용·토큰·검증 결과는 [공통 UI 적용 및 검증](docs/ui-style-improvements.md)을 참고하세요.

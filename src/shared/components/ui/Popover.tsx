@@ -41,6 +41,8 @@ export function Popover({
   triggerClassName,
 }: PopoverProps) {
   const contentId = useId();
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
   const isOpen = open ?? internalOpen;
@@ -63,20 +65,18 @@ export function Popover({
         setOpen(false);
       }
     };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setOpen(false);
-      }
-    };
+
 
     document.addEventListener('pointerdown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
 
     return () => {
       document.removeEventListener('pointerdown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
     };
   });
+
+  useEffect(() => {
+    if (isOpen) contentRef.current?.focus({ preventScroll: true });
+  }, [isOpen]);
 
   return (
     <div
@@ -87,6 +87,17 @@ export function Popover({
         className,
       )}
       ref={rootRef}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && isOpen) {
+          event.preventDefault();
+          event.stopPropagation();
+          setOpen(false);
+          triggerRef.current?.focus();
+        }
+      }}
     >
       <button
         aria-controls={isOpen ? contentId : undefined}
@@ -96,12 +107,13 @@ export function Popover({
         className={classNames('ui-popover-trigger', triggerClassName)}
         disabled={disabled}
         onClick={() => setOpen(!isOpen)}
+        ref={triggerRef}
         type="button"
       >
         {trigger}
       </button>
       {isOpen ? (
-        <div className="ui-popover-content" id={contentId} role="dialog">
+        <div aria-label={ariaLabel} className="ui-popover-content" id={contentId} ref={contentRef} role="dialog" tabIndex={-1}>
           {children}
         </div>
       ) : null}

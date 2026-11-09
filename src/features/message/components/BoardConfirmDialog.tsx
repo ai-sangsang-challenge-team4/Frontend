@@ -1,4 +1,6 @@
-import { useEffect, type ReactNode, type SVGProps } from 'react';
+import { createPortal } from 'react-dom';
+import { useModalFocus } from '../../../shared/components/ui/useModalFocus';
+import { useRef, type ReactNode, type SVGProps } from 'react';
 
 export type BoardConfirmDialogAction = {
   disabled?: boolean;
@@ -44,32 +46,14 @@ export function BoardConfirmDialog({
   titleHidden = false,
   titleId,
 }: BoardConfirmDialogProps) {
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    const previousOverflow = document.body.style.overflow;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    document.body.style.overflow = 'hidden';
-    document.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [onClose, open]);
+  const dialogRef = useRef<HTMLElement | null>(null);
+  useModalFocus(open, dialogRef, onClose);
 
   if (!open) {
     return null;
   }
 
-  return (
+  return createPortal(
     <div
       className="board-confirm-modal-overlay"
       onMouseDown={(event) => {
@@ -84,7 +68,9 @@ export function BoardConfirmDialog({
         aria-labelledby={titleId}
         aria-modal="true"
         className="board-confirm-modal"
+        ref={dialogRef}
         role="dialog"
+        tabIndex={-1}
       >
         <button
           aria-label="닫기"
@@ -126,6 +112,7 @@ export function BoardConfirmDialog({
           })}
         </div>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }
