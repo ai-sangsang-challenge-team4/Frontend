@@ -27,10 +27,12 @@ async function setup(page: Page, role: 'ADMIN' | 'TEACHER', handler: (route: Rou
   await expect(page).toHaveURL(role === 'ADMIN' ? /\/admin\/messages$/ : /\/teacher(?:\/messages)?$/);
 }
 
-test('동의 조회 실패 재시도와 명시적 필수 동의, 선택 동의 변경을 HTTP로 처리한다', async ({ page }) => {
+test('동의 조회 실패 재시도와 명시적 필수 동의, 선택 동의 변경을 HTTP로 처리한다', async ({ page }, testInfo) => {
   let failRead = true;
   let failSave = true;
   let writes = 0;
+  let completeSave: () => void = () => {};
+  const saveGate = new Promise<void>((resolve) => { completeSave = resolve; });
   let consent = { consentId: null as number | null, policyVersion: '2026-v2', agreedAt: null as string | null, requiredAgreed: false, optionalAgreed: false };
   await setup(page, 'ADMIN', async (route, key) => {
     if (key === 'GET /users/me/policy-consents') {
@@ -45,6 +47,7 @@ test('동의 조회 실패 재시도와 명시적 필수 동의, 선택 동의 �
         failSave = false;
         await route.fulfill({ status: 503, json: { message: '동의 저장 지연' } });
       } else {
+        if (writes === 2) await saveGate;
         consent = { ...consent, consentId: 1, requiredAgreed: true, optionalAgreed: writes < 3, agreedAt: '2026-10-30T12:00:00' };
         await route.fulfill({ json: consent });
       }
@@ -57,20 +60,42 @@ test('동의 조회 실패 재시도와 명시적 필수 동의, 선택 동의 �
   await expect(page.getByRole('alert')).toBeVisible();
   await page.getByRole('button', { name: '다시 불러오기' }).click();
   await expect(page.getByText('2026-v2', { exact: true })).toBeVisible();
+  const panel = page.getByRole('region', { name: '동의 현황', exact: true });
+  const status = panel.getByRole('status');
+  await expect(status).toContainText('필수 약관 동의가 필요해요.');
+  for (const width of [320, 375, 620, 980, 1440]) {
+    await page.setViewportSize({ width, height: 1100 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${width}px consent layout`).toBe(true);
+  }
+  await panel.screenshot({ path: testInfo.outputPath('consent-desktop.png') });
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: testInfo.outputPath('consent-mobile.png'), fullPage: true });
+  await page.setViewportSize(testInfo.project.name === 'mobile' ? { width: 393, height: 851 } : { width: 1280, height: 720 });
   const save = page.getByRole('button', { name: '동의 내용 저장' });
   await expect(save).toBeDisabled();
   expect(writes).toBe(0);
   await page.getByRole('checkbox', { name: /서비스 이용약관/ }).check();
   await page.getByRole('checkbox', { name: /메시지 활용/ }).check();
+  await expect(status).toContainText('변경한 동의 내용이 아직 저장되지 않았어요.');
+  await expect(panel.locator('dl > div').filter({ hasText: '필수 동의' }).locator('dd')).toHaveText('미동의');
+  await expect(page.getByRole('checkbox', { name: /메시지 활용/ })).toHaveAccessibleDescription(/거부해도 서비스를 이용/);
   await save.click();
   await expect(page.getByRole('alert')).toBeVisible();
+  await expect(status).toContainText('변경한 동의 내용이 아직 저장되지 않았어요.');
+  await expect(status).not.toContainText('저장되었습니다');
   await save.click();
+  await expect(status).toContainText('동의 내용을 저장하고 있어요.');
+  await expect(page.getByRole('button', { name: '저장 중…', exact: true })).toBeDisabled();
+  await expect(page.getByRole('checkbox', { name: /서비스 이용약관/ })).toBeDisabled();
+  completeSave();
   await expect(page.getByText('동의 내용이 저장되었습니다.')).toBeVisible();
   await page.getByRole('checkbox', { name: /메시지 활용/ }).uncheck();
   await save.click();
   await expect(page.getByText('동의 내용이 저장되었습니다.')).toBeVisible();
   await page.reload();
   await page.getByRole('tab', { name: '약관 및 동의' }).click();
+  await expect(status).toContainText('필수 약관에 동의한 상태예요.');
   await expect(page.getByRole('checkbox', { name: /메시지 활용/ })).not.toBeChecked();
   await expect(page.getByRole('checkbox', { name: /서비스 이용약관/ })).toBeChecked();
 });

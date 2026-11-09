@@ -138,12 +138,46 @@
 - 비교 화면은 `/tmp/issue72-flat-input-before.png`, `/tmp/issue72-flat-input-after.png`, `/tmp/issue72-flat-input-mobile.png`에 보관했다. 기존 입력 정렬·버튼 크기를 유지한다.
 - 이번 추가 수정 후 build·lint·diff 검사가 통과했다. 공통 UI·리뷰 회귀·학부모 작성/내역/검토/API Playwright **146건**, 학부모 HTTP **26건**, 합계 **172건**이 통과했다. 앞 절의 전체 522건은 그림자 제거 전 결과이며, 이번에는 영향 범위의 기존 테스트를 재실행했다.
 
+## 문의 작성 안내 및 동의 현황 피드백
+
+### 문의 작성 안내
+
+- 분석 전에만 상단 `문의 전 확인해 주세요`에서 자녀·문의 대상·제목 변경 제한을 한 문장으로 예고한다. 실제 제한이 없는 mock 새 문의에는 이 문구를 표시하지 않는다.
+- 분석을 시작한 문의에는 입력 영역 위의 한 줄 상태 안내로 잠금 이유와 문의 내용 수정 가능 여부를 설명한다. 필드 아래의 잠금 설명 3개는 제거하고, 해당 필드의 `aria-describedby`를 공통 안내에 연결했다.
+- 추가 문의는 분석 여부와 관계없이 대상·제목이 고정되므로 별도 문구를 사용한다. 필드별 조회 지연·실패·연결 없음·필수 입력 오류와 기존 잠금 조건은 유지한다.
+- 재분석 시 서버 정책에 따라 새 수정안이 제공되지 않을 수 있어, 공통 안내는 내용 수정 가능 여부만 설명한다. 분석·전송 동작은 변경하지 않았다.
+
+### 동의 현황
+
+- 기본 설명을 `필수 약관과 선택 동의 내역을 관리하세요.`로 줄이고 14px 보조 글자로 표시한다. 20px 제목 아래 8px 간격, 설명과 상태 안내 사이 24px 간격을 사용한다.
+- 사용자 행동 안내는 기존 `mypage-notice`와 Info 아이콘을 재사용한 별도 영역에 표시한다. 상태 제목은 16px/500, 설명은 14px, 배경은 기존 `--color-primary-subtle`이다.
+- 서버의 저장된 값과 현재 체크 상태를 비교해 미동의·동의 완료·변경 미저장·저장 중·저장 완료를 구분한다. 저장 실패에는 기존 오류·재시도 동작을 유지하고, 체크만 한 상태를 동의 저장 완료로 표시하지 않는다.
+- 정책 버전·동의 시점·필수/선택 동의 내역을 기존 canvas 면으로 묶는다. 체크 영역은 fieldset/legend로 구분하고, 필수·선택 Badge를 항목명 앞에 일정하게 배치했다.
+- 각 항목의 설명은 기존 가입 화면의 안내를 재사용했다. 선택 동의 거부 시에도 이용 가능하다는 안내를 선택 항목에 연결하고, 체크박스의 이름·설명을 각각 연결했다.
+- 중복된 하단 안내와 겹치는 구분선을 정리했다. 체크 행 20px padding, 설명 gap 8px, 영역 간 24px, 카드 padding 24px(모바일 20px/16px)을 기존 토큰으로 적용했다. 모바일 저장 버튼은 전체 폭을 사용한다.
+- 기존 `requiredAgreed: true` / `optionalAgreed` 저장 계약, 필수 미체크·저장 중 버튼 비활성화, 조회·저장·재시도 로직은 유지했다. 새 토큰과 API는 추가하지 않았다.
+
+참고: [토스 TDS AgreementV4](https://tossmini-docs.toss.im/tds-mobile/components/Agreement/v4/)의 항목·필수 여부·설명 계층, [네이버 공개 가입 동의 화면](https://nid.naver.com/account/signup/term?lang=ko_KR)의 항목별 필수/선택 표시, [카카오 공개 가입 동의 화면](https://accounts.kakao.com/weblogin/create_account/?lang=ko#confirmTerm)의 선택 거부 가능 안내를 확인했다. 이 배치 원칙만 참고하고 브랜드 색상·컴포넌트 라이브러리는 기존 것을 사용한다.
+
+약관 전문을 여는 실제 URL·본문은 현재 코드와 동의 API에 없다. 동작하지 않는 `보기` 링크나 새로운 약관 본문을 만들지 않았으며, 전문 연결은 해당 원문·경로가 제공된 뒤 진행할 후속 항목이다.
+
+### 이번 수정의 검증
+
+- build·lint·diff 검사 통과. 기존 chunk 크기 안내 유지.
+- 전체 Playwright 476건 통과. 아래 HTTP 50건과 합쳐 이번 코드의 전체 검증은 **526건 통과**했다. 스크린샷 저장 방식을 전체 화면으로 보완한 뒤 해당 회귀 6건도 다시 통과했다(526건과 중복 집계하지 않음).
+- HTTP 통합 8건, 학부모 HTTP 30건, 관리자 HTTP 12건 통과. 동의 상태·저장 실패·저장 중·선택 변경·새로고침과 문의 분석 전후·추가 문의의 잠금 유지·안내 연결을 확인했다.
+- 실제 Chromium에서 동의 화면의 1440px desktop·375px mobile을 시각 확인하고 320px 가로 넘침을 점검했다. HTTP 회귀에서도 동의 화면은 320/375/620/980/1440px, 잠긴 문의는 320/375/1440px을 확인한다.
+- 동의 전후 화면: `/tmp/issue72-consent-before.png`, `/tmp/issue72-consent-after-desktop.png`, `/tmp/issue72-consent-after-mobile-full.png`. HTTP 화면은 `/tmp/issue72-consent-http-results`, `/tmp/issue72-consent-parent-results`에 보관한다. 최종 모바일 전체 화면은 `/tmp/issue72-consent-final-shots`, `/tmp/issue72-parent-final-shots`에 보관한다.
+- HTTP 검증은 응답 interception 기반이다. 실서버·실기기·화면낭독기 검증은 실행하지 않았다.
+
 ## 수정 파일 목록
 
 - `README.md`
 - `docs/ui-style-improvements.md`
 - `src/App.css`
 - `src/features/admin/AdminPages.css`
+- `src/features/auth/MyPagePanel.css`
+- `src/features/auth/PolicyConsentPanel.tsx`
 - `src/features/message/components/BoardConfirmDialog.tsx`
 - `src/features/message/components/MessageContextCard.tsx`
 - `src/features/message/messages/MessagesPage.base.css`
@@ -185,5 +219,6 @@
 - `tests/auth/ui-review-regressions.spec.ts`
 - `tests/fixtures/common-ui.html`
 - `tests/fixtures/common-ui.tsx`
+- `tests/integration/api-flows.spec.ts`
 - `tests/parent/risk-http.spec.ts`
 - `tsconfig.playwright.json`

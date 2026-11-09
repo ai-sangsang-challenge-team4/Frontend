@@ -95,6 +95,25 @@
   row-gap: 8px;
 }
 
+.parent-write-lock-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-canvas);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.parent-write-lock-notice > svg {
+  flex: 0 0 auto;
+  margin-top: 3px;
+}
+
 .parent-write-field .ui-field-label {
   padding-top: 9px;
   font-size: 24px;
