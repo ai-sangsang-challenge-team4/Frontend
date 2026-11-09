@@ -112,33 +112,23 @@ async function analyze(page: Page) {
 }
 
 test('분석 버튼 곁의 안내는 분석 전후에 유지되고 입력 잠금 조건을 보존한다', async ({ page }, testInfo) => {
-  await setup(page);
+  const calls = await setup(page);
   const notice = page.locator('#parent-message-analysis-description');
-  const noticeText = '분석 시작 후 자녀·문의 대상·제목은 변경할 수 없습니다.';
-  const detailText = 'AI 분석을 시작하면 자녀·문의 대상·제목은 변경할 수 없으며, 문의 내용은 계속 수정할 수 있습니다.';
-  const info = page.getByRole('button', { name: 'AI 분석 변경 제한 안내', exact: true });
-  const detail = page.getByRole('dialog', { name: 'AI 분석 변경 제한 안내', exact: true });
+  const noticeText = 'AI 분석은 문의를 전송하지 않습니다. 분석 시작 후 자녀·문의 대상·제목은 변경할 수 없으며, 문의 내용은 계속 수정할 수 있습니다.';
   const analyzeButton = page.getByRole('button', { name: 'AI 분석 시작', exact: true });
   await expect(notice).toHaveText(noticeText);
   await expect(analyzeButton).toHaveAccessibleDescription(noticeText);
-  await info.focus();
-  await page.keyboard.press('Enter');
-  await expect(detail).toHaveText(detailText);
-  await expect(detail).toBeFocused();
-  await page.keyboard.press('Escape');
-  await expect(detail).toHaveCount(0);
-  await expect(info).toBeFocused();
-  await page.keyboard.press('Space');
-  await expect(detail).toBeVisible();
-  await page.getByRole('heading', { name: '새 문의 작성', exact: true }).click();
-  await expect(detail).toHaveCount(0);
+  await expect(page.getByText(noticeText, { exact: true })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'AI 분석 변경 제한 안내', exact: true })).toHaveCount(0);
   await expect(page.locator('.parent-write-notice')).not.toContainText('AI 분석');
   await expect(page.getByLabel('자녀', { exact: true })).toBeEnabled();
   await expect(page.getByLabel('문의 대상', { exact: true })).toBeEnabled();
   await expect(page.getByLabel('문의 제목', { exact: true })).toBeEditable();
   await analyze(page);
+  expect(calls).not.toContain('POST /complaints/42/send');
   await page.getByRole('button', { name: '문의 작성으로 돌아가기', exact: true }).click();
   await expect(notice).toHaveText(noticeText);
+  await expect(page.getByText(noticeText, { exact: true })).toHaveCount(1);
   await expect(analyzeButton).toHaveAccessibleDescription(noticeText);
   await expect(page.locator('.parent-write-field .ui-field-message')).toHaveCount(0);
   for (const name of ['자녀', '문의 대상', '문의 제목']) {
@@ -150,6 +140,10 @@ test('분석 버튼 곁의 안내는 분석 전후에 유지되고 입력 잠금
   await expect(page.getByLabel('문의 내용', { exact: true })).toBeEditable();
   for (const width of [320, 375, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: 1100 });
+    await page.getByRole('heading', { name: '새 문의 작성', exact: true }).click();
+    await page.evaluate(() => window.scrollTo(0, 0));
+    // Finish the shell's padding transition before measuring responsive geometry.
+    await page.screenshot({ path: testInfo.outputPath(`parent-layout-${width}.png`), fullPage: true, animations: 'disabled' });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await expect.poll(() => page.locator('.parent-write-footer').evaluate((element) => (
       element.getBoundingClientRect().top - document.querySelector('.privacy-masking-notice')!.getBoundingClientRect().bottom
@@ -159,35 +153,16 @@ test('분석 버튼 곁의 안내는 분석 전후에 유지되고 입력 잠금
       button: document.querySelector('.parent-write-analyze')!.getBoundingClientRect().toJSON(),
       save: document.querySelector('.parent-write-save')!.getBoundingClientRect().toJSON(),
     }));
-    if (width <= 620) {
-      expect(layout.note.bottom).toBeLessThanOrEqual(layout.button.top);
-      expect(layout.button.top - layout.note.bottom).toBeLessThanOrEqual(32);
-      expect(layout.save.bottom).toBeLessThanOrEqual(layout.note.top);
-    } else {
-      expect(layout.save.right).toBeLessThanOrEqual(layout.button.left);
-      expect(layout.save.bottom).toBeCloseTo(layout.button.bottom, 0);
+    for (const button of [layout.save, layout.button]) {
+      expect(button.height).toBeGreaterThanOrEqual(44);
+      expect(button.height).toBeLessThanOrEqual(48);
     }
-    await info.click();
-    await expect(detail).toHaveText(detailText);
-    const detailBox = await detail.boundingBox();
-    expect(detailBox!.x).toBeGreaterThanOrEqual(0);
-    expect(detailBox!.x + detailBox!.width).toBeLessThanOrEqual(width);
-    if (width === 375 || width === 1440) {
-      await page.evaluate(() => window.scrollTo(0, 0));
-      await page.screenshot({ path: testInfo.outputPath(`parent-analysis-info-${width}.png`), fullPage: true, animations: 'disabled' });
-    }
-    await page.keyboard.press('Escape');
-    await page.getByRole('heading', { name: '새 문의 작성', exact: true }).click();
-    await page.evaluate(() => window.scrollTo(0, 0));
-    await page.screenshot({ path: testInfo.outputPath(`parent-layout-${width}.png`), fullPage: true, animations: 'disabled' });
-    if (width === 1440) {
-      expect(layout.note.right).toBeLessThanOrEqual(layout.button.left);
-      expect(await notice.evaluate((element) => {
-        const range = document.createRange();
-        range.selectNodeContents(element);
-        return range.getClientRects().length;
-      })).toBe(1);
-    }
+    expect(layout.button.top - layout.note.bottom).toBeGreaterThanOrEqual(12);
+    expect(layout.button.top - layout.note.bottom).toBeLessThanOrEqual(16);
+    expect(layout.button.left - layout.save.right).toBeGreaterThanOrEqual(8);
+    expect(layout.button.left - layout.save.right).toBeLessThanOrEqual(12);
+    expect(layout.save.top).toBeCloseTo(layout.button.top, 0);
+    expect(layout.save.bottom).toBeCloseTo(layout.button.bottom, 0);
   }
   await page.locator('.parent-write-form').screenshot({ path: testInfo.outputPath('parent-locked-fields-desktop.png') });
   await page.setViewportSize({ width: 375, height: 812 });
@@ -206,15 +181,62 @@ test('추가 문의는 분석 여부 대신 기존 대상·제목을 유지하�
 
 test('새 문의의 자녀·대상·제목·내용은 같은 시작선에 표시되고 작은 버튼으로 작성한다', async ({ page }, testInfo) => {
   await setup(page);
+  const title = page.getByLabel('문의 제목', { exact: true });
+  const privacy = page.getByRole('region', { name: '개인정보 마스킹 상태', exact: true });
+  await title.fill('');
+  await expect(privacy).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('parent-empty.png'), fullPage: true, animations: 'disabled' });
+  await title.fill('HTTP 분석 확인');
+  await expect(privacy).toContainText('탐지된 전화번호·이메일·주민등록번호가 없습니다.');
+  await expect(privacy).not.toHaveClass(/has-personal-info|is-failed/);
+  await expect(privacy).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await expect(privacy).toHaveCSS('border-top-width', '0px');
+  await page.screenshot({ path: testInfo.outputPath('parent-privacy-neutral.png'), fullPage: true, animations: 'disabled' });
+  await page.getByLabel('문의 내용', { exact: true }).fill(body);
+  await expect(privacy).toHaveClass(/has-personal-info/);
+  await expect(privacy).toContainText('1건 마스킹');
+  await privacy.getByText('마스킹 결과 보기', { exact: true }).click();
+  await expect(privacy.locator('.privacy-masking-preview p')).toBeVisible();
+  await expect(privacy).not.toContainText('010-1234-5678');
+  await privacy.getByText('마스킹 결과 보기', { exact: true }).click();
   await expect(page.getByLabel('자녀', { exact: true })).toBeEnabled();
   await expect(page.locator('.parent-write-field .ui-field-control')).toHaveCount(4);
-  for (const width of [1440, 1240, 980, 620, 375, 320]) {
+  for (const width of [1440, 1240, 1024, 980, 820, 768, 620, 375, 320]) {
     await page.setViewportSize({ width, height: 900 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({ path: testInfo.outputPath(`parent-form-${width}.png`), fullPage: true, animations: 'disabled' });
     const starts = await page.locator('.parent-write-field .ui-field-control').evaluateAll((controls) => controls.map((control) => {
       const style = getComputedStyle(control);
       return control.getBoundingClientRect().left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft);
     }));
     expect(Math.max(...starts) - Math.min(...starts), `${width}px input text alignment`).toBeLessThanOrEqual(1);
+    const geometry = await page.locator('.parent-write-form').evaluate((element) => ({
+      fields: Array.from(element.querySelectorAll('.parent-write-field')).map((field) => ({
+        label: field.querySelector('.ui-field-label')!.getBoundingClientRect().toJSON(),
+        control: field.querySelector('.ui-field-control')!.getBoundingClientRect().toJSON(),
+        shell: field.querySelector('.ui-input-shell, .ui-select-shell, .ui-textarea-control')!.getBoundingClientRect().toJSON(),
+      })),
+      body: element.querySelector('.parent-write-body')!.getBoundingClientRect().toJSON(),
+      privacy: element.querySelector('.privacy-masking-notice')!.getBoundingClientRect().toJSON(),
+      analyze: element.querySelector('.parent-write-analyze')!.getBoundingClientRect().toJSON(),
+      form: element.getBoundingClientRect().toJSON(),
+    }));
+    for (const field of geometry.fields) {
+      if (width > 820) {
+        expect(field.label.width).toBeGreaterThanOrEqual(140);
+        expect(field.label.width).toBeLessThanOrEqual(160);
+        expect(field.shell.left - field.label.right).toBeCloseTo(24, 0);
+      } else {
+        expect(field.label.bottom).toBeLessThanOrEqual(field.control.top);
+      }
+    }
+    for (const field of geometry.fields.slice(0, 3)) {
+      if (width > 820) expect(field.label.y + field.label.height / 2).toBeCloseTo(field.control.y + field.control.height / 2, 0);
+    }
+    expect(geometry.fields[3].control.height).toBe(width > 820 ? 224 : 200);
+    expect(geometry.privacy.top - geometry.body.bottom).toBe(16);
+    expect(geometry.privacy.left).toBeCloseTo(geometry.body.left + (width > 820 ? (width > 1240 ? 160 : 140) + 24 : 0), 0);
+    expect(geometry.analyze.right).toBeCloseTo(geometry.form.right, 0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
   await page.getByRole('heading', { name: '새 문의 작성', exact: true }).click();

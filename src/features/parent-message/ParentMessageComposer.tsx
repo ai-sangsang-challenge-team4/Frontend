@@ -3,7 +3,7 @@ import { ChevronDown, Info, LockKeyhole, Save, Send } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import analysisIllustration from '../../shared/assets/parent/message-analysis.svg';
 import { getApiErrorMessage, isApiError } from '../../shared/api';
-import { Accordion, Button, EmptyState, Popover, Select, TextareaField, TextField, Toast } from '../../shared/components/ui';
+import { Accordion, Button, EmptyState, Select, TextareaField, TextField, Toast } from '../../shared/components/ui';
 import { COMPLAINT_TITLE_MAX_LENGTH, parentComplaintApi, parentMessageApiMode } from './api/parentComplaintApi';
 import {
   findSentMessage, mockConnectedTeachers, readMessageDraft, readMessageDrafts, saveMessageDraft,
@@ -377,10 +377,9 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
 
   const analysisNotice = threadId
     ? '추가 문의는 기존 문의의 대상과 제목을 그대로 사용합니다. 이어서 전달할 내용을 작성해 주세요.'
-    : isServer ? '분석 시작 후 자녀·문의 대상·제목은 변경할 수 없습니다.' : undefined;
-  const analysisDetail = isServer && !threadId
-    ? 'AI 분석을 시작하면 자녀·문의 대상·제목은 변경할 수 없으며, 문의 내용은 계속 수정할 수 있습니다.' : undefined;
-  const analysisDescriptionId = analysisNotice ? 'parent-message-analysis-description' : undefined;
+    : isServer ? 'AI 분석은 문의를 전송하지 않습니다. 분석 시작 후 자녀·문의 대상·제목은 변경할 수 없으며, 문의 내용은 계속 수정할 수 있습니다.'
+      : 'AI 분석은 문의를 전송하지 않습니다. 분석 결과를 확인한 뒤 전송할 수 있습니다.';
+  const analysisDescriptionId = 'parent-message-analysis-description';
   const childHelper = serverLocked ? undefined
     : children.isLoading ? '자녀 정보를 불러오고 있어요.'
       : children.error ? <>{getApiErrorMessage(children.error, '자녀 정보를 불러오지 못했어요.')} <button className="parent-write-retry" onClick={children.retry} type="button">다시 시도</button></>
@@ -453,7 +452,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
               <TextareaField containerClassName="parent-write-field parent-write-body" error={errors.body}
                 id="parent-message-body" label="문의 내용" maxLength={MESSAGE_MAX_LENGTH} name="body"
                 onChange={(event) => updateField('body', event.target.value)}
-                placeholder={threadId ? '추가로 문의할 내용을 작성해 주세요.' : '선생님께 전달할 문의 내용을 작성해 주세요.'} required rows={10} value={draft.body} />
+                placeholder={threadId ? '추가로 문의할 내용을 작성해 주세요.' : '선생님께 전달할 문의 내용을 작성해 주세요.'} required rows={6} value={draft.body} />
               {maskingFailed || draft.body.trim() || draft.title.trim() ? (
                 <PrivacyMaskingNotice
                   onRetry={() => handleAnalyze()}
@@ -462,20 +461,14 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
                 />
               ) : null}
               <div className="parent-write-footer">
+                <div className="parent-write-analysis-note">
+                  {threadId ? <LockKeyhole aria-hidden="true" size={18} /> : <Info aria-hidden="true" size={18} />}
+                  <p id={analysisDescriptionId}>{analysisNotice}</p>
+                </div>
                 <div className="parent-write-actions">
                   <Button className="parent-write-save" leftIcon={<Save size={18} />} onClick={handleSaveDraft} size="md" variant="outline">임시저장</Button>
-                  <div className="parent-write-analysis-action">
-                    {analysisNotice ? <div className="parent-write-analysis-note">
-                      {threadId ? <LockKeyhole aria-hidden="true" size={18} /> : null}
-                      <p id={analysisDescriptionId}>{analysisNotice}</p>
-                      {analysisDetail ? <Popover ariaLabel="AI 분석 변경 제한 안내" className="parent-write-analysis-info"
-                        placement="top-end" trigger={<Info aria-hidden="true" size={18} />} triggerClassName="ui-information-trigger">
-                        <p>{analysisDetail}</p>
-                      </Popover> : null}
-                    </div> : null}
-                    <Button aria-describedby={analysisDescriptionId} className="parent-write-analyze" disabled={teacherOptions.length === 0 || maskingFailed}
-                      leftIcon={<Send size={18} />} size="md" type="submit">AI 분석 시작</Button>
-                  </div>
+                  <Button aria-describedby={analysisDescriptionId} className="parent-write-analyze" disabled={teacherOptions.length === 0 || maskingFailed}
+                    leftIcon={<Send size={18} />} size="md" type="submit">AI 분석 시작</Button>
                 </div>
               </div>
             </form>
