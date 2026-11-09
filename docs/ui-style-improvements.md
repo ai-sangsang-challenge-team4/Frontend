@@ -89,7 +89,7 @@
 
 - 공통 md shell 규칙과 페이지 textarea 규칙의 우선순위 차이로 텍스트 시작선에 **40px 차이**가 발생했다. 수정 전 회귀 테스트에서 이를 재현했다.
 - 페이지의 `--parent-field-inset`을 기존 spacing token에 연결해 Select·TextField·Textarea의 좌우 시작선을 통일했다. 기본은 `--space-6`(24px), 620px 이하에서는 `--space-4`(16px)이다.
-- 이 화면의 기본 테두리는 `--color-border-default`(#a2a2a2), hover는 `--color-border-control`(#888888)을 재사용했다. 기존 shadow를 유지하고 focus의 brand 경계·shadow와 오류의 readable danger 표시를 보존한다. 전역 토큰 값은 변경하지 않았다.
+- 이 화면의 기본 테두리는 `--color-border-default`(#a2a2a2), hover는 `--color-border-control`(#888888)을 재사용했다. 당시 기존 shadow를 유지했으며, 아래 추가 피드백에서 평상시 shadow를 제거했다. focus의 brand 경계·shadow와 오류의 readable danger 표시를 보존한다. 전역 토큰 값은 변경하지 않았다.
 - 임시저장·AI 분석 버튼은 공통 `size="md"`(47px/16px)를 사용한다. 67px 높이·24px 글자·208/217px 최소 폭의 페이지 override를 제거하고 아이콘을 18px로 맞췄다. 모바일도 44px 이상의 조작 영역을 유지한다.
 - 자녀 선택을 포함한 HTTP 4개 field와 mock 작성 화면을 320~1440px에서 점검했다. 자동 측정으로 텍스트 시작선 차이가 1px 이내인지, 버튼이 기본 높이를 유지하는지, 가로 넘침이 없는지 확인한다.
 
@@ -128,6 +128,15 @@
 | build·lint·diff 검사 | 통과 (기존 chunk 크기 안내 유지) |
 
 위 변경은 공통 UI 상호작용과 로그인 표시 문구에 한정했다. 이전에 조정한 학부모 입력 정렬·테두리·버튼 크기와 위험 판정·권한·API·safetyLock·전송 정책은 유지한다.
+
+## 학부모 입력창 그림자 추가 피드백
+
+- 실제 Chromium에서 TextField·Select·Textarea에 `#a2a2a2` 테두리와 `--shadow-sm`(검정 10%, blur 10px)이 함께 적용되는 것을 확인했다. 앞선 색상 조정 후에도 테두리 바깥이 어두워 보인 원인이다.
+- DESIGN.md 5장의 면·구분선 우선 원칙에 따라 학부모 작성·추가 문의 입력창의 평상시 그림자를 제거했다. 기본 테두리 `#a2a2a2`, hover `#888888`, focus의 브랜드 경계·3px ring, 오류색, disabled 배경은 유지한다.
+- 전역 `ui-input-shell`이나 그림자 토큰 값은 변경하지 않았다. 다른 역할 화면과 카드·Modal·Popover의 그림자에는 영향을 주지 않는다. 추가한 디자인 토큰은 없다.
+- `/browse`로 1440px desktop과 375px mobile 화면을 확인했다. 세 입력 유형 모두 기본 `box-shadow: none`, focus는 `#3b5bdb`·3px ring, hover는 `#888888`·그림자 없음으로 확인했다. 320px·375px에서 가로 넘침과 console error가 없었다.
+- 비교 화면은 `/tmp/issue72-flat-input-before.png`, `/tmp/issue72-flat-input-after.png`, `/tmp/issue72-flat-input-mobile.png`에 보관했다. 기존 입력 정렬·버튼 크기를 유지한다.
+- 이번 추가 수정 후 build·lint·diff 검사가 통과했다. 공통 UI·리뷰 회귀·학부모 작성/내역/검토/API Playwright **146건**, 학부모 HTTP **26건**, 합계 **172건**이 통과했다. 앞 절의 전체 522건은 그림자 제거 전 결과이며, 이번에는 영향 범위의 기존 테스트를 재실행했다.
 
 ## 수정 파일 목록
 

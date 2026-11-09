@@ -107,7 +107,7 @@
   min-height: 52px;
   padding: 0 var(--parent-field-inset);
   border-color: var(--color-border-default);
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
 }
 
 .parent-write-field.ui-field:where(:not(.is-invalid):not(.is-disabled)) .ui-input-shell:hover:not(:focus-within),
@@ -168,7 +168,7 @@
   min-height: 316px;
   padding: var(--space-6) var(--parent-field-inset);
   border: var(--border-default);
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
   resize: vertical;
 }
 
