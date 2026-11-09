@@ -202,6 +202,25 @@
 
 키보드 테스트는 실제 Tab 이동으로 focus-visible을 확인한다. 화면 폭 전환 시 간격은 기존 shell padding transition이 끝날 때까지 기다린 뒤 같은 frame에서 측정한다. 최종 전체 로그는 `/tmp/issue72-disclosure-auth-verified.log`, HTTP 로그는 `/tmp/issue72-disclosure-{integration,http,admin}.log`에 보관한다. 실서버·실기기·화면낭독기 검증은 실행하지 않았다.
 
+## 작성 화면 간격·배경·반응형 세부 조정
+
+이번 조정의 실제 UI 변경은 `ParentMessageComposer.css` 한 파일에 한정했다. HTML·TSX·문구·공통 Accordion·입력/임시저장/AI/마스킹/API 로직은 변경하지 않았다.
+
+| 요청 | 적용 및 확인 |
+| --- | --- |
+| 아코디언과 폼 구분 | 폼 위 margin을 desktop/tablet `--space-8`(32px), 620px 이하 `--space-6`(24px)로 적용 |
+| 하나의 카드 표현 | 카드·Panel을 기존 canvas `#f8f8f8`로 통일. 1px divider·8px radius 유지, 펼치면 Trigger는 위쪽·Panel은 아래쪽 모서리를 담당 |
+| Hover 범위 | Trigger만 기존 primary-subtle `#ebeffb`로 강조. Panel은 hover 중에도 canvas 유지. 기존 common focus·expanded 아이콘 동작 유지 |
+| 모바일 헤더 | 작성 main과 인접한 헤더만 선택해 620px 이하에서 제목/crumb를 세로 배치하고 gap 12px 적용. 621~820px 행 배치 gap은 16px. 다른 검토·전송 완료 헤더와 1024/1440px desktop 헤더는 유지 |
+| AI 안내 줄바꿈 | 원인인 `max-width:65ch`를 제거하고 Grid 행 전체 폭을 사용. desktop은 flex-end 정렬, 모바일은 start 정렬. nowrap·생략 없이 여유 폭에 따라 줄바꿈 |
+
+실제 Chromium에서 펼친 카드-폼 gap 32px, 모바일 제목-crumb gap 12px·카드-폼 24px·가로 넘침 없음을 확인했다. Trigger hover는 `#ebeffb`, Panel은 `#f8f8f8`로 측정했다. HTTP 화면은 375/768/1024/1440px에서 시각 확인했고, 1440px AI 설명 한 줄은 텍스트 Range로 자동 검증한다. 모바일은 자연스럽게 줄바꿈하며 버튼과 겹치지 않는다.
+
+- 이번 실행: build·lint·diff 검사 통과, 관련 인증/UI Playwright **148건** + 학부모 HTTP **30건** = **178건 통과**. 전체 528건은 직전 구조 개선의 결과이며 이번 CSS 조정 후 전체를 재실행하지 않았다.
+- 기존 헤더 테스트를 모바일 세로/desktop 행 배치 기준으로 갱신했고, 같은 frame에서 좌표를 측정한다. 기존 HTTP 회귀의 화면 폭과 스크린샷 범위를 확장했다. 테스트 추가·새 토큰·공통 컴포넌트 변경은 없다.
+- 비교 화면: `/tmp/issue72-spacing-before-1440.png`, `/tmp/issue72-spacing-after-1440.png`, `/tmp/issue72-spacing-after-expanded-1440.png`, `/tmp/issue72-spacing-after-375.png`.
+- 네 폭의 최종 HTTP 화면: `/tmp/issue72-spacing-after-{375,768,1024,1440}-http.png`. 로그는 `/tmp/issue72-spacing-{build,lint,auth,after}.log`, 회귀 artifact는 `/tmp/issue72-spacing-auth-results`, `/tmp/issue72-spacing-after-results`에 보관한다. HTTP는 응답 interception 기반이며 실서버·실기기 검증은 실행하지 않았다.
+
 ## 수정 파일 목록
 
 - `README.md`

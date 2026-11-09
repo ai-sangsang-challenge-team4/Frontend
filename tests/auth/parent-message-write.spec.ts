@@ -87,25 +87,33 @@ test('학부모 홈과 잘못된 경로는 새 문의로 연결되고 새 문의
   await expect(page).toHaveURL(/\/parent\/messages\/new$/);
 });
 
-test('320px 화면에서도 제목과 breadcrumb가 헤더 안에 겹치지 않고 표시된다', async ({ page }, testInfo) => {
+test('작성 헤더는 모바일에서 제목과 breadcrumb를 나누고 데스크톱 한 줄 배치를 유지한다', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 320, height: 720 });
   await openComposer(page);
   const header = page.locator('.parent-write-header');
-  const heading = page.locator('.parent-write-heading');
   const breadcrumb = page.getByRole('navigation', { name: '현재 위치', exact: true });
   const currentPage = breadcrumb.locator('[aria-current="page"]');
   await expect(currentPage).toHaveText('새 문의 작성');
   await expect(currentPage).toHaveCSS('text-overflow', 'ellipsis');
 
-  for (const width of [320, 375, 620]) {
+  for (const width of [320, 375, 620, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: 720 });
-    const headerBox = (await header.boundingBox())!;
-    const headingBox = (await heading.boundingBox())!;
-    const breadcrumbBox = (await breadcrumb.boundingBox())!;
-    expect(breadcrumbBox.x).toBeGreaterThanOrEqual(headingBox.x + headingBox.width);
+    const { headerBox, headingBox, breadcrumbBox } = await header.evaluate((element) => ({
+      headerBox: element.getBoundingClientRect().toJSON(),
+      headingBox: element.querySelector('.parent-write-heading')!.getBoundingClientRect().toJSON(),
+      breadcrumbBox: element.querySelector('.parent-write-breadcrumb')!.getBoundingClientRect().toJSON(),
+    }));
+    if (width <= 620) {
+      const gap = breadcrumbBox.y - (headingBox.y + headingBox.height);
+      expect(gap).toBeGreaterThanOrEqual(12);
+      expect(gap).toBeLessThanOrEqual(16);
+      expect(breadcrumbBox.x).toBeCloseTo(headingBox.x, 0);
+    } else {
+      expect(breadcrumbBox.x).toBeGreaterThanOrEqual(headingBox.x + headingBox.width + 12);
+      expect(breadcrumbBox.y).toBeLessThan(headingBox.y + headingBox.height);
+      expect(breadcrumbBox.y + breadcrumbBox.height).toBeGreaterThan(headingBox.y);
+    }
     expect(breadcrumbBox.x + breadcrumbBox.width).toBeLessThanOrEqual(headerBox.x + headerBox.width + 1);
-    expect(breadcrumbBox.y).toBeLessThan(headingBox.y + headingBox.height);
-    expect(breadcrumbBox.y + breadcrumbBox.height).toBeGreaterThan(headingBox.y);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   }
   await page.setViewportSize({ width: 320, height: 720 });

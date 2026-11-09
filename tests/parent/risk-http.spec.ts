@@ -134,7 +134,7 @@ test('분석 버튼 곁의 안내는 분석 전후에 유지되고 입력 잠금
   await expect(page.getByLabel('문의 대상', { exact: true })).toBeDisabled();
   await expect(page.getByLabel('문의 제목', { exact: true })).toHaveAttribute('readonly', '');
   await expect(page.getByLabel('문의 내용', { exact: true })).toBeEditable();
-  for (const width of [320, 375, 1440]) {
+  for (const width of [320, 375, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: 1100 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     // Wait for the shell's padding transition and measure both elements in one frame.
@@ -142,6 +142,15 @@ test('분석 버튼 곁의 안내는 분석 전후에 유지되고 입력 잠금
       const button = document.querySelector('.parent-write-analyze')!;
       return button.getBoundingClientRect().top - element.getBoundingClientRect().bottom;
     })).toBeLessThanOrEqual(16);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({ path: testInfo.outputPath(`parent-layout-${width}.png`), fullPage: true, animations: 'disabled' });
+    if (width === 1440) {
+      expect(await notice.locator('span').evaluate((element) => {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        return range.getClientRects().length;
+      })).toBe(1);
+    }
   }
   await page.locator('.parent-write-form').screenshot({ path: testInfo.outputPath('parent-locked-fields-desktop.png') });
   await page.setViewportSize({ width: 375, height: 812 });
