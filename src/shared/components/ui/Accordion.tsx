@@ -82,7 +82,7 @@ export function Accordion({
           >
             <h3 className="ui-accordion-heading">
               <button
-                aria-controls={contentId}
+                aria-controls={isOpen ? contentId : undefined}
                 aria-expanded={isOpen}
                 className="ui-accordion-trigger"
                 disabled={item.disabled}

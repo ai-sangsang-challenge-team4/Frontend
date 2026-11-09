@@ -339,7 +339,11 @@ test('여러 임시저장을 구분하고 모달을 닫거나 이어서 작성�
   await expect(page.locator('.parent-draft-row')).toHaveCount(3);
   await page.getByRole('button', { name: /첫 번째 작성 중/ }).click();
   dialog = page.getByRole('dialog', { name: '작성 중인 문의가 있어요.', exact: true });
-  await dialog.getByRole('button', { name: '이어서 작성', exact: true }).click();
+  const continueDraft = dialog.getByRole('button', { name: '이어서 작성', exact: true });
+  await continueDraft.hover();
+  await expect(continueDraft).toHaveCSS('color', 'rgb(59, 91, 219)');
+  await expect(continueDraft).toHaveCSS('background-color', 'rgb(235, 239, 251)');
+  await continueDraft.click();
   await expect(page.getByLabel('문의 내용', { exact: true })).toHaveValue('첫 번째 임시저장 내용');
   await page.goto('/parent/messages?tab=drafts');
   await page.getByRole('button', { name: /방과후 출결 확인/ }).click();
@@ -478,5 +482,5 @@ test('문의 내역, 상세, 추가 문의, 새 문의의 헤더 위치가 같�
     await expect.poll(headerPosition).toEqual({ x: 200, y: expected.y });
   }
   await page.goto('/parent/messages/new');
-  await expect(page.locator('.parent-write-notice-heading svg')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^문의 작성 시 유의사항/ })).toHaveAttribute('aria-expanded', 'false');
 });

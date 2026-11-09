@@ -39,6 +39,9 @@ export function Dropdown({
   value,
 }: DropdownProps) {
   const menuId = useId();
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const initialEdge = useRef<'first' | 'last'>('first');
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [internalValue, setInternalValue] = useState(defaultValue ?? '');
@@ -55,18 +58,15 @@ export function Dropdown({
         setIsOpen(false);
       }
     };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsOpen(false);
-      }
-    };
+    const enabled = menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]:not(:disabled)');
+    const selected = menuRef.current?.querySelector<HTMLButtonElement>('[aria-selected="true"]:not(:disabled)');
+    const target = selected ?? (initialEdge.current === 'last' ? enabled?.[enabled.length - 1] : enabled?.[0]);
+    (target ?? menuRef.current)?.focus();
 
     document.addEventListener('pointerdown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
 
     return () => {
       document.removeEventListener('pointerdown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
     };
   }, [isOpen]);
 
@@ -80,6 +80,7 @@ export function Dropdown({
     }
 
     setIsOpen(false);
+    triggerRef.current?.focus();
     onValueChange?.(option.value, option);
   };
 
@@ -92,6 +93,30 @@ export function Dropdown({
         className,
       )}
       ref={rootRef}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsOpen(false);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && isOpen) {
+          event.preventDefault();
+          event.stopPropagation();
+          setIsOpen(false);
+          triggerRef.current?.focus();
+        }
+        if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        if (!isOpen) {
+          initialEdge.current = event.key === 'ArrowUp' || event.key === 'End' ? 'last' : 'first';
+          setIsOpen(true);
+          return;
+        }
+        const enabled = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]:not(:disabled)') ?? []);
+        if (!enabled.length) return;
+        const index = enabled.indexOf(document.activeElement as HTMLButtonElement);
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? enabled.length - 1 :
+          (index + (event.key === 'ArrowUp' ? -1 : 1) + enabled.length) % enabled.length;
+        enabled[next].focus();
+      }}
     >
       <button
         aria-controls={isOpen ? menuId : undefined}
@@ -100,7 +125,8 @@ export function Dropdown({
         aria-label={ariaLabel}
         className="ui-dropdown-button"
         disabled={disabled}
-        onClick={() => setIsOpen((current) => !current)}
+        onClick={() => { initialEdge.current = 'first'; setIsOpen((current) => !current); }}
+        ref={triggerRef}
         type="button"
       >
         <span className="ui-dropdown-value">
@@ -110,10 +136,12 @@ export function Dropdown({
       </button>
       {isOpen ? (
         <div
-          aria-label={menuLabel}
+          aria-label={menuLabel ?? ariaLabel}
           className="ui-dropdown-menu"
           id={menuId}
+          ref={menuRef}
           role="listbox"
+          tabIndex={-1}
         >
           {options.map((option) => (
             <button
@@ -126,6 +154,7 @@ export function Dropdown({
               key={option.value}
               onClick={() => handleSelect(option)}
               role="option"
+              tabIndex={-1}
               type="button"
             >
               <span>{option.label}</span>

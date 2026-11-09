@@ -92,6 +92,15 @@ test('AI 수정본을 복원하고 개인정보를 재검사한 최종 문장을
 
   const reviewUrl = page.url();
   const dialog = await confirmSend(page);
+  await expect(dialog.locator('.parent-review-preview-meta')).toContainText('아이의 학교생활 상담 요청');
+  await expect(dialog.locator('.parent-review-preview-body')).toHaveText('선생님, 이번 주 상담이 가능한지 문의드립니다. 연락처는 [전화번호]이고 이메일은 [이메일]입니다.');
+  await expect(dialog).toContainText('전송 후에는 문의를 수정하거나 삭제할 수 없습니다.');
+  await dialog.getByRole('button', { name: '취소', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByLabel('AI 초안 내용', { exact: true })).toHaveValue(edited);
+  expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? '[]').length, sentKey)).toBe(0);
+  await confirmSend(page);
+  await expect(dialog.locator('.parent-review-preview-body')).toContainText('[전화번호]');
   await page.screenshot({ path: testInfo.outputPath('parent-review-confirm.png'), fullPage: true });
   await dialog.getByRole('button', { name: '확인 후 전송', exact: true }).evaluate((button) => {
     (button as HTMLButtonElement).click();

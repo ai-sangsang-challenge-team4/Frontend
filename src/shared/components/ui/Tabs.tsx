@@ -106,7 +106,7 @@ export function Tabs({
 
           return (
             <button
-              aria-controls={panelId}
+              aria-controls={isActive && item.content !== undefined ? panelId : undefined}
               aria-selected={isActive}
               className={classNames('ui-tabs-trigger', isActive && 'is-active')}
               disabled={item.disabled}

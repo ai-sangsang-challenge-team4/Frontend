@@ -77,7 +77,7 @@
 .parent-review-risk-excerpt mark {
   padding: 1px 2px;
   border-radius: 2px;
-  background: #fff180;
+  background: var(--color-highlight);
   color: inherit;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
@@ -94,8 +94,8 @@
   gap: 16px;
   margin-top: 20px;
   padding: 0 12px;
-  color: var(--color-border-default);
-  font-size: 16px;
+  color: var(--color-text-muted-readable);
+  font-size: var(--font-size-body);
   line-height: 24px;
 }
 
@@ -115,8 +115,8 @@
 .parent-review-reset,
 .parent-review-risk-toggle {
   display: grid;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   flex: 0 0 auto;
   place-items: center;
   border-radius: var(--radius-xs);
@@ -246,7 +246,7 @@
   margin-top: 32px;
   padding: 24px;
   border: var(--divider-default);
-  border-radius: 12px;
+  border-radius: var(--radius-panel);
   color: var(--color-text-secondary);
   line-height: 1.6;
   overflow-wrap: anywhere;
@@ -288,7 +288,7 @@
 }
 
 .parent-review-preview-meta dt {
-  color: var(--color-text-muted);
+  color: var(--color-text-muted-readable);
 }
 
 .parent-review-preview-meta dd {

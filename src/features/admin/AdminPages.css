@@ -70,7 +70,7 @@
 }
 
 .admin-process-updated {
-  color: var(--color-text-muted);
+  color: var(--color-text-muted-readable);
   font-size: 14px;
   white-space: nowrap;
 }
@@ -89,9 +89,9 @@
   align-items: center;
   gap: 10px;
   padding: 12px 14px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--color-bg-canvas);
-  color: var(--color-text-muted);
+  color: var(--color-text-muted-readable);
   font-size: 15px;
   font-weight: 500;
 }
@@ -167,14 +167,14 @@
 
 .admin-process-result strong {
   margin-right: 8px;
-  color: var(--color-text-muted);
+  color: var(--color-text-muted-readable);
   font-weight: 500;
 }
 
 .board-risk-workflow-panel > p.admin-attachments,
 .admin-message-notice {
   margin: 0;
-  color: var(--color-text-muted);
+  color: var(--color-text-muted-readable);
   font-size: 14px;
   line-height: 20px;
 }
@@ -208,7 +208,7 @@
   padding: 16px 20px;
   border: 1px solid var(--color-border-default);
   border-left: 4px solid var(--color-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   color: var(--color-text-secondary);
   font-size: 14px;
   line-height: 22px;
@@ -259,3 +259,8 @@
     align-items: stretch;
   }
 }
+
+.admin-emergency-link { transition: background-color var(--transition-control), border-color var(--transition-control); }
+.admin-emergency-link:hover { background: var(--color-bg-canvas); border-color: var(--color-border-control); }
+.admin-detail .board-activity-list time { font-variant-numeric: tabular-nums; }
+.admin-reason-text, .admin-message-text { overflow-wrap: anywhere; }
