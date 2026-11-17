@@ -1,29 +1,92 @@
-.teacher-admin-share-list .status-row {
-  display: grid;
-  min-height: 112px;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 20px;
-  padding: 20px 16px;
+.teacher-admin-share-panel {
+  min-width: 0;
 }
 
-.teacher-admin-share-list .status-row > div {
-  gap: 12px;
-}
-
-.teacher-admin-share-list .status-row h2,
-.teacher-admin-share-list .status-row p {
+.teacher-admin-share-notice {
   margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 15px;
+  line-height: 22px;
+  word-break: keep-all;
   overflow-wrap: anywhere;
 }
 
-@media (max-width: 640px) {
-  .teacher-admin-share-list .status-row {
+.teacher-admin-share-tabs .ui-tabs-list {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.teacher-admin-share-panel .board-toolbar {
+  margin: var(--space-5) 0 var(--space-6);
+}
+
+.teacher-admin-share-search {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  gap: var(--space-3);
+}
+
+.teacher-admin-share-search .ui-button {
+  flex-shrink: 0;
+}
+
+.teacher-admin-share-search .board-search-field {
+  width: auto;
+  flex: 1 1 0%;
+}
+
+.teacher-admin-share-link .board-risk-badge {
+  flex-shrink: 0;
+}
+
+.teacher-admin-share-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  margin-top: var(--space-6);
+}
+
+.teacher-admin-share-pagination > span {
+  font-variant-numeric: tabular-nums;
+}
+
+.teacher-admin-share-row {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.teacher-admin-share-link {
+  grid-template-columns: minmax(0, 1fr) minmax(140px, auto) auto;
+  gap: var(--space-6);
+  padding: var(--space-4);
+  text-decoration: none;
+}
+
+.teacher-admin-share-link:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+.teacher-admin-share-link .board-thread-time {
+  text-align: right;
+}
+
+@media (max-width: 980px) {
+  .teacher-admin-share-tabs .ui-tabs-list {
+    height: auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .teacher-admin-share-link {
     grid-template-columns: minmax(0, 1fr);
-    gap: 16px;
-    padding: 16px;
+    gap: var(--space-3);
   }
 
-  .teacher-admin-share-list .status-row > .ui-status-chip {
-    justify-self: start;
+  .teacher-admin-share-link .board-thread-time {
+    text-align: left;
+    white-space: normal;
   }
 }

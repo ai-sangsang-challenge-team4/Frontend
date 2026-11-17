@@ -245,19 +245,51 @@ export type TeacherHistoryResponse = {
   events: HistoryEvent[];
 };
 
-// ---- Mock only: no endpoint in the spec ----
-
-// "My shared complaints" list on /teacher/admin-share. The backend has no endpoint for it yet.
-export type MockTeacherEscalation = {
+// GET /teacher/escalations and /teacher/escalations/{escalationId}.
+export type TeacherEscalationSummaryResponse = {
+  // Numeric over HTTP; the mock adapter preserves inbox thread IDs.
   complaintId: ComplaintId;
+  complaintTitle: string;
+  studentName: string;
+  assignedAdminName: string;
+  reason: string;
+  sharedScopes: EscalationScope[];
   escalationId: number;
   escalationStatus: EscalationStatus;
+  currentRiskScore: number;
+  currentRiskLevel: RiskLevel;
+  emergencyReviewRequestId: number | null;
+  riskReviewStatus: RiskReviewStatus | null;
+  safetyLock: boolean;
   sharedAt: string;
-  title: string;
+  reviewStartedAt: string | null;
+  completedAt: string | null;
+};
+
+export type TeacherEscalationListQuery = {
+  // Zero-based; the backend fixes the page size at 10.
+  page?: number;
+  // Complaint title or student name, up to 100 characters.
+  keyword?: string;
+  status?: EscalationStatus;
+  riskLevel?: RiskLevel;
+};
+
+export type TeacherEscalationPageResponse = {
+  content: TeacherEscalationSummaryResponse[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+  first: boolean;
+  last: boolean;
+  hasNext: boolean;
+  hasPrevious: boolean;
 };
 
 // What the mock server would already know about a complaint. The HTTP adapter never sends it.
 export type EscalationComplaintSnapshot = {
+  studentName?: string;
   detectedFactors: DetectedFactor[];
   maskedMessages: ConversationMessage[];
   originalMessages: ConversationMessage[];

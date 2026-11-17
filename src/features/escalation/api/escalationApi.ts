@@ -19,6 +19,7 @@ export const {
   shareEscalation,
   submitRiskReview,
   listMyEscalations,
+  getMyEscalation,
   listAdminEscalations,
   getAdminEscalation,
   getAdminEscalationMessages,

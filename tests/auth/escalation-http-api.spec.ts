@@ -74,6 +74,34 @@ test('교사 공유 상태 조회와 공유 요청은 스펙 경로·본문으�
   expect(JSON.parse(String(calls[1].init.body))).toEqual({ adminId: null, reason: '공동 검토 필요', scopes: ['MASKING_MESSAGES'] });
 });
 
+test('교사 공유 내역은 서버 페이지와 검색·상태·위험도 조건을 사용한다', async () => {
+  const page = {
+    content: [{ escalationId: 3, complaintId: 12, complaintTitle: '공동 검토 요청', escalationStatus: 'UNDER_REVIEW' }],
+    page: 2, size: 10, totalElements: 21, totalPages: 3,
+    first: false, last: true, hasNext: false, hasPrevious: true,
+  };
+  mockFetch(() => json(200, page));
+  await expect(httpEscalationApi.listMyEscalations({
+    page: 2, keyword: '김학생', status: 'UNDER_REVIEW', riskLevel: 'HIGH',
+  })).resolves.toEqual(page);
+  const url = new URL(calls[0].url);
+  expect(url.pathname).toBe('/teacher/escalations');
+  expect(Object.fromEntries(url.searchParams)).toEqual({ page: '2', keyword: '김학생', status: 'UNDER_REVIEW', riskLevel: 'HIGH' });
+  expect(new Headers(calls[0].init.headers).get('Authorization')).toBe('Bearer jwt');
+  expect(calls[0].init.method).toBe('GET');
+});
+
+test('교사 공유 건 조회는 escalationId를 사용하고 접근 거부를 그대로 전달한다', async () => {
+  mockFetch((call) => call.url.endsWith('/3')
+    ? json(200, { escalationId: 3, complaintId: 12, complaintTitle: '공동 검토 요청' })
+    : json(403, { code: 'ESCALATION_ACCESS_DENIED', message: '본인이 공유하지 않은 공유 건에는 접근할 수 없습니다.' }));
+  await expect(httpEscalationApi.getMyEscalation(3)).resolves.toMatchObject({ complaintId: 12 });
+  await expect(httpEscalationApi.getMyEscalation(4)).rejects.toMatchObject({ status: 403 });
+  expect(calls.map((call) => call.url)).toEqual([
+    'https://api.test/teacher/escalations/3', 'https://api.test/teacher/escalations/4',
+  ]);
+});
+
 test('숫자 complaintId가 아니면 서버로 요청을 보내지 않는다', async () => {
   mockFetch(() => json(200, state));
 

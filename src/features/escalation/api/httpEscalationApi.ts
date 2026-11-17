@@ -8,6 +8,8 @@ import type {
   TeacherHistoryResponse,
   TeacherRiskResponse,
   TeacherRiskReviewResponse,
+  TeacherEscalationPageResponse,
+  TeacherEscalationSummaryResponse,
 } from '../escalationTypes';
 import { notifyEscalationsChanged, toServerComplaintId, type EscalationApi } from './escalationApiContract';
 
@@ -30,6 +32,12 @@ async function mutate<T>(request: Promise<T>) {
 }
 
 export const httpEscalationApi: EscalationApi = {
+  listMyEscalations: (query, signal) =>
+    apiClient.get<TeacherEscalationPageResponse>('/teacher/escalations', { query, signal }),
+
+  getMyEscalation: (escalationId, signal) =>
+    apiClient.get<TeacherEscalationSummaryResponse>(`/teacher/escalations/${escalationId}`, { signal }),
+
   // async so an invalid ID rejects instead of throwing synchronously.
   getEscalationState: async (complaintId, options) =>
     apiClient.get<EscalationStateResponse>(`/teacher/complaints/${serverComplaintId(complaintId)}/escalation`, {

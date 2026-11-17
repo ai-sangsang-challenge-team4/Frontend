@@ -30,7 +30,7 @@
 | TEACHER | `/teacher/messages/:id` → 위험 요소 탭 | 위험·긴급 메시지에 `관리자 공유` 섹션. 공유 버튼은 서버 `currentRiskLevel`이 EMERGENCY일 때만 활성. 공유 후 상태 칩, 현재 위험도, 위험도 변경 요청 상태 표시 |
 | TEACHER | 같은 탭 → 위험도 검토 | 일반 위험도 검토는 `risk-reviews`로 저장하고, 긴급 하향은 `emergency-review`로 요청합니다. 현재 EMERGENCY에서 점수를 바꾸면 공유 여부와 관계없이 Emergency 재검토 요청이 생기고 요청 응답은 `status: PENDING_ADMIN_APPROVAL`·`safetyLock: true`·`requestId`를 포함합니다(`risk-reviews`를 경유하는 경우에는 `emergencyReviewRequestId`). 승인 대기 중에는 중복 요청을 막습니다. 반려 후에는 안전 잠금이 유지되어도 다시 요청할 수 있습니다. 최근 요청 상세는 `emergency-review/current`로 조회합니다. |
 | TEACHER | 같은 탭 → 관리자 공유 섹션 | 공유 상태, 현재 위험도, 재검토 요청 상태, 안전 잠금 표시. 서버 `safetyLock`이 true면 답변 작성 잠금 유지 |
-| TEACHER | `/teacher/admin-share` | 내가 공유한 목록. **mock 전용** (대응 API 없음, http 모드에서는 안내 문구) |
+| TEACHER | `/teacher/admin-share` | 내가 공유한 목록. HTTP 목록 조회·상태/위험도 필터·검색·페이지 이동 지원 |
 | ADMIN | `/admin/emergency-reviews` 및 `/:requestId` | 나에게 지정된 긴급 재검토 목록·상세, 승인·거부·안전 잠금 해제. 공유 여부와 독립 |
 | ADMIN | `/admin/messages` | 공유받은 목록. 상태 탭(전체·확인 대기·검토 중·처리 완료), 위험도 필터 |
 | ADMIN | `/admin/messages/:escalationId` | 처리 상태(검토 시작·처리 완료), Emergency 재검토 요청 내용(이전→요청 위험도, 사유)과 승인/거부, 안전 잠금 해제, 공유 내용, 위험 분석, 처리 기록 |
@@ -66,6 +66,8 @@
 | 기능 | Method | Endpoint |
 | --- | --- | --- |
 | 공유 상태 조회(교사) | GET | `/teacher/complaints/{complaintId}/escalation` |
+| 공유 목록(교사) | GET | `/teacher/escalations?page=&keyword=&status=&riskLevel=` |
+| 공유 건 조회(교사) | GET | `/teacher/escalations/{escalationId}` |
 | 공유 요청(교사) | POST | `/teacher/complaints/{complaintId}/escalation` (201, 본문 string → 상태 재조회) |
 | 위험도 검토(교사) | POST | `/teacher/complaints/{complaintId}/risk-reviews` |
 | 공유 목록(관리자) | GET | `/admin/escalations?status=&riskLevel=` |
@@ -83,7 +85,7 @@
 
 ## 백엔드 확인·추가 요청
 
-- 교사의 "내가 공유한 목록" API가 없습니다(`/teacher/admin-share`는 mock 전용). **엔드포인트 추가 필요.**
+- `/teacher/admin-share`는 `GET /teacher/escalations`로 본인이 공유한 내역을 조회합니다. 서버의 10건 단위 페이지·제목/학생명 검색·위험도/처리 상태 필터를 사용하고, 탭 건수는 각 상태 조회의 `totalElements`를 표시합니다. 목록의 메시지를 선택하면 기존 교사 메시지 상세로 이동합니다. HTTP·mock 어댑터는 같은 페이지 응답을 반환합니다.
 - 미공유 상태 응답은 `escalationId`가 `null`이고, 재검토 요청이 없으면 `emergencyReviewRequestId`·`riskReviewStatus`도 `null`입니다. 완료된 분석이 없으면 `currentRiskScore`·`currentRiskLevel`도 `null`입니다(백엔드 dev 코드로 확인).
 - `SHARED → COMPLETED` 직접 완료는 불가합니다(백엔드 코드로 확인). 재검토 결정은 공유 상태와 무관합니다.
 - `/admin/emergency-reviews`에서 지정 검토자의 전체 재검토 요청을 조회합니다. 공유되지 않은 민원도 `/admin/emergency-reviews/:requestId`에서 요청 상세 확인과 승인·거부가 가능합니다. 하향 승인 시 잠금도 함께 해제됩니다.
