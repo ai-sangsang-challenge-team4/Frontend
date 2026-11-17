@@ -218,6 +218,8 @@ export const riskStageGuides: Record<
 };
 
 export function getThreadRiskLevel(thread: BoardThread): SystemRiskLevel {
+  const current = thread.analysis?.currentRiskLevel;
+  if (current && systemRiskReviewLevels.includes(current)) return current;
   const reviewed = thread.analysis?.teacherReviewedRiskLevel;
   const system = thread.analysis?.systemRiskLevel;
   if (reviewed && systemRiskReviewLevels.includes(reviewed)) return reviewed;

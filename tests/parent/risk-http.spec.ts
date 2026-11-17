@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import type { RiskDetectorResponse, RiskSummaryResponse, SubmissionAnalysisResponse } from '../../src/features/parent-message/api/parentComplaintTypes';
 
 const body = '상담 시간을 알려 주세요. 010-1234-5678';
 const maskedContent = '상담 시간을 알려 주세요. [전화번호]';
@@ -17,7 +18,12 @@ const thread = {
   sentAt: '2026-10-29T10:00:00Z', auditLog: [], consultationStatus: 'inProgress',
 };
 
-async function setup(page: Page, options: { tagFailure?: boolean; finding?: boolean; followUp?: boolean; maskFailure?: boolean; detectorFailure?: boolean; conflict?: boolean; localOnly?: boolean; failFollowUpSendOnce?: boolean; changedBeforeSend?: boolean } = {}) {
+async function setup(page: Page, options: {
+  tagFailure?: boolean; finding?: boolean; followUp?: boolean; maskFailure?: boolean; detectorFailure?: boolean;
+  conflict?: boolean; localOnly?: boolean; failFollowUpSendOnce?: boolean; changedBeforeSend?: boolean;
+  summary?: Partial<RiskSummaryResponse>; detector?: RiskDetectorResponse; submission?: SubmissionAnalysisResponse;
+  analysisErrorCode?: string; sendErrorCode?: string; noRevision?: boolean;
+} = {}) {
   const calls: string[] = [];
   let content = maskedContent;
   let savedFollowUp = false;
@@ -50,13 +56,15 @@ async function setup(page: Page, options: { tagFailure?: boolean; finding?: bool
         json = options.maskFailure ? { code: 'INTERNAL_SERVER_ERROR' } : { complaintId: 42, contentVersion: 1, maskedContent: content }; break;
       case 'POST /complaints/42/risk-analysis':
       case 'POST /complaints/42/messages/101/risk-analysis':
-        json = { analysisId: options.followUp ? 8 : 7, complaintId: 42, riskScore: 30, riskLevel: 'HIGH' }; break;
+        status = options.analysisErrorCode ? 500 : 200;
+        json = options.analysisErrorCode ? { code: options.analysisErrorCode, message: 'Internal Java exception' }
+          : { analysisId: options.followUp ? 8 : 7, complaintId: 42, riskScore: 30, riskLevel: 'HIGH', ...options.summary }; break;
       case 'GET /risk-analyses/7/findings':
-      case 'GET /risk-analyses/8/findings': json = { findings: options.finding ? [{ code: 'THREAT', evidences: ['상담 시간을 알려 주세요.'], revisionSuggestions: [] }] : [], finalRevision: { content: '상담 가능한 시간을 안내해 주세요.', reason: '요청을 구체적이고 부드럽게 표현했습니다.' } }; break;
+      case 'GET /risk-analyses/8/findings': json = { findings: options.finding ? [{ code: 'THREAT', evidences: ['상담 시간을 알려 주세요.'], revisionSuggestions: [] }] : [], finalRevision: options.noRevision ? null : { content: '상담 가능한 시간을 안내해 주세요.', reason: '요청을 구체적이고 부드럽게 표현했습니다.' } }; break;
       case 'GET /risk-analyses/7/detector-results':
       case 'GET /risk-analyses/8/detector-results':
         status = failDetector ? 500 : 200;
-        json = failDetector ? { code: 'INTERNAL_SERVER_ERROR' } : detector;
+        json = failDetector ? { code: 'INTERNAL_SERVER_ERROR' } : options.detector ?? detector;
         break;
       case 'GET /complaints/42/message-draft':
         status = savedFollowUp || options.conflict ? 200 : 404;
@@ -76,11 +84,13 @@ async function setup(page: Page, options: { tagFailure?: boolean; finding?: bool
         if (options.changedBeforeSend) { content = '다른 기기에서 고친 내용'; version += 1; }
         if (request.postDataJSON().expectedContentVersion !== version) { status = 409; json = versionConflict; break; }
         sendAttempts += 1;
-        status = options.failFollowUpSendOnce && sendAttempts === 1 ? 500 : 200;
-        json = status === 500 ? { code: 'INTERNAL_SERVER_ERROR' }
-          : { ...followUp(), status: 'SENT', waitingFor: 'TEACHER', sentAt: '2026-10-30T10:03:00' }; break;
+        status = options.sendErrorCode || (options.failFollowUpSendOnce && sendAttempts === 1) ? 500 : 200;
+        json = status === 500 ? { code: options.sendErrorCode ?? 'INTERNAL_SERVER_ERROR' }
+          : { ...followUp(), status: 'SENT', waitingFor: 'TEACHER', sentAt: '2026-10-30T10:03:00', ...options.submission }; break;
       case 'GET /complaints/42/messages': json = { complaintId: 42, messages: [] }; break;
-      case 'POST /complaints/42/send': json = { message: '제출됨' }; break;
+      case 'POST /complaints/42/send':
+        status = options.sendErrorCode ? 500 : 200;
+        json = options.sendErrorCode ? { code: options.sendErrorCode } : { message: '제출됨', ...options.submission }; break;
       default: throw new Error(`Unexpected request: ${key}`);
     }
     await route.fulfill({ status, json });
@@ -369,7 +379,7 @@ test('HTTP 새 문의에서 마스킹·분석·findings·상세 탐지를 호출
   const calls = await setup(page);
   await analyze(page);
   const results = page.getByRole('region', { name: '위험 분석 결과' });
-  await expect(results).toContainText('위험 점수: 3점');
+  await expect(results).toContainText('위험 점수: 30/100');
   await expect(results).toContainText('요청을 구체적이고 부드럽게 표현했습니다.');
   await results.getByText('상세 탐지 결과 보기', { exact: true }).click();
   await results.getByRole('button', { name: '서버에서 관리하는 협박 명칭 경계', exact: true }).click();
@@ -483,4 +493,163 @@ test('추가 문의 저장 후 전송이 실패해도 문장을 바꿔 다시 �
   await expect(page).toHaveURL(/\/parent\/messages\/thread-local$/);
   const messages = await page.evaluate(() => JSON.parse(localStorage.getItem('teacher-hub.parent-sent-messages.101')!));
   expect(messages[0].conversation.at(-1)).toMatchObject({ body: '전송 실패 후 수정한 문장', serverMessageId: 101 });
+});
+
+for (const [index, status] of (['COMPLETED', 'REUSED', 'REUSED_RULE_ONLY', 'RULE_ONLY_AI_UNAVAILABLE', 'RULE_ONLY_INVALID_RESPONSE'] as const).entries()) {
+  test(`${status}: 새 문의와 추가 문의에서 상태값으로 잠정 분석을 구분한다`, async ({ page }) => {
+    const provisional = status !== 'COMPLETED' && status !== 'REUSED';
+    await setup(page, { followUp: index % 2 === 1, noRevision: provisional, summary: {
+      aiAnalysisStatus: status, analysisMode: provisional ? 'RULE_ONLY' : 'HYBRID',
+      manualReviewRequired: provisional, analysisMessage: '응답 메시지는 화면 분기 기준이 아닙니다.',
+      riskScore: 75, riskLevel: 'EMERGENCY',
+    } });
+    await analyze(page);
+    const results = page.getByRole('region', { name: '위험 분석 결과' });
+    await expect(results).toContainText('위험 점수: 75/100');
+    await expect(results).toContainText('긴급');
+    await expect(results.getByText('잠정 분석', { exact: true })).toHaveCount(provisional ? 1 : 0);
+    if (provisional) {
+      await expect(results).toContainText('교사의 직접 검토가 필요합니다.');
+      await expect(page.getByRole('tab', { name: 'AI 초안', exact: true })).toBeDisabled();
+    }
+    await expect(page.getByRole('button', { name: '전송하기', exact: true })).toBeEnabled();
+    // Persisted analyses retain their metadata across reloads.
+    await page.reload();
+    await expect(results.getByText('잠정 분석', { exact: true })).toHaveCount(provisional ? 1 : 0);
+  });
+}
+
+test('분석 모드와 수동 검토 플래그는 상태값이 없는 이전 응답에서도 적용한다', async ({ page }) => {
+  await setup(page, { summary: { analysisMode: 'RULE_ONLY', manualReviewRequired: true } });
+  await analyze(page);
+  await expect(page.getByText('잠정 분석', { exact: true })).toBeVisible();
+  await expect(page.getByText('교사의 직접 검토가 필요합니다.', { exact: true })).toBeVisible();
+});
+
+for (const severity of [0, 1, 2, 3, null] as const) {
+  test(`심각도 ${severity}: 반복 횟수와 안전 신호의 true·false·null을 구분한다`, async ({ page }) => {
+    await setup(page, { detector: {
+      analysisId: 7, llm: null,
+      results: [{ code: 'THREAT', finalState: 'PRESENT', rule: null,
+        llm: { state: severity === null ? 'BOUNDARY' : severity === 0 ? 'ABSENT' : 'PRESENT',
+          confidence: null, severity, repeatCount: severity === null ? null : 5, evidenceSpans: [] } }],
+      safetyFlags: { credibleThreat: true, studentSafetyConcern: null, privacyExposure: false },
+    } });
+    await analyze(page);
+    const results = page.getByRole('region', { name: '위험 분석 결과' });
+    await expect(results).toContainText('긴급 안전 신호');
+    await expect(results).toContainText('학생 안전 위험: 현재 정보만으로 안전 신호를 판단할 수 없습니다.');
+    await expect(results).not.toContainText('개인정보 노출 또는 유포 위험이 감지');
+    await results.getByText('상세 탐지 결과 보기', { exact: true }).click();
+    await results.getByRole('button', { name: '서버에서 관리하는 협박 명칭 탐지', exact: true }).click();
+    await expect(results).toContainText(`심각도: ${severity === null ? '경계 사례' : ['해당 없음', '경미', '보통', '심각'][severity]}`);
+    await expect(results).toContainText(severity === null ? '반복 횟수 정보 없음' : '현재 민원에서 5회 감지');
+    // Safety flags do not cause the client to recalculate the returned score or level.
+    await expect(results).toContainText('위험 점수: 30/100');
+  });
+}
+
+test('UNKNOWN과 누락된 안전 신호는 위험 없음으로 표시하지 않는다', async ({ page }) => {
+  await setup(page, { detector: { analysisId: 7, llm: null, results: [
+    { code: 'THREAT', finalState: 'UNKNOWN', rule: null, llm: { state: 'UNKNOWN', confidence: null } },
+  ] } });
+  await analyze(page);
+  const results = page.getByRole('region', { name: '위험 분석 결과' });
+  await expect(results).toContainText('안전 신호 정보가 제공되지 않았습니다.');
+  await results.getByText('상세 탐지 결과 보기', { exact: true }).click();
+  await results.getByRole('button', { name: '서버에서 관리하는 협박 명칭 미확인', exact: true }).click();
+  await expect(results).toContainText('심각도: 판단 정보 부족');
+});
+
+for (const code of ['PRIVACY_MASKING_FAILED', 'RISK_RULE_PROCESSING_FAILED', 'RISK_SCORE_CALCULATION_FAILED', 'RISK_ANALYSIS_SAVE_FAILED']) {
+  test(`${code}: 내부 분석 오류는 검토 화면으로 넘기거나 전송하지 않는다`, async ({ page }) => {
+    const calls = await setup(page, { analysisErrorCode: code });
+    await page.getByLabel('문의 내용', { exact: true }).fill(body);
+    await page.getByRole('button', { name: 'AI 분석 시작', exact: true }).click();
+    await expect(page.getByText(/분석과 전송을 중단했습니다/)).toBeVisible();
+    await expect(page.getByLabel('문의 내용', { exact: true })).toHaveValue(body);
+    await expect(page).not.toHaveURL(/\/review$/);
+    expect(calls).not.toContain('GET /risk-analyses/7/findings');
+    expect(calls).not.toContain('POST /complaints/42/send');
+    await expect(page.getByText('Internal Java exception')).toHaveCount(0);
+  });
+
+  test(`${code}: 최종 전송 실패 시 원문과 초안을 보존한다`, async ({ page }) => {
+    const calls = await setup(page, { sendErrorCode: code });
+    await analyze(page);
+    await page.getByRole('button', { name: '전송하기', exact: true }).click();
+    await page.getByRole('button', { name: '확인 후 전송', exact: true }).click();
+    await expect(page.getByText(/분석과 전송을 중단했습니다/)).toBeVisible();
+    await expect(page).toHaveURL(/\/review$/);
+    await expect(page.getByRole('textbox', { name: 'AI 초안 내용', exact: true })).toHaveValue('상담 가능한 시간을 안내해 주세요.');
+    expect(calls.filter((call) => call === 'POST /complaints/42/send')).toHaveLength(1);
+    expect(await page.evaluate(() => localStorage.getItem('teacher-hub.parent-message-draft.101'))).not.toBeNull();
+    expect(await page.evaluate(() => localStorage.getItem('teacher-hub.parent-sent-messages.101'))).toBeNull();
+  });
+}
+
+for (const followUp of [false, true]) {
+  test(`SKIPPED_LIMIT: ${followUp ? '추가 문의' : '새 문의'} 전송 후 이전 분석 점수를 재사용하지 않는다`, async ({ page }) => {
+    await setup(page, { followUp, summary: { riskScore: 95 },
+      submission: { aiAnalysisStatus: 'SKIPPED_LIMIT', riskAnalysis: null } });
+    await analyze(page);
+    await page.getByRole('button', { name: '전송하기', exact: true }).click();
+    await page.getByRole('button', { name: '확인 후 전송', exact: true }).click();
+    await expect(page.getByRole('heading', { name: '전송 완료', exact: true })).toBeVisible();
+    await expect(page.getByText('분석 횟수 제한', { exact: true })).toBeVisible();
+    await expect(page.getByText(/최종 전송 내용의 시스템 위험 점수/)).toHaveCount(0);
+    const messages = await page.evaluate(() => JSON.parse(localStorage.getItem('teacher-hub.parent-sent-messages.101')!));
+    expect(messages[0].submissionAnalysis).toMatchObject({ aiAnalysisStatus: 'SKIPPED_LIMIT' });
+    expect(messages[0].submissionAnalysis.riskScore).toBeUndefined();
+  });
+}
+
+test('최종 제출은 현재 백엔드의 submissionAnalysisStatus와 최신 위험 점수를 표시한다', async ({ page }) => {
+  await setup(page, { summary: { riskScore: 95 }, submission: {
+    submissionAnalysisStatus: 'RULE_ONLY_INVALID_RESPONSE',
+    riskAnalysis: { analysisId: 9, complaintId: 42, riskScore: 25, riskLevel: 'MEDIUM',
+      aiAnalysisStatus: 'RULE_ONLY_INVALID_RESPONSE', analysisMode: 'RULE_ONLY', manualReviewRequired: true },
+  } });
+  await analyze(page);
+  await page.getByRole('button', { name: '전송하기', exact: true }).click();
+  await page.getByRole('button', { name: '확인 후 전송', exact: true }).click();
+  await expect(page.getByText('최종 전송 내용의 시스템 위험 점수: 25/100', { exact: true })).toBeVisible();
+  await expect(page.getByText('잠정 분석', { exact: true })).toBeVisible();
+  await expect(page.getByText('교사의 직접 검토가 필요합니다.', { exact: true })).toBeVisible();
+});
+
+test('추가 문의의 내부 안전 오류는 대화 재조회로 전송 성공 처리하지 않는다', async ({ page }) => {
+  const calls = await setup(page, { followUp: true, sendErrorCode: 'RISK_ANALYSIS_SAVE_FAILED' });
+  await analyze(page);
+  await page.getByRole('button', { name: '전송하기', exact: true }).click();
+  await page.getByRole('button', { name: '확인 후 전송', exact: true }).click();
+  await expect(page.getByText(/분석 결과를 저장하지 못해 분석과 전송을 중단했습니다/)).toBeVisible();
+  await expect(page).toHaveURL(/\/review$/);
+  expect(calls).not.toContain('GET /complaints/42/messages');
+});
+
+for (const metadata of [
+  { aiAnalysisStatus: 'REUSED_RULE_ONLY' }, { aiAnalysisStatus: 'RULE_ONLY_AI_UNAVAILABLE' },
+  { aiAnalysisStatus: 'RULE_ONLY_INVALID_RESPONSE' }, { manualReviewRequired: true },
+] satisfies Partial<RiskSummaryResponse>[]) {
+  test(`독립 상태값 ${JSON.stringify(metadata)}만 있어도 검토 안내를 표시한다`, async ({ page }) => {
+    await setup(page, { summary: metadata });
+    await analyze(page);
+    const results = page.getByRole('region', { name: '위험 분석 결과' });
+    if ('aiAnalysisStatus' in metadata) await expect(results.getByText('잠정 분석', { exact: true })).toBeVisible();
+    else await expect(results.getByText('교사의 직접 검토가 필요합니다.', { exact: true })).toBeVisible();
+  });
+}
+
+test('반복 횟수 0을 보존하고 모든 안전 신호가 false이면 경고하지 않는다', async ({ page }) => {
+  await setup(page, { detector: { analysisId: 7, llm: null,
+    results: [{ code: 'THREAT', finalState: 'ABSENT', rule: null,
+      llm: { state: 'ABSENT', confidence: null, severity: 0, repeatCount: 0 } }],
+    safetyFlags: { credibleThreat: false, studentSafetyConcern: false, privacyExposure: false },
+  } });
+  await analyze(page);
+  await expect(page.getByRole('region', { name: '안전 신호', exact: true })).toHaveCount(0);
+  await page.getByText('상세 탐지 결과 보기', { exact: true }).click();
+  await page.getByRole('button', { name: '서버에서 관리하는 협박 명칭 미탐지', exact: true }).click();
+  await expect(page.getByText('현재 민원에서 0회 감지', { exact: true })).toBeVisible();
 });

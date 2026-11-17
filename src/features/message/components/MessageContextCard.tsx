@@ -3,6 +3,7 @@ import { ProfileAvatar } from './ProfileAvatar';
 import type { BoardThread } from '../types';
 import { Badge, InformationTooltip } from '../../../shared/components/ui';
 import { getAnalysisStatus, systemRiskTone } from '../messageRules';
+import { RiskAnalysisNotice } from '../../risk-analysis/RiskAnalysisNotice';
 
 type MessageContextCardProps = {
   thread: BoardThread;
@@ -11,6 +12,9 @@ type MessageContextCardProps = {
 export function MessageContextCard({ thread }: MessageContextCardProps) {
   const analysisStatus = getAnalysisStatus(thread);
   const analysis = thread.analysis;
+  const riskDescription = analysisStatus === 'ready' && analysis?.systemRiskScore != null
+    ? `시스템 위험 점수: ${analysis.systemRiskScore}/100. 규칙과 AI 문맥 분석으로 산정하며, 잠정 분석은 규칙 결과만 제공해 직접 검토가 필요합니다.`
+    : '규칙과 AI 문맥 분석을 바탕으로 산정한 위험도입니다. 잠정 분석은 규칙 결과만 제공하며 직접 검토가 필요합니다.';
   return (
     <div className="board-parent-card">
       <div className="board-card-profile">
@@ -26,7 +30,7 @@ export function MessageContextCard({ thread }: MessageContextCardProps) {
       </div>
       <div className="board-card-meta-group">
         <div className="board-card-meta">
-          <span className="board-card-meta-label">AI 최종 위험도<InformationTooltip label="AI 위험도 설명" content="메시지 표현을 바탕으로 AI가 분석한 위험 단계입니다." /></span>
+          <span className="board-card-meta-label">시스템 분석 위험도<InformationTooltip label="AI 위험도 설명" content={<span className="board-risk-score-help">{riskDescription}</span>} /></span>
           {analysisStatus === 'ready' && analysis ? <RiskBadge level={systemRiskTone[analysis.systemRiskLevel]} /> : (
             <Badge size="sm">{analysisStatus === 'failed' ? '분석 확인 필요' : analysisStatus === 'loading' ? '분석 중' : '분석 대기'}</Badge>
           )}
@@ -39,6 +43,7 @@ export function MessageContextCard({ thread }: MessageContextCardProps) {
           <time dateTime={thread.latestAt}>{thread.latestAtLabel}</time>
         </div>
       </div>
+      {analysisStatus === 'ready' && analysis ? <RiskAnalysisNotice metadata={analysis} /> : null}
     </div>
   );
 }

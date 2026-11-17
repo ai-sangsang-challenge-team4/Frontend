@@ -56,7 +56,7 @@ export function syncThreadWithEmergencyReview(thread: BoardThread, state: Escala
       },
       safetyLock: state.safetyLock,
       // An applied review's currentRiskScore is the teacher's 1~7 choice ×10.
-      ...(level ? { teacherReviewedRiskLevel: level, teacherRiskScore: toDisplayRiskScore(state.currentRiskScore!) as RiskScore } : {}),
+      ...(level ? { currentRiskLevel: level, teacherReviewedRiskLevel: level, teacherRiskScore: toDisplayRiskScore(state.currentRiskScore!) as RiskScore } : {}),
     },
     ...(level ? { risk: systemRiskTone[level], riskReviewRequired: false } : {}),
   };
@@ -104,7 +104,7 @@ export function createEscalationSnapshot(thread: BoardThread): EscalationComplai
     maskedMessages: [{ ...parentMessage, content: maskContactInfo(deliveredMessage).text, messageId: `${thread.id}-masked` }],
     originalMessages: original ? [{ ...parentMessage, content: original, messageId: `${thread.id}-original` }] : [],
     riskLevel: apiRiskLevel[level],
-    // 0~70 like the server: the 1~7 choice (or the level's starting choice) ×10.
+    // Mock teacher choices remain 1~7 and are stored ×10.
     riskScore: (thread.analysis?.teacherRiskScore ?? defaultRiskScore[level]) * 10,
     title: thread.title,
   };

@@ -10,7 +10,6 @@ import {
   SHARE_REASON_MAX_LENGTH,
   SHAREABLE_RISK_LEVEL,
   teacherEscalationStatusLabel,
-  toDisplayRiskScore,
 } from '../../escalation/escalationRules';
 import type { EscalationStateResponse } from '../../escalation/escalationTypes';
 import { createEscalationSnapshot } from '../escalationSnapshot';
@@ -105,7 +104,7 @@ function SharedSummary({ state }: { state: EscalationStateResponse }) {
           <dt>현재 위험도</dt>
           <dd>
             {riskLabel[apiRiskTone[state.currentRiskLevel]]}
-            {state.currentRiskScore == null ? '' : ` (${toDisplayRiskScore(state.currentRiskScore)}점)`}
+            {state.currentRiskScore == null ? '' : ` (${state.currentRiskScore}점)`}
           </dd>
         </div>
       ) : null}

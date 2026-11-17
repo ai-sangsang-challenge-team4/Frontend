@@ -5,7 +5,7 @@ import { AsyncContent } from '../../shared/components';
 import { Button, ButtonLink, EmptyState, StatusChip } from '../../shared/components/ui';
 import type { EmergencyReviewDecision } from '../../shared/types';
 import { getAdminEmergencyReview, listAdminEmergencyReviews, updateEmergencyReview } from '../escalation/api';
-import { ADMIN_MESSAGE_MAX_LENGTH, canReleaseSafetyLock, formatEscalationTime, riskReviewStatusChip, riskReviewStatusLabel, toDisplayRiskScore } from '../escalation/escalationRules';
+import { ADMIN_MESSAGE_MAX_LENGTH, canReleaseSafetyLock, formatEscalationTime, riskReviewStatusChip, riskReviewStatusLabel } from '../escalation/escalationRules';
 import type { EmergencyReviewResponse } from '../escalation/escalationTypes';
 import { useEscalationRequest } from '../escalation/useEscalationRequest';
 import { BoardConfirmDialog } from '../message/components/BoardConfirmDialog';
@@ -27,7 +27,7 @@ export function AdminEmergencyReviewList() {
             <Link className="admin-emergency-link" to={`/admin/emergency-reviews/${review.requestId}`}>
               <strong>민원 #{review.complaintId} · 재검토 #{review.requestId}</strong>
               <StatusChip label={riskReviewStatusLabel[review.status]} status={riskReviewStatusChip[review.status]} />
-              <span>{toDisplayRiskScore(review.previousRiskScore)}점 → {toDisplayRiskScore(review.requestedRiskScore)}점</span>
+              <span>기존 {review.previousRiskScore}점 → 교사 검토 {review.requestedRiskScale}/7단계</span>
               <span className="admin-emergency-reason">{review.reason}</span>
               <time>{formatEscalationTime(review.requestedAt)}</time>
             </Link>
@@ -101,7 +101,7 @@ export function ReviewInformation({ review }: { review: EmergencyReviewResponse 
   return <div className="admin-process-result">
     <StatusChip label={riskReviewStatusLabel[review.status]} status={riskReviewStatusChip[review.status]} />
     <p><strong>민원</strong> #{review.complaintId}</p>
-    <p><strong>요청 위험도</strong> {toDisplayRiskScore(review.previousRiskScore)}점 → {toDisplayRiskScore(review.requestedRiskScore)}점</p>
+    <p><strong>요청 위험도</strong> 기존 {review.previousRiskScore}점 → 교사 검토 {review.requestedRiskScale}/7단계</p>
     <p><strong>요청 사유</strong> {review.reason}</p>
     <p><strong>지정 검토자</strong> {review.reviewerName}</p>
     <p><strong>요청 시각</strong> {formatEscalationTime(review.requestedAt)}</p>

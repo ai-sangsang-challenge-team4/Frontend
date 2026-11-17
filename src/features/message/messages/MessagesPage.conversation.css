@@ -97,8 +97,6 @@
   margin: 0;
   padding-left: var(--board-moderation-title-text-offset);
   color: var(--color-text-secondary);
-  font-size: 16px;
-  line-height: 24px;
 }
 
 .board-moderation-actions {
@@ -164,15 +162,21 @@
   display: none;
 }
 
-.board-reply-bubble p {
+.board-moderation-card p,
+.board-reply-bubble p,
+.board-answer-box p {
   margin: 0;
-  color: inherit;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-body);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
   word-break: keep-all;
-  font-size: 20px;
-  font-weight: 400;
-  line-height: 24px;
+  text-wrap: pretty;
+}
+
+.board-reply-bubble p {
+  color: inherit;
 }
 
 .board-moderation-row time,

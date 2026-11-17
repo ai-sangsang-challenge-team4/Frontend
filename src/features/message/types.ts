@@ -2,6 +2,7 @@ import type { ThreadActivityLog } from '../parent-message/parentMessageTypes';
 import type { ReplyTemplate, ReplyTemplateDraft } from './replyTemplates';
 import type { RiskClassification } from '../risk-analysis';
 import type { ComplaintStatus, RiskReviewStatus, WaitingFor } from '../../shared/types';
+import type { RiskAnalysisMetadata } from '../../shared/types/risk';
 
 export type ThreadStatus = 'before' | 'inProgress' | 'complete';
 export type RiskLevel = 'normal' | 'attention' | 'danger' | 'urgent';
@@ -59,7 +60,9 @@ export type AiObjection = {
   type: AiObjectionType;
 };
 
-export type ThreadAnalysis = {
+export type ThreadAnalysis = RiskAnalysisMetadata & {
+  systemRiskScore?: number | null;
+  currentRiskLevel?: SystemRiskLevel;
   // Omitted by existing fixtures; a populated analysis was ready before status was added.
   status?: 'ready' | 'loading' | 'failed';
   riskClassifications?: RiskClassification[];

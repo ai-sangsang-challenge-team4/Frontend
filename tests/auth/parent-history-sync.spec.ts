@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { configureApiClient } from '../../src/shared/api/apiClient';
-import { needsParentReview } from '../../src/features/parent-message/conversation';
-import { readMessageDrafts, readSentMessages, saveMessageDraft, storeSentMessage } from '../../src/features/parent-message/messageDraft';
+import { appendFollowUp, getConversation, needsParentReview } from '../../src/features/parent-message/conversation';
+import { readMessageDrafts, readSentMessages, saveMessageDraft, storeSentMessage, type MessageDraft } from '../../src/features/parent-message/messageDraft';
 import type { SentParentMessage } from '../../src/features/parent-message/parentMessageTypes';
 import { complaintIdFromThreadId, syncServerComplaints, syncServerConversation } from '../../src/features/parent-message/serverHistory';
 
@@ -185,4 +185,133 @@ test('서버 목록에서 온 문의의 추가 문의 초안은 교사 ID 없이
   expect(drafts.find((draft) => draft.messageId === 'follow-up-draft')?.server?.serverMessageId).toBe(301);
   // A new inquiry still needs its teacher.
   expect(drafts.find((draft) => draft.messageId === 'new-draft')?.server).toBeUndefined();
+});
+
+for (const newParent of [false, true]) {
+  test(`전송 분석은 ${newParent ? '다른 기기의 새 추가 문의가 오면 지운다' : '기존 문의의 교사 답변만 오면 유지한다'}`, async () => {
+    const analysis = { aiAnalysisStatus: 'COMPLETED' as const, riskScore: 30, riskLevel: 'MEDIUM' as const };
+    storeSentMessage(USER_ID, localThread({ submissionAnalysis: analysis }));
+    serve({ 'GET /complaints/42/messages': {
+      complaintId: 42, status: 'OPEN', waitingFor: newParent ? 'TEACHER' : 'PARENT', messages: [
+        message(10, 'PARENT', '처음 문의 42', '2026-10-30T09:00:00'),
+        message(11, 'TEACHER', '답변입니다.', '2026-10-30T09:10:00'),
+        ...(newParent ? [message(12, 'PARENT', '다른 기기의 추가 문의', '2026-10-30T09:20:00')] : []),
+      ],
+    } });
+    await syncServerConversation(USER_ID, 42);
+    expect(readSentMessages(USER_ID)[0].submissionAnalysis).toEqual(newParent ? undefined : analysis);
+  });
+}
+
+function followUpDraft(): MessageDraft {
+  return {
+    messageId: 'local-follow-up', threadId: 'local-thread', teacherId: '20', title: '문의 42',
+    body: '추가 문의', status: 'PARENT_REVIEW',
+  };
+}
+
+function followUpSubmission(overrides: Partial<SentParentMessage> = {}): SentParentMessage {
+  return localThread({
+    messageId: 'local-follow-up', serverMessageId: 103,
+    originalBody: '추가 문의', finalBody: '추가 문의', sentAt: '2026-10-30T01:00:00.000Z',
+    auditLog: [{ action: 'SENT', at: '2026-10-30T01:00:00.000Z', selectionType: 'ORIGINAL' }],
+    ...overrides,
+  });
+}
+
+test('지연된 대화 응답은 조회 중 전송한 최신 문의와 분석을 되돌리지 않는다', async () => {
+  const analysis = { aiAnalysisStatus: 'RULE_ONLY_AI_UNAVAILABLE' as const, manualReviewRequired: true, riskScore: 40, riskLevel: 'MEDIUM' as const };
+  storeSentMessage(USER_ID, localThread({ conversation: [
+    { id: 'local-thread', serverMessageId: 101, authorRole: 'parent', body: '처음 문의 42', sentAt: '2026-10-30T00:00:00.000Z' },
+    { id: 'teacher-reply', serverMessageId: 102, authorRole: 'teacher', body: '답변입니다.', sentAt: '2026-10-30T00:30:00.000Z' },
+  ] }));
+  let release!: (response: Response) => void;
+  const pendingResponse = new Promise<Response>((resolve) => { release = resolve; });
+  globalThis.fetch = (() => pendingResponse) as typeof fetch;
+  const syncing = syncServerConversation(USER_ID, 42);
+  appendFollowUp(USER_ID, followUpDraft(), followUpSubmission({ submissionAnalysis: analysis }));
+  const latest = readSentMessages(USER_ID)[0];
+  release(new Response(JSON.stringify({ complaintId: 42, status: 'OPEN', waitingFor: 'PARENT', messages: [
+    message(101, 'PARENT', '처음 문의 42', '2026-10-30T09:00:00'),
+    message(102, 'TEACHER', '답변입니다.', '2026-10-30T09:30:00'),
+  ] }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+  await syncing;
+
+  expect(readSentMessages(USER_ID)[0]).toEqual(latest);
+});
+
+test('지연된 대화 응답은 이미 동기화한 교사 답변과 상담 상태도 되돌리지 않는다', async () => {
+  const latest = localThread({ consultationStatus: 'complete', serverWaitingFor: 'NONE', conversation: [
+    { id: 'local-thread', serverMessageId: 101, authorRole: 'parent', body: '처음 문의 42', sentAt: '2026-10-30T00:00:00.000Z' },
+    { id: 'teacher-reply', serverMessageId: 102, authorRole: 'teacher', body: '답변입니다.', sentAt: '2026-10-30T00:00:00.000Z' },
+  ] });
+  storeSentMessage(USER_ID, latest);
+  serve({ 'GET /complaints/42/messages': { complaintId: 42, status: 'OPEN', waitingFor: 'TEACHER', messages: [
+    message(101, 'PARENT', '처음 문의 42', '2026-10-30T09:00:00'),
+  ] } });
+  await syncServerConversation(USER_ID, 42);
+
+  expect(readSentMessages(USER_ID)[0]).toEqual(latest);
+});
+
+for (const identity of ['local', 'server'] as const) {
+  test(`중복 ${identity} ID의 최신 전송 응답은 메시지를 늘리지 않고 분석을 저장한다`, async () => {
+    const oldAnalysis = { aiAnalysisStatus: 'COMPLETED' as const, riskScore: 10, riskLevel: 'LOW' as const };
+    storeSentMessage(USER_ID, localThread({ submissionAnalysis: oldAnalysis }));
+    serve({ 'GET /complaints/42/messages': { complaintId: 42, status: 'OPEN', waitingFor: 'TEACHER', messages: [
+      message(101, 'PARENT', '처음 문의 42', '2026-10-30T09:00:00'),
+      message(102, 'TEACHER', '답변입니다.', '2026-10-30T09:30:00'),
+      message(103, 'PARENT', '추가 문의', '2026-10-30T10:00:00'),
+      message(104, 'TEACHER', '추가 답변입니다.', '2026-10-30T10:10:00'),
+    ] } });
+    await syncServerConversation(USER_ID, 42);
+    const synced = readSentMessages(USER_ID)[0];
+    expect(synced.submissionAnalysis).toBeUndefined();
+    const analysis = { aiAnalysisStatus: 'REUSED_RULE_ONLY' as const, manualReviewRequired: true, riskScore: 40, riskLevel: 'MEDIUM' as const };
+    const draft = { ...followUpDraft(), ...(identity === 'local' ? { messageId: 'server-message-103' } : {}) };
+    const result = appendFollowUp(USER_ID, draft, followUpSubmission({ submissionAnalysis: analysis }));
+
+    expect(result).toEqual({ ...synced, submissionAnalysis: analysis });
+    expect(getConversation(result)).toHaveLength(4);
+    expect(readSentMessages(USER_ID)[0].submissionAnalysis).toEqual(analysis);
+  });
+}
+
+test('중복된 과거 전송 응답은 같은 문장의 최신 문의 분석을 바꾸지 않는다', () => {
+  const analysis = { aiAnalysisStatus: 'COMPLETED' as const, riskScore: 80, riskLevel: 'HIGH' as const };
+  const latest = localThread({ submissionAnalysis: analysis, conversation: [
+    { id: 'local-thread', serverMessageId: 101, authorRole: 'parent', body: '처음 문의 42', sentAt: '2026-10-30T00:00:00.000Z' },
+    { id: 'local-follow-up', serverMessageId: 103, authorRole: 'parent', body: '추가 문의', sentAt: '2026-10-30T01:00:00.000Z' },
+    { id: 'newer-follow-up', serverMessageId: 105, authorRole: 'parent', body: '추가 문의', sentAt: '2026-10-30T02:00:00.000Z' },
+  ] });
+  storeSentMessage(USER_ID, latest);
+  const result = appendFollowUp(USER_ID, followUpDraft(), followUpSubmission({ submissionAnalysis: {
+    aiAnalysisStatus: 'RULE_ONLY_AI_UNAVAILABLE', manualReviewRequired: true, riskScore: 40, riskLevel: 'MEDIUM',
+  } }));
+
+  expect(result).toEqual(latest);
+});
+
+test('중복 전송 복구 응답에 분석이 없으면 이미 확인한 분석을 보존한다', () => {
+  const analysis = { aiAnalysisStatus: 'COMPLETED' as const, riskScore: 80, riskLevel: 'HIGH' as const };
+  const latest = localThread({ submissionAnalysis: analysis, conversation: [
+    { id: 'local-thread', serverMessageId: 101, authorRole: 'parent', body: '처음 문의 42', sentAt: '2026-10-30T00:00:00.000Z' },
+    { id: 'local-follow-up', serverMessageId: 103, authorRole: 'parent', body: '추가 문의', sentAt: '2026-10-30T01:00:00.000Z' },
+  ] });
+  storeSentMessage(USER_ID, latest);
+
+  expect(appendFollowUp(USER_ID, followUpDraft(), followUpSubmission())).toEqual(latest);
+});
+
+test('중복된 최신 전송의 SKIPPED_LIMIT은 이전 점수를 되살리지 않는다', () => {
+  storeSentMessage(USER_ID, localThread());
+  appendFollowUp(USER_ID, followUpDraft(), followUpSubmission({ submissionAnalysis: {
+    aiAnalysisStatus: 'COMPLETED', riskScore: 80, riskLevel: 'HIGH',
+  } }));
+  const result = appendFollowUp(USER_ID, followUpDraft(), followUpSubmission({ submissionAnalysis: {
+    aiAnalysisStatus: 'SKIPPED_LIMIT',
+  } }));
+
+  expect(result.submissionAnalysis).toEqual({ aiAnalysisStatus: 'SKIPPED_LIMIT' });
+  expect(getConversation(result)).toHaveLength(2);
 });

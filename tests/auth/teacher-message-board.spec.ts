@@ -81,7 +81,7 @@ test('교사가 1~7점으로 위험도를 평가하고 하향 시에는 사유�
   await expect(submit).toBeEnabled();
 
   await page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name: '처리 기록', exact: true }).click();
-  await expect(page.getByText(/수정 전 위험도: 주의\(4점\), 수정 후 위험도: 위험\(6점\)/)).toBeVisible();
+  await expect(page.getByText(/수정 전 위험도: 주의\(40점\), 수정 후 위험도: 위험\(교사 검토 6\/7단계\)/)).toBeVisible();
 });
 
 test('AI 판단 이의 제기는 유형과 사유를 남기고 처리 기록에 저장한다', async ({ page }) => {

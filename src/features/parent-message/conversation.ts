@@ -66,15 +66,24 @@ export function findSentSubmissionById(userId: number, submissionId: string) {
 
 export function appendFollowUp(userId: number, draft: MessageDraft, submission: SentParentMessage) {
   return updateSentMessage(userId, draft.threadId!, (thread) => {
-    if (getConversation(thread).some((entry) => entry.id === draft.messageId ||
+    const conversation = getConversation(thread);
+    const duplicate = conversation.find((entry) => entry.id === draft.messageId ||
       (thread.serverComplaintId === submission.serverComplaintId && submission.serverMessageId !== undefined &&
-        entry.authorRole === 'parent' && entry.serverMessageId === submission.serverMessageId))) return thread;
+        entry.authorRole === 'parent' && entry.serverMessageId === submission.serverMessageId));
+    if (duplicate) {
+      // Another tab can sync the sent message before its send response arrives.
+      // Only that latest parent message may receive the returned analysis metadata.
+      const latestParent = conversation.filter((entry) => entry.authorRole === 'parent').at(-1);
+      return duplicate === latestParent && submission.submissionAnalysis !== undefined
+        ? { ...thread, submissionAnalysis: submission.submissionAnalysis } : thread;
+    }
     if (thread.teacherId !== draft.teacherId || thread.title !== draft.title) throw new Error('기존 문의 정보를 다시 확인해 주세요.');
     const isComplete = thread.consultationStatus === 'complete';
     return {
       ...thread,
+      submissionAnalysis: submission.submissionAnalysis,
       parentName: thread.parentName ?? submission.parentName,
-      conversation: [...getConversation(thread), {
+      conversation: [...conversation, {
         id: submission.messageId, authorRole: 'parent', body: submission.finalBody, sentAt: submission.sentAt,
         ...(submission.serverMessageId !== undefined ? { serverMessageId: submission.serverMessageId } : {}),
       }],

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { ChevronDown, LockKeyhole, Save, Send } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import analysisIllustration from '../../shared/assets/parent/message-analysis.svg';
-import { getApiErrorMessage, isApiError } from '../../shared/api';
+import { getApiErrorMessage, isApiError, isRiskAnalysisSafetyError } from '../../shared/api';
 import { Accordion, Button, EmptyState, InformationTooltip, Select, TextareaField, TextField, Toast } from '../../shared/components/ui';
 import { COMPLAINT_TITLE_MAX_LENGTH, parentComplaintApi, parentMessageApiMode } from './api/parentComplaintApi';
 import {
@@ -212,7 +212,9 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
             }
           }
           stopAnalyzing();
-          if (isApiError(failure) && failure.code === 'INVALID_COMPLAINT_RECIPIENT') {
+          if (isRiskAnalysisSafetyError(failure)) {
+            setErrors({ body: getApiErrorMessage(failure) });
+          } else if (isApiError(failure) && failure.code === 'INVALID_COMPLAINT_RECIPIENT') {
             setErrors({ teacherId: getApiErrorMessage(failure) });
             retryRecipients();
           } else if (creationFailed && isApiError(failure) && failure.code === 'INVALID_REQUEST') {

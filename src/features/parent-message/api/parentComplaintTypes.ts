@@ -1,6 +1,7 @@
 import type { ComplaintStatus, MessageStatus, RiskFactorStatus, RiskLevel, WaitingFor } from '../../../shared/types';
 import type { DetectedFactorCode } from '../../escalation/escalationTypes';
 import type { ComplaintListQuery, ComplaintPageResponse } from '../../message/api/teacherInboxTypes';
+import type { AiAnalysisStatus, RiskAnalysisMetadata, SafetyFlags } from '../../../shared/types/risk';
 
 // Shapes in this file follow the backend parent complaint and risk analysis DTOs
 // (complaint/parent/dto/complaint, risk/dto/response). Do not add fields the backend does not define.
@@ -68,11 +69,27 @@ export type ParentComplaintDetailResponse = {
 // POST /complaints/{id}/risk-analysis. Only the score; evidence and suggestions come from /findings.
 // One analysis per message: the same content returns the existing analysis, and different content after an
 // analysis answers 409 FINAL_ANALYSIS_ON_SUBMIT (the server analyzes it again on /send instead).
-export type RiskSummaryResponse = {
+export type RiskSummaryResponse = RiskAnalysisMetadata & {
   analysisId: number;
   complaintId: number;
   riskScore: number;
   riskLevel: RiskLevel;
+};
+
+// Older deployments return only { message }. dev currently calls the top-level
+// field submissionAnalysisStatus; the shared contract also calls it aiAnalysisStatus.
+export type SubmissionAnalysisResponse = {
+  aiAnalysisStatus?: AiAnalysisStatus | null;
+  submissionAnalysisStatus?: AiAnalysisStatus | null;
+  aiAnalysisMessage?: string | null;
+  riskAnalysis?: RiskSummaryResponse | null;
+};
+
+export type ComplaintSubmissionResponse = SubmissionAnalysisResponse & {
+  message?: string;
+  complaintId?: number;
+  status?: ComplaintStatus;
+  waitingFor?: WaitingFor;
 };
 
 export type RiskRevisionSuggestion = {
@@ -104,6 +121,8 @@ export type ComplaintMaskResponse = {
 export type RiskDetection = {
   state?: RiskFactorStatus;
   confidence: number | null;
+  severity?: 0 | 1 | 2 | 3 | null;
+  repeatCount?: number | null;
   evidenceSpans?: { text: string; start?: number | null; end?: number | null }[];
   // Older deployed servers use boolean flags and plain evidence strings.
   detected?: boolean;
@@ -120,6 +139,7 @@ export type RiskDetectorResponse = {
     llm: RiskDetection | null;
   }[];
   llm: { modelName: string; temperature: number | null } | null;
+  safetyFlags?: SafetyFlags | null;
 };
 
 // PUT /complaints/{id}/message-draft. expectedContentVersion is required once a draft exists and omitted
@@ -135,7 +155,7 @@ export type ParentFollowUpSendRequest = {
   expectedContentVersion: number;
 };
 
-export type ParentFollowUpResponse = {
+export type ParentFollowUpResponse = SubmissionAnalysisResponse & {
   messageId: number;
   complaintId: number;
   content: string;

@@ -79,8 +79,10 @@
 - `/admin/emergency-reviews`에서 지정 검토자의 전체 재검토 요청을 조회합니다. 공유되지 않은 민원도 `/admin/emergency-reviews/:requestId`에서 요청 상세 확인, 승인·거부 및 별도 안전 잠금 해제가 가능합니다.
 - 관리자 목록·상세 응답에 민원 제목·학생·학급 정보가 없어 `민원 #{complaintId}`와 공유 교사(`sharedBy`)만 표시합니다.
 - 관리자 처리 메모·결정 사유는 응답에 없고 `/history`의 `reason`으로만 확인됩니다. 처리 이력의 빈 필드는 `null`이 아니라 생략됩니다(`@JsonInclude(NON_NULL)`).
-- 위험 점수는 0~70점(LOW ≤20·MEDIUM ≤40·HIGH ≤60·EMERGENCY)입니다. 교사는 1~7점을 고르고 서버가 10을 곱해 저장합니다. 검토·재검토 응답은 선택값(`*Scale`, 1~7)과 환산 점수(`*Score`, 10~70)를 함께 줍니다. 화면은 모든 점수를 교사 슬라이더와 같은 7점 기준으로 보여 줍니다(`toDisplayRiskScore`: 10으로 나눠 올림, 1~7로 제한). 등급 경계가 2·4·6점으로 맞고, 교사 선택값은 그대로 보입니다. 등급 판정은 서버가 하며, 프론트 슬라이더 미리보기와 mock 서버만 같은 기준을 흉내 냅니다.
-- 관리자 위험 분석 탭은 시스템 분석(`riskScore`), 교사 검토(`reviewScore`·`reviewScale`, 검토가 없으면 숨김), 현재 적용(`currentRiskScore`·`currentRiskLevel`)을 나눠 보여 줍니다.
+- 시스템 위험 점수는 0~100점으로 표시하고, 교사 검토는 별도의 1~7단계(`reviewScale`)로 표시합니다(#77). 교사가 고른 값은 서버가 10을 곱해 `reviewScore`(10~70)로 저장합니다. 현재 적용 등급은 `currentRiskLevel`을 따르고 시스템 점수를 교사 7점 척도로 환산하지 않습니다. 이력·공유 요약의 점수는 서버 값을 그대로 표시합니다. 등급 판정은 서버가 하며, 프론트 슬라이더 미리보기와 mock 서버만 교사 척도의 기준을 흉내 냅니다.
+- 위험 분석의 `analysisMode=RULE_ONLY` 또는 `aiAnalysisStatus`의 잠정 분석 상태와 `manualReviewRequired`에 따라 잠정 분석·직접 검토 안내를 표시합니다. 설명 문자열로 상태를 추측하지 않으며 새 필드가 생략된 이전 응답도 지원합니다.
+- 관리자 위험 분석 탭은 시스템 분석(`riskScore`, 0~100), 교사 검토(`reviewScale`, 1~7단계, 검토가 없으면 숨김), 현재 적용 등급(`currentRiskLevel`)을 나눠 보여 줍니다. `reviewScale`이 없으면 `reviewScore`를 시스템 점수처럼 표시하지 않고 척도 정보 없음으로 안내합니다.
+- 긴급 재검토 목록·상세와 공유 상세의 처리 패널(`AdminProcessPanel`)은 기존 점수(`previousRiskScore`)를 그대로 표시하고, 요청값은 `requestedRiskScale/7단계`로 표시합니다. `requestedRiskScore`를 100점 시스템 점수나 같은 척도의 비교값으로 보여 주지 않습니다.
 - 교사 메시지함이 아직 mock이라, 관리자가 잠금을 해제해도 mock 스레드의 `analysis.safetyLock`은 그대로입니다. 메시지함을 `/teacher/complaints/{id}/risk`(`safetyLock`)로 연동할 때 해소됩니다.
 
 ## 미결정 정책
@@ -96,7 +98,7 @@ npx playwright test --config=playwright.admin-http.config.ts
 
 - `admin-escalation`: mock 어댑터로 교사 공유 → 관리자 검토 시작·처리 완료, 긴급 하향 승인 대기(중복 요청 차단) → 결정 전 완료 불가 → 승인 후에도 잠금 유지 → 잠금 해제, 미공유 하향의 승인 대기, HIGH 공유 버튼 비활성, 권한 차단을 확인합니다.
 - `escalation-http-api`: fetch를 대체해 HTTP 어댑터의 경로·본문·`current` 404 → `null`·409 메시지 노출을 확인합니다. **실제 서버 호출은 아닙니다.**
-- `playwright.admin-http.config.ts`: HTTP 어댑터를 켜고 실제 관리자 화면에서 7개 API 호출, 검토 시작→완료, 새 응답 필드·이전 응답 호환성·로그 누락을 확인합니다. 데스크톱·모바일과 UTC 브라우저에서 실행하며, 백엔드 응답은 명세 기반 fixture로 대체합니다.
+- `playwright.admin-http.config.ts`: HTTP 어댑터를 켜고 실제 관리자 화면에서 7개 API 호출, 검토 시작→완료, 새 응답 필드·이전 응답 호환성·로그 누락을 확인합니다. #77의 잠정 분석·직접 검토 안내와 시스템 95/100·교사 5/7단계·현재 적용 등급 구분도 확인합니다. 데스크톱·모바일과 UTC 브라우저에서 실행하며, 백엔드 응답은 명세 기반 fixture로 대체합니다. 실제 배포 AI 연결 테스트는 아닙니다.
 
 Mock 공유 내역 초기화:
 

@@ -1,7 +1,7 @@
 import { toServerInstant } from '../../shared/api';
 import type { ComplaintStatus, RiskLevel as ApiRiskLevel, WaitingFor } from '../../shared/types';
 import type { DetectedFactorCode, HistoryEvent, TeacherRiskResponse } from '../escalation/escalationTypes';
-import { getDetectedFactorEvidence, getDetectedFactorState, historyEventLabel, toDisplayRiskScore } from '../escalation/escalationRules';
+import { getDetectedFactorEvidence, getDetectedFactorState, historyEventLabel } from '../escalation/escalationRules';
 import { formatMessageDate } from '../parent-message/conversation';
 import { riskCategories, type RiskClassification } from '../risk-analysis';
 import type {
@@ -132,7 +132,7 @@ function toReplies(conversation: TeacherConversationResponse): BoardReply[] {
 function riskText(level: ApiRiskLevel | null | undefined, score: number | null | undefined) {
   if (!level) return null;
   const label = systemRiskLabel[systemRiskLevelFromApi[level]];
-  return score == null ? label : `${label}(${toDisplayRiskScore(score)}점)`;
+  return score == null ? label : `${label}(${score}점)`;
 }
 
 // GET /history is newest first; the inbox lists logs oldest first. Empty fields are omitted, not null.
@@ -179,6 +179,12 @@ function toAnalysis(
   // unsummarized message. The conversation shows each message's own summary.
   const latestParent = [...conversation.messages].reverse().find((message) => message.senderRole === 'PARENT');
   const base: ThreadAnalysis = {
+    aiAnalysisStatus: risk?.aiAnalysisStatus,
+    analysisMode: risk?.analysisMode,
+    analysisMessage: risk?.analysisMessage,
+    manualReviewRequired: risk?.manualReviewRequired,
+    systemRiskScore: risk?.riskScore,
+    currentRiskLevel: risk?.currentRiskLevel ? systemRiskLevelFromApi[risk.currentRiskLevel] : undefined,
     // Kept from the browser: the server has no AI objections or reviewer re-check requests.
     aiObjections: local?.aiObjections,
     riskReviewRequestedAt: local?.riskReviewRequestedAt,
@@ -220,7 +226,7 @@ export function mergeServerDetail(thread: BoardThread, bundle: ServerThreadDetai
   const latest = replies.at(-1);
   const hasTeacherReply = replies.some((reply) => reply.authorRole === 'teacher');
   const analysis = toAnalysis(bundle, thread.analysis);
-  const level = analysis.teacherReviewedRiskLevel ?? analysis.systemRiskLevel;
+  const level = analysis.currentRiskLevel ?? analysis.teacherReviewedRiskLevel ?? analysis.systemRiskLevel;
   const latestAt = latest?.sentAt ?? thread.latestAt;
   const firstSentAt = replies[0]?.sentAt ?? toServerInstant(detail.submittedAt);
   return {

@@ -37,7 +37,8 @@
 
 - 상담 상태: `CLOSED`·`waitingFor=NONE` → 상담 완료, `waitingFor=PARENT` 또는 교사 답변이 있으면 → 상담 중, 그 외 → 상담 전. 교사 답변 뒤 `waitingFor=TEACHER`(추가 문의)면 "재확인 필요".
 - 위험 분류: 백엔드 `RiskTagCode` 8종과 화면 분류 8종이 1:1입니다(PROFANITY→감정적 표현, INSULT→인신공격, THREAT→위협, LEGAL→법적·행정적 조치, EXPOSURE→공개·유포 위협, REPEAT→반복성, UNFAIR_REQUEST→무리한 요구, PRIVACY→개인정보 위험). `detectedFactors`에 있으면 탐지, 없으면 미탐지입니다.
-- 위험 점수(2026-10-30 백엔드 정책): 시스템 점수 `riskScore`는 탐지된 태그 점수의 합(0~70, LOW ≤20·MEDIUM ≤40·HIGH ≤60·EMERGENCY)입니다. 교사는 1~7점(`reviewScale`)을 고르고 서버가 10을 곱해 `reviewScore`(10~70)로 저장합니다. 현재 적용 위험도는 `currentRiskScore`·`currentRiskLevel`입니다. 처리 기록의 `RISK_REVIEWED` 점수도 10배 값입니다. 화면에는 모두 7점 기준으로 바꿔 표시합니다(예: 시스템 23점 → 3점, 교사 선택 4 → 4점).
+- 위험 점수(#77, 2026-11-17): 시스템 점수 `riskScore`는 0~100점이며 그대로 표시합니다. 교사는 1~7점(`reviewScale`)을 고르고 서버가 10을 곱해 `reviewScore`(10~70)로 저장합니다. 현재 적용 위험도와 행동 정책은 `currentRiskLevel`을 우선합니다. 처리 기록의 점수는 서버 값을 그대로 표시하며 시스템 점수를 교사 7점 척도로 환산하지 않습니다.
+- 잠정 분석: `analysisMode=RULE_ONLY` 또는 `aiAnalysisStatus`가 `REUSED_RULE_ONLY`·`RULE_ONLY_AI_UNAVAILABLE`·`RULE_ONLY_INVALID_RESPONSE`이면 잠정 분석 배지와 직접 검토 안내를 표시하고, `manualReviewRequired=true`를 강조합니다. `analysisMessage`는 설명으로 표시하며 화면 분기 기준으로 사용하지 않습니다. 관리자 공유 상세의 위험 분석도 동일한 안내를 사용합니다. 새 메타데이터가 생략된 이전 응답도 지원합니다.
 - 교사 검토 위험도: 검토가 없으면 `reviewScale`·`reviewScore`·`reviewLevel`이 `null`입니다. 화면의 1~7점 슬라이더에는 `reviewScale`을 씁니다.
 - 증빙 패키지 가능 여부: `allowedActions`에 `CREATE_EVIDENCE_PACKAGE`가 있을 때.
 - 위험도 검토 가능: `status=OPEN`이고 `waitingFor=TEACHER`일 때(백엔드 규칙과 동일).
@@ -66,4 +67,4 @@ AI 초안·임시저장·답변 전송은 [teacher-reply-api.md](teacher-reply-a
 npx playwright test teacher-inbox-api
 ```
 
-`teacher-inbox-api.spec.ts`는 fetch를 대체해 요청 경로·쿼리와 응답 변환(상태·위험 분류·교사 검토·완충 요약·이력 순서·생략 필드·KST 시각)을 확인합니다. 실제 서버 호출은 아닙니다. 화면 연결은 배포 서버(dev 계정)로 수동 확인했습니다: 로그인 → 목록 → 완료 필터·검색 → 상세·대화 → 위험 요소(위협 탐지·잠금·관리자 공유) → 원문 열람 → 처리 기록.
+`teacher-inbox-api.spec.ts`는 fetch를 대체해 요청 경로·쿼리와 응답 변환(상태·위험 분류·교사 검토·완충 요약·이력 순서·생략 필드·KST 시각)을 확인합니다. #77은 분석 메타데이터 보존, 현재 적용 등급 우선, 100점 시스템 점수와 교사 7단계 구분도 확인합니다. 실제 서버 호출은 아닙니다. 기존 화면 연결은 배포 서버(dev 계정)로 수동 확인했습니다: 로그인 → 목록 → 완료 필터·검색 → 상세·대화 → 위험 요소(위협 탐지·잠금·관리자 공유) → 원문 열람 → 처리 기록. 이 과거 확인을 #77의 배포 AI 검증으로 간주하지 않습니다.

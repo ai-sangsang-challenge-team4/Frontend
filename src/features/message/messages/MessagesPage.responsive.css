@@ -240,7 +240,7 @@
     --board-conversation-x-padding: 20px;
     --board-chat-edge-offset: 0px;
 
-    padding: 20px;
+    padding: var(--space-5) var(--board-conversation-x-padding) 0;
   }
 
   .board-reply-row,

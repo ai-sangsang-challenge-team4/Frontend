@@ -317,15 +317,13 @@
   min-width: 0;
 }
 
-.board-risk-classifications h3,
-.board-analysis-state h2 {
+.board-risk-classifications h3 {
   margin: 0;
   font-size: 18px;
   line-height: 1.6;
 }
 
-.board-risk-classifications > p,
-.board-analysis-state p {
+.board-risk-classifications > p {
   margin: 0;
   color: var(--color-text-secondary);
   font-size: 14px;
@@ -390,8 +388,60 @@
   font-size: 14px;
 }
 
-.board-analysis-state > button {
-  justify-self: start;
+.board-analysis-state {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  border: 1px solid var(--color-border-divider);
+  border-radius: var(--radius-panel);
+  background: var(--color-bg-canvas);
+}
+
+.board-analysis-state-icon {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--color-text-secondary);
+}
+
+.board-analysis-state--loading .board-analysis-state-icon {
+  color: var(--color-primary);
+  animation: ui-spin 1s linear infinite;
+}
+
+.board-analysis-state--failed .board-analysis-state-icon {
+  color: var(--color-text-danger-readable);
+}
+
+.board-analysis-state-copy {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-1);
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+}
+
+.board-analysis-state h2 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-body);
+}
+
+.board-analysis-state p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-helper);
+  line-height: 1.6;
+}
+
+.board-analysis-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
 }
 
 @media (max-width: 640px) {
@@ -443,7 +493,20 @@
   color: var(--color-text-secondary);
   font-size: 16px;
   font-weight: 400;
-  line-height: 20px;
+  line-height: var(--line-height-body);
+}
+
+.board-risk-review-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.board-risk-score-help {
+  display: block;
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+  text-wrap: pretty;
 }
 
 .board-risk-review-slider {

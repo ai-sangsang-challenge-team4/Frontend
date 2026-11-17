@@ -3,6 +3,7 @@ import type {
   ComplaintCreateRequest,
   ComplaintDraftUpdateRequest,
   ComplaintMessageResponse,
+  ComplaintSubmissionResponse,
   ComplaintRecipientResponse,
   ComplaintResponse,
   ParentComplaintDetailResponse,
@@ -29,7 +30,7 @@ export type ParentComplaintApi = {
   updateDraft: (complaintId: number, request: ComplaintDraftUpdateRequest, signal?: AbortSignal) => Promise<ComplaintMessageResponse>;
   analyze: (complaintId: number, signal?: AbortSignal) => Promise<RiskSummaryResponse>;
   getFindings: (analysisId: number, signal?: AbortSignal) => Promise<RiskRevisionResponse>;
-  submit: (complaintId: number, signal?: AbortSignal) => Promise<ComplaintMessageResponse>;
+  submit: (complaintId: number, signal?: AbortSignal) => Promise<ComplaintSubmissionResponse>;
   getStatus: (complaintId: number, signal?: AbortSignal) => Promise<ComplaintResponse>;
   mask: (complaintId: number, signal?: AbortSignal) => Promise<ComplaintMaskResponse>;
   getDetectorResults: (analysisId: number, signal?: AbortSignal) => Promise<RiskDetectorResponse>;

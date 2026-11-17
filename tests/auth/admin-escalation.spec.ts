@@ -61,7 +61,7 @@ test('교사가 긴급 메시지를 사유와 함께 관리자에게 공유하�
 
   await expect(section.getByRole('button', { name: '공유 완료' })).toBeDisabled();
   await expect(section.getByText('관리자 확인 대기', { exact: true })).toBeVisible();
-  await expect(section.getByText('긴급 (7점)')).toBeVisible();
+  await expect(section.getByText('긴급 (70점)')).toBeVisible();
 
   await page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name: '처리 기록', exact: true }).click();
   await expect(page.getByRole('region', { name: '처리 기록' }).getByText('관리자 공유', { exact: true })).toBeVisible();
@@ -160,7 +160,7 @@ test('긴급 위험도 하향은 관리자 승인 대기가 되고, 승인해도
   // The summary carries riskReviewStatus, so the decision is available on load.
   await expect(processPanel.getByText('위험도 변경 관리자 승인 대기')).toBeVisible();
   await expect(processPanel.getByText('안전 잠금 유지 중')).toBeVisible();
-  await expect(processPanel.getByText('긴급(7점) → 위험(5점)')).toBeVisible();
+  await expect(processPanel.getByText('긴급(70점) → 위험(교사 검토 5/7단계)')).toBeVisible();
   await processPanel.getByLabel('처리 메모').fill('교사 하향 요청 사유 확인');
   await processPanel.getByRole('button', { name: '검토 시작', exact: true }).click();
   // Completion waits for the decision (server: 409 ESCALATION_STATE_INVALID).
@@ -179,7 +179,7 @@ test('긴급 위험도 하향은 관리자 승인 대기가 되고, 승인해도
   await login(page, 'TEACHER');
   await openDetailTab(page, EMERGENCY_THREAD, '위험 요소');
   const teacherSection = page.getByRole('region', { name: '관리자 공유' });
-  await expect(teacherSection.getByText('위험 (5점)')).toBeVisible();
+  await expect(teacherSection.getByText('위험 (50점)')).toBeVisible();
   await expect(teacherSection.getByText(/유지 중/)).toBeVisible();
   await expect(page.getByText('현재 답변 작성이 제한되어 있습니다.')).toBeVisible();
   // The approval reaches the thread: 5 is now the teacher's score, so choosing it is an unchanged

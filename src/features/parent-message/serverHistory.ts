@@ -92,6 +92,10 @@ function applyListItem(thread: SentParentMessage, item: ListItem): SentParentMes
 function applyConversation(thread: SentParentMessage, response: ParentConversationResponse): SentParentMessage {
   const local = getConversation(thread);
   const sent = response.messages.filter((message) => message.status !== 'DRAFT' && message.sentAt);
+  // Sent messages are immutable and /messages returns the whole conversation. A
+  // response missing a message already confirmed by the server is an older snapshot.
+  const serverMessageIds = new Set(sent.map((message) => message.messageId));
+  if (local.some((entry) => entry.serverMessageId !== undefined && !serverMessageIds.has(entry.serverMessageId))) return thread;
   let firstParent = true;
   const conversation = sent.map((message): ConversationMessage => {
     const sentAt = toInstant(message.sentAt)!;
@@ -108,8 +112,15 @@ function applyConversation(thread: SentParentMessage, response: ParentConversati
     };
   });
   if (conversation.length === 0) return thread;
+  const previousParent = local.filter((entry) => entry.authorRole === 'parent').at(-1);
+  const latestParent = conversation.filter((entry) => entry.authorRole === 'parent').at(-1);
+  const sameSubmission = latestParent && previousParent &&
+    latestParent.id === previousParent.id && latestParent.body === previousParent.body;
   return {
     ...thread,
+    // Send metadata belongs to one parent message. A newer inquiry from another
+    // device has no local analysis result; a teacher reply alone does not invalidate it.
+    submissionAnalysis: sameSubmission ? thread.submissionAnalysis : undefined,
     conversation,
     consultationStatus: toConsultationStatus(response.status, response.waitingFor,
       conversation.some((entry) => entry.authorRole === 'teacher'), thread.consultationStatus),

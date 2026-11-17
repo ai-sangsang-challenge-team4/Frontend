@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { configureApiClient } from '../../src/shared/api/apiClient';
 import { toServerInstant } from '../../src/shared/api/serverDateTime';
+import { getThreadRiskLevel } from '../../src/features/message/messageRules';
 import { httpTeacherInboxApi } from '../../src/features/message/api/httpTeacherInboxApi';
 import type { ComplaintListItem, TeacherConversationResponse } from '../../src/features/message/api/teacherInboxTypes';
 import type { HistoryEvent, TeacherRiskResponse } from '../../src/features/escalation/escalationTypes';
@@ -281,7 +282,7 @@ test('명시적으로 빈 근거 구간이 오면 이전 evidence 문자열을 �
 test('서버 이력은 오래된 순으로 바꾸고 생략된 필드를 비어 있는 값으로 처리한다', () => {
   expect(toActivityLogs(history)).toEqual([
     expect.objectContaining({ id: 'complaint-event:2', action: '민원 상태 변경', actor: 'Demo Parent', detail: '작성 중' }),
-    expect.objectContaining({ id: 'complaint-event:3', action: '위험 분석', actor: '시스템', detail: '긴급(7점)' }),
+    expect.objectContaining({ id: 'complaint-event:3', action: '위험 분석', actor: '시스템', detail: '긴급(70점)' }),
   ]);
 });
 
@@ -338,4 +339,26 @@ test('상세 조회 실패는 로딩을 실패로 바꾸고, 다시 불러오면
   const ready = mergeServerDetail(toListThread(listItem), bundle());
   expect(markServerDetailLoading(ready)).toBe(ready);
   expect(markServerDetailFailed(ready)).toBe(ready);
+});
+
+test('Rule-only 상태·검토 안내·100점 시스템 점수를 화면 모델에 유지한다', () => {
+  const thread = mergeServerDetail(toListThread(listItem), bundle({ risk: {
+    ...risk, riskScore: 95, analysisMode: 'RULE_ONLY', manualReviewRequired: true,
+    analysisMessage: '규칙 기반 잠정 결과입니다.', currentRiskLevel: 'HIGH', currentRiskScore: 50,
+  } }));
+  expect(thread.analysis).toMatchObject({
+    analysisMode: 'RULE_ONLY', manualReviewRequired: true, systemRiskScore: 95,
+    analysisMessage: '규칙 기반 잠정 결과입니다.', systemRiskLevel: 'emergency', currentRiskLevel: 'high',
+  });
+  expect(thread.risk).toBe('danger');
+});
+
+test('현재 서버 등급은 시스템 점수와 교사 검토 등급보다 우선한다', () => {
+  const thread = mergeServerDetail(toListThread(listItem), bundle({ risk: {
+    ...risk, riskScore: 95, riskLevel: 'EMERGENCY', reviewScale: 7, reviewLevel: 'EMERGENCY', reviewScore: 70,
+    latestReview: { riskReviewId: 1, direction: 'RAISED', reason: '검토', reviewedBy: '교사', reviewedAt: '2026-11-17T10:00:00' },
+    currentRiskLevel: 'LOW', currentRiskScore: 10,
+  } }));
+  expect(thread.analysis?.teacherReviewedRiskLevel).toBe('emergency');
+  expect(getThreadRiskLevel(thread)).toBe('low');
 });
