@@ -91,6 +91,13 @@ export function Tooltip({ children, className, content, disabled = false, placem
     };
   }, [visible]);
   useEffect(() => () => clearTimeout(closeTimer.current), []);
+  useEffect(() => {
+    if (disabled) {
+      clearTimeout(closeTimer.current);
+      touchOpen.current = null;
+      setOpen(false);
+    }
+  }, [disabled]);
 
   if (disabled) return <>{children}</>;
   return (
@@ -98,7 +105,11 @@ export function Tooltip({ children, className, content, disabled = false, placem
       onMouseEnter={show} onMouseLeave={scheduleHide}
       onFocus={show} onBlur={scheduleHide}
       onPointerDown={(event) => { touchOpen.current = event.pointerType === 'touch' ? visible : null; }}
-      onClick={() => { if (touchOpen.current === null) show(); else setOpen(!touchOpen.current); }}>
+      onClick={(event) => {
+        if (event.detail === 0 || touchOpen.current === null) show();
+        else setOpen(!touchOpen.current);
+        touchOpen.current = null;
+      }}>
       {children}
       {visible ? createPortal(
         <span className="ui-tooltip-content" id={tooltipId} ref={contentRef} role="tooltip"

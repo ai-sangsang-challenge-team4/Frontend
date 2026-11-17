@@ -111,6 +111,50 @@ async function analyze(page: Page) {
   await expect(page).toHaveURL(/\/review$/);
 }
 
+test('서버 초안 생성 중 다시 연 작성 화면에서도 선생님 목록 오류를 재시도한다', async ({ page }) => {
+  const calls = await setup(page);
+  let releaseCreation!: () => void;
+  const creationGate = new Promise<void>((resolve) => { releaseCreation = resolve; });
+  await page.route((url) => url.pathname === '/api/complaints', async (route) => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    await creationGate;
+    await route.fallback();
+  });
+  try {
+    await page.getByLabel('문의 내용', { exact: true }).fill(body);
+    await Promise.all([
+      page.waitForRequest((request) => request.method() === 'POST' && new URL(request.url()).pathname === '/api/complaints'),
+      page.getByRole('button', { name: 'AI 분석 시작', exact: true }).click(),
+    ]);
+    let recipientAttempts = 0;
+    let rejectRecipients = true;
+    await page.route((url) => url.pathname === '/api/complaints/recipients', async (route) => {
+      recipientAttempts += 1;
+      if (rejectRecipients) await route.fulfill({ status: 503, json: { code: 'INTERNAL_SERVER_ERROR' } });
+      else await route.fallback();
+    });
+    // SPA navigation remounts the composer without clearing its pending creation registry.
+    await page.getByRole('navigation', { name: '현재 위치' }).getByRole('link', { name: '홈', exact: true }).click();
+    await expect(page.getByLabel('문의 제목', { exact: true })).toHaveAttribute('readonly', '');
+    await expect(page.getByLabel('문의 대상', { exact: true })).toBeDisabled();
+    const helper = page.locator('#parent-message-teacherId-helper');
+    await expect(helper).toBeVisible();
+    const failedAttempts = recipientAttempts;
+    rejectRecipients = false;
+    await helper.getByRole('button', { name: '다시 시도', exact: true }).click();
+    await expect.poll(() => recipientAttempts).toBeGreaterThan(failedAttempts);
+    await expect(page.locator('#parent-message-teacherId option[value="20"]')).toHaveCount(1);
+    await expect(page.getByLabel('문의 대상', { exact: true })).toBeDisabled();
+    await expect(helper).toHaveCount(0);
+    releaseCreation();
+    await expect.poll(() => calls.filter((call) => call === 'POST /complaints').length).toBe(1);
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('teacher-hub.parent-message-draft.101'))).toContain('"complaintId":42');
+    expect(calls).not.toContain('POST /complaints/42/send');
+  } finally {
+    releaseCreation();
+  }
+});
+
 async function checkInformationTooltip(page: Page, label: string, content: string, touch: boolean, screenshotPath?: string) {
   const trigger = page.getByRole('button', { name: label, exact: true });
   const tooltip = page.getByRole('tooltip');

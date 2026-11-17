@@ -387,10 +387,10 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
       : children.error ? <>{getApiErrorMessage(children.error, '자녀 정보를 불러오지 못했어요.')} <button className="parent-write-retry" onClick={children.retry} type="button">다시 시도</button></>
         : childOptions.length === 0 ? '확인된 자녀 정보가 없습니다. 학교에 학생 연결을 요청해 주세요.' : undefined;
   const teacherHelper = !isServer ? (teacherOptions.length === 0 ? '연결된 선생님이 없습니다. 학교에 교사 연결을 요청해 주세요.' : undefined)
-    : serverLocked ? undefined
-      : !studentId ? undefined
-        : recipients.isLoading ? '선생님 목록을 불러오고 있어요.'
-          : recipients.error ? <>{getApiErrorMessage(recipients.error, '선생님 목록을 불러오지 못했어요.')} <button className="parent-write-retry" onClick={recipients.retry} type="button">다시 시도</button></>
+    : !studentId ? undefined
+      : recipients.error ? <>{getApiErrorMessage(recipients.error, '선생님 목록을 불러오지 못했어요.')} <button className="parent-write-retry" onClick={recipients.retry} type="button">다시 시도</button></>
+        : serverLocked ? undefined
+          : recipients.isLoading ? '선생님 목록을 불러오고 있어요.'
             : teacherOptions.length === 0 ? '연결된 선생님이 없습니다. 학교에 교사 연결을 요청해 주세요.' : undefined;
 
   return (

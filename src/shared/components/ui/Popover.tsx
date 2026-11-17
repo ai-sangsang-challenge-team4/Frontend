@@ -83,7 +83,13 @@ export function Popover({
 
   useLayoutEffect(() => {
     if (isOpen) contentRef.current?.focus({ preventScroll: true });
-    else if (wasOpen.current && restoreFocus.current) triggerRef.current?.focus({ preventScroll: true });
+    else if (wasOpen.current && restoreFocus.current) {
+      const active = document.activeElement;
+      // Content can already be unmounted, but an external control may have taken focus synchronously.
+      if (active === document.body || rootRef.current?.contains(active) || focusedInside.current === active) {
+        triggerRef.current?.focus({ preventScroll: true });
+      }
+    }
     wasOpen.current = isOpen;
   }, [isOpen]);
   useEffect(() => () => clearTimeout(blurTimer.current), []);
@@ -116,7 +122,10 @@ export function Popover({
         }, 0);
       }}
       onKeyDown={(event) => {
-        if (event.key === 'Escape' && isOpen && rootRef.current?.contains(event.target as Node)) {
+        const modal = (event.target as Element).closest('[aria-modal="true"]');
+        // React portal events reach this handler before a nested modal's document listener.
+        if (modal && !modal.contains(rootRef.current)) return;
+        if (event.key === 'Escape' && isOpen && !event.defaultPrevented) {
           event.preventDefault();
           event.stopPropagation();
           setOpen(false);
