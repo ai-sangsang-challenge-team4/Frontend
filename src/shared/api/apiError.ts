@@ -105,6 +105,10 @@ export const API_ERROR_CODE_MESSAGES: Record<string, string> = {
   STUDENT_NOT_FOUND: '학생 정보를 찾을 수 없어요.',
   INVALID_COMPLAINT_RECIPIENT: '문의를 보낼 수 있는 선생님이 아니에요. 받는 선생님을 다시 선택해 주세요.',
   RISK_ANALYSIS_NOT_FOUND: '분석 결과를 찾을 수 없어요.',
+  PRIVACY_MASKING_FAILED: '개인정보 보호 처리에 실패하여 분석과 전송을 중단했습니다. 작성한 내용을 확인하고 잠시 후 다시 시도해 주세요.',
+  RISK_RULE_PROCESSING_FAILED: '규칙 기반 위험 분석에 실패하여 분석과 전송을 중단했습니다. 잠시 후 다시 시도해 주세요.',
+  RISK_SCORE_CALCULATION_FAILED: '위험 점수를 계산하지 못해 분석과 전송을 중단했습니다. 잠시 후 다시 시도해 주세요.',
+  RISK_ANALYSIS_SAVE_FAILED: '분석 결과를 저장하지 못해 분석과 전송을 중단했습니다. 잠시 후 다시 시도해 주세요.',
   ANALYSIS_REQUIRED: 'AI 분석과 수정안 확인을 마친 후 제출해 주세요.',
   FINAL_ANALYSIS_ON_SUBMIT: '수정한 내용은 제출할 때 다시 분석돼요. 제출하기를 눌러 주세요.',
   REANALYSIS_LIMIT_REACHED: '재분석은 한 번만 할 수 있어요. 재분석 후에는 내용을 수정할 수 없어요.',
@@ -208,6 +212,13 @@ export function getApiErrorKind(status: number): ApiErrorKind {
 
 export function isApiError(error: unknown): error is ApiError {
   return error instanceof ApiError;
+}
+
+export function isRiskAnalysisSafetyError(error: unknown): error is ApiError {
+  return isApiError(error) && error.status === 500 && [
+    'PRIVACY_MASKING_FAILED', 'RISK_RULE_PROCESSING_FAILED',
+    'RISK_SCORE_CALCULATION_FAILED', 'RISK_ANALYSIS_SAVE_FAILED',
+  ].includes(error.code);
 }
 
 export function isAbortError(error: unknown) {

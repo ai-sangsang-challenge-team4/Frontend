@@ -65,7 +65,7 @@ test('분류 누락을 미확인으로 표시하고 원문 권한이 없으면 �
   await expect(classification.getByRole('button', { name: '원문에서 근거 확인', exact: true })).toHaveCount(0);
 });
 
-test('AI 최종 위험도는 교사 검토 위험도와 구분하고 목록 위험도가 달라도 완충 요약을 유지한다', async ({ page }) => {
+test('시스템 분석 위험도는 교사 검토 위험도와 구분하고 목록 위험도가 달라도 완충 요약을 유지한다', async ({ page }) => {
   await openTeacherMessage(page);
   await changeAnalysis(page, { systemRiskLevel: 'high', teacherReviewedRiskLevel: 'medium' });
   await page.evaluate(async () => {
@@ -74,7 +74,7 @@ test('AI 최종 위험도는 교사 검토 위험도와 구분하고 목록 위�
     initialTeacherThreads.find((thread: { id: string }) => thread.id === 'thread-002').risk = 'normal';
   });
   await openTab(page, '위험 요소');
-  await expect(page.locator('.board-card-meta').filter({ hasText: 'AI 최종 위험도' })).toContainText('위험');
+  await expect(page.locator('.board-card-meta').filter({ hasText: '시스템 분석 위험도' })).toContainText('위험');
   await expect(page.locator('.board-card-meta').filter({ hasText: '교사 검토 위험도' })).toContainText('주의');
   await openTab(page, '대화');
   await expect(page.locator('.board-moderation-card')).toContainText('친구와의 갈등 이후 학생 정서 확인과 후속 안내를 요청함.');
@@ -114,4 +114,16 @@ test('분석 실패·로딩·잘못된 응답을 구분하며 답변을 차단�
   await changeAnalysis(page, { systemRiskLevel: 'medium' });
   await openTab(page, '대화');
   await expect(page.getByRole('button', { name: /답변 (작성하러 가기|이어서 작성하기)/ })).toBeVisible();
+});
+
+test('Rule-only 잠정 배지와 검토 안내를 표시하고 100점과 교사 7단계를 구분한다', async ({ page }) => {
+  await openTeacherMessage(page);
+  await changeAnalysis(page, { systemRiskScore: 75, analysisMode: 'RULE_ONLY', manualReviewRequired: true });
+  await openTab(page, '위험 요소');
+  await expect(page.locator('.board-card-meta').filter({ hasText: '시스템 위험 점수' })).toContainText('75/100');
+  await expect(page.locator('.board-risk-tab')).toContainText('교사 검토는 1~7단계 척도입니다.');
+  await expect(page.locator('.board-risk-tab').getByText('잠정 분석', { exact: true })).toBeVisible();
+  await expect(page.locator('.board-risk-tab')).toContainText('교사의 직접 검토가 필요합니다.');
+  await expect(page.getByRole('button', { name: '7점 매우 위험', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '8점', exact: false })).toHaveCount(0);
 });

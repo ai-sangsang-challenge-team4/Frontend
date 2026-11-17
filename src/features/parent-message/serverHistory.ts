@@ -108,8 +108,15 @@ function applyConversation(thread: SentParentMessage, response: ParentConversati
     };
   });
   if (conversation.length === 0) return thread;
+  const previousParent = local.filter((entry) => entry.authorRole === 'parent').at(-1);
+  const latestParent = conversation.filter((entry) => entry.authorRole === 'parent').at(-1);
+  const sameSubmission = latestParent && previousParent &&
+    latestParent.id === previousParent.id && latestParent.body === previousParent.body;
   return {
     ...thread,
+    // Send metadata belongs to one parent message. A newer inquiry from another
+    // device has no local analysis result; a teacher reply alone does not invalidate it.
+    submissionAnalysis: sameSubmission ? thread.submissionAnalysis : undefined,
     conversation,
     consultationStatus: toConsultationStatus(response.status, response.waitingFor,
       conversation.some((entry) => entry.authorRole === 'teacher'), thread.consultationStatus),

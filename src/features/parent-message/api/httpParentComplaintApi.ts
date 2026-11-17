@@ -3,6 +3,7 @@ import type { UserInfoResponse } from '../../auth/api/authTypes';
 import type { ParentComplaintApi } from './parentComplaintApiContract';
 import type {
   ComplaintMessageResponse,
+  ComplaintSubmissionResponse,
   ComplaintRecipientResponse,
   ComplaintResponse,
   ParentComplaintDetailResponse,
@@ -51,7 +52,7 @@ export const httpParentComplaintApi: ParentComplaintApi = {
     apiClient.get<RiskRevisionResponse>(`/risk-analyses/${analysisId}/findings`, { signal }),
 
   submit: (complaintId, signal) =>
-    apiClient.post<ComplaintMessageResponse>(`/complaints/${complaintId}/send`, undefined, { signal }),
+    apiClient.post<ComplaintSubmissionResponse>(`/complaints/${complaintId}/send`, undefined, { signal }),
 
   getStatus: (complaintId, signal) =>
     apiClient.get<ComplaintResponse>(`/complaints/${complaintId}/status`, { signal }),

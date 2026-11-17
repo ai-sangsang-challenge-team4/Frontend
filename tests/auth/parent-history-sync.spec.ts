@@ -186,3 +186,19 @@ test('서버 목록에서 온 문의의 추가 문의 초안은 교사 ID 없이
   // A new inquiry still needs its teacher.
   expect(drafts.find((draft) => draft.messageId === 'new-draft')?.server).toBeUndefined();
 });
+
+for (const newParent of [false, true]) {
+  test(`전송 분석은 ${newParent ? '다른 기기의 새 추가 문의가 오면 지운다' : '기존 문의의 교사 답변만 오면 유지한다'}`, async () => {
+    const analysis = { aiAnalysisStatus: 'COMPLETED' as const, riskScore: 30, riskLevel: 'MEDIUM' as const };
+    storeSentMessage(USER_ID, localThread({ submissionAnalysis: analysis }));
+    serve({ 'GET /complaints/42/messages': {
+      complaintId: 42, status: 'OPEN', waitingFor: newParent ? 'TEACHER' : 'PARENT', messages: [
+        message(10, 'PARENT', '처음 문의 42', '2026-10-30T09:00:00'),
+        message(11, 'TEACHER', '답변입니다.', '2026-10-30T09:10:00'),
+        ...(newParent ? [message(12, 'PARENT', '다른 기기의 추가 문의', '2026-10-30T09:20:00')] : []),
+      ],
+    } });
+    await syncServerConversation(USER_ID, 42);
+    expect(readSentMessages(USER_ID)[0].submissionAnalysis).toEqual(newParent ? undefined : analysis);
+  });
+}

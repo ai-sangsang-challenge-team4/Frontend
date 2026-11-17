@@ -83,8 +83,8 @@ export const apiRiskTone = {
   EMERGENCY: 'urgent',
 } as const satisfies Record<RiskLevel, string>;
 
-// Server scores are 0~70 (LOW ≤20, MEDIUM ≤40, HIGH ≤60, EMERGENCY); people see the 1~7 scale the teacher
-// rates on. Rounding up keeps the level boundaries at 2/4/6, and a teacher's choice ×10 shows as that choice.
+// Only convert a known teacher review score (choice ×10) back to its 1~7 scale.
+// System scores are 0~100 and must be displayed directly, without this conversion.
 export function toDisplayRiskScore(score: number) {
   return Math.min(7, Math.max(1, Math.ceil(score / 10)));
 }

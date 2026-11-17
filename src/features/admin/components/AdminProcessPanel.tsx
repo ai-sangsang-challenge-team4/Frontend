@@ -11,7 +11,6 @@ import {
 import {
   ADMIN_MESSAGE_MAX_LENGTH,
   apiRiskTone,
-  toDisplayRiskScore,
   canCompleteEscalation,
   canDecideEmergencyReview,
   canReleaseSafetyLock,
@@ -36,7 +35,7 @@ const steps: EscalationStatus[] = ['SHARED', 'UNDER_REVIEW', 'COMPLETED'];
 type PanelAction = 'review' | 'complete' | 'release-lock' | EmergencyReviewDecision;
 
 function riskText(level: RiskLevel, score: number) {
-  return `${riskLabel[apiRiskTone[level]]}(${toDisplayRiskScore(score)}점)`;
+  return `${riskLabel[apiRiskTone[level]]}(${score}점)`;
 }
 
 const decisionCopy: Record<EmergencyReviewDecision, string> = {
@@ -168,7 +167,7 @@ export function AdminProcessPanel({ summary, onConflict }: AdminProcessPanelProp
               <p>
                 <strong>요청 위험도</strong>
                 {riskText(emergencyReview.previousRiskLevel, emergencyReview.previousRiskScore)} →{' '}
-                {riskText(emergencyReview.requestedRiskLevel, emergencyReview.requestedRiskScore)}
+                {riskLabel[apiRiskTone[emergencyReview.requestedRiskLevel]]}(교사 검토 {emergencyReview.requestedRiskScale}/7단계)
               </p>
               <p><strong>요청 사유</strong>{emergencyReview.reason}</p>
               <p><strong>요청 시각</strong>{formatEscalationTime(emergencyReview.requestedAt)}</p>

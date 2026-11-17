@@ -176,3 +176,17 @@ test('알 수 없는 상태값은 원래 값으로 표시하고, 같은 종류�
   await expect(panel.getByText('메시지 기록 누락', { exact: true })).toBeVisible();
   await expect(panel.getByText('민원 기록 누락', { exact: true })).toBeVisible();
 });
+
+test('잠정 분석의 100점 시스템 점수와 교사 7단계, 현재 적용 등급을 구분한다', async ({ page }) => {
+  await setup(page, { risk: {
+    ...risk, riskScore: 95, riskLevel: 'EMERGENCY', reviewScale: 5, reviewScore: 50, reviewLevel: 'HIGH',
+    currentRiskScore: 50, currentRiskLevel: 'HIGH', analysisMode: 'RULE_ONLY', manualReviewRequired: true,
+  } });
+  await openTab(page, '위험 분석');
+  await expect(page.getByText('잠정 분석', { exact: true })).toBeVisible();
+  await expect(page.getByText('교사의 직접 검토가 필요합니다.', { exact: true })).toBeVisible();
+  const summary = page.locator('.board-risk-tab .board-admin-share-summary');
+  await expect(summary.locator('div').filter({ has: page.locator('dt', { hasText: '시스템 분석' }) })).toContainText('긴급 · 위험 점수 95/100');
+  await expect(summary.locator('div').filter({ has: page.locator('dt', { hasText: '교사 검토' }) })).toContainText('위험 · 7단계 중 5단계');
+  await expect(summary.locator('div').filter({ has: page.locator('dt', { hasText: '현재 적용' }) })).toContainText('위험');
+});

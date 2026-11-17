@@ -10,7 +10,8 @@ import {
   getAdminEscalationMessages,
   getAdminEscalationRisk,
 } from '../escalation/api';
-import { apiRiskTone, formatEscalationTime, toDisplayRiskScore, getDetectedFactorEvidence, getDetectedFactorState, historyEventLabel } from '../escalation/escalationRules';
+import { apiRiskTone, formatEscalationTime, getDetectedFactorEvidence, getDetectedFactorState, historyEventLabel } from '../escalation/escalationRules';
+import { RiskAnalysisNotice } from '../risk-analysis/RiskAnalysisNotice';
 import type {
   AdminEscalationSummaryResponse,
   ConversationMessage,
@@ -57,7 +58,7 @@ type AdminSharedMessageDetailProps = {
 // History events omit empty fields (@JsonInclude(NON_NULL)), so a score may be undefined as well as null.
 function riskText(level: RiskLevel | null, score: number | null | undefined) {
   if (!level) return '-';
-  return score == null ? riskLabel[apiRiskTone[level]] : `${riskLabel[apiRiskTone[level]]}(${toDisplayRiskScore(score)}점)`;
+  return score == null ? riskLabel[apiRiskTone[level]] : `${riskLabel[apiRiskTone[level]]}(${score}점)`;
 }
 
 export function AdminSharedMessageDetail({ escalationId }: AdminSharedMessageDetailProps) {
@@ -293,21 +294,22 @@ function RiskAnalysisPanel({ escalationId }: { escalationId: number }) {
                 <h2 className="board-risk-section-title">위험도</h2>
               </div>
             </div>
+            <RiskAnalysisNotice metadata={data} />
             <dl className="board-admin-share-summary">
               <div>
                 <dt>시스템 분석</dt>
-                <dd>{riskText(data.riskLevel, data.riskScore)}</dd>
+                <dd>{data.riskScore == null ? riskText(data.riskLevel, data.riskScore) : `${riskText(data.riskLevel, null)} · 위험 점수 ${data.riskScore}/100`}</dd>
               </div>
               {/* The review fields are null until a teacher reviews. */}
               {data.reviewLevel ? (
                 <div>
                   <dt>교사 검토</dt>
-                  <dd>{riskText(data.reviewLevel, data.reviewScore)}</dd>
+                  <dd>{riskText(data.reviewLevel, null)}{data.reviewScale != null ? ` · 7단계 중 ${data.reviewScale}단계` : ' · 검토 척도 정보 없음'}</dd>
                 </div>
               ) : null}
               <div>
                 <dt>현재 적용</dt>
-                <dd>{riskText(data.currentRiskLevel, data.currentRiskScore)}</dd>
+                <dd>{riskText(data.currentRiskLevel, null)}</dd>
               </div>
               {data.latestReview ? (
                 <div>

@@ -135,7 +135,7 @@ function requireUser(role: UserRole) {
   return user;
 }
 
-// Mock stand-in for the server's 0~70 score → level rule. The UI never uses this for saved state.
+// Mock stand-in for the server's 0~100 score → level rule. The UI never uses this for saved state.
 function mockScoreToLevel(score: number): RiskLevel {
   if (score <= 20) return 'LOW';
   if (score <= 40) return 'MEDIUM';
@@ -143,7 +143,7 @@ function mockScoreToLevel(score: number): RiskLevel {
   return 'EMERGENCY';
 }
 
-// Stored scores are 0~70 like the server's; requests carry the teacher's 1~7 choice, stored ×10.
+// Mock review scores are 10~70; requests carry the teacher's 1~7 choice, stored ×10.
 // Every mock score is a choice ×10 (the inbox snapshot sends one too), so dividing gives the choice back.
 const toMockScore = (scale: number) => scale * 10;
 const toMockScale = (score: number) => Math.round(score / 10);

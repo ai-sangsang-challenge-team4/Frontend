@@ -73,6 +73,7 @@ export function appendFollowUp(userId: number, draft: MessageDraft, submission: 
     const isComplete = thread.consultationStatus === 'complete';
     return {
       ...thread,
+      submissionAnalysis: submission.submissionAnalysis,
       parentName: thread.parentName ?? submission.parentName,
       conversation: [...getConversation(thread), {
         id: submission.messageId, authorRole: 'parent', body: submission.finalBody, sentAt: submission.sentAt,

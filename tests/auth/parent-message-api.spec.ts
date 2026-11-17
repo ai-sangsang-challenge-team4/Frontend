@@ -12,6 +12,7 @@ import {
   submitServerDraft,
   toServerAnalysis,
   toServerRecipients,
+  toSubmissionAnalysis,
 } from '../../src/features/parent-message/serverComplaint';
 
 // Request paths and bodies against the backend parent complaint and risk endpoints (stubbed fetch, not the
@@ -488,4 +489,28 @@ test('최종 수정 이유가 null이어도 유효한 수정문과 위험 근거
   const analysis = toServerAnalysis({ ...findings, finalRevision: { content: '수정된 문장', reason: null } }, '원문');
   expect(analysis).toMatchObject({ status: 'ready', revisedText: '수정된 문장', revisionReason: null });
   expect(analysis.risks).not.toHaveLength(0);
+});
+
+test('SKIPPED_LIMIT은 응답에 오래된 분석이 섞여도 결과를 되살리지 않는다', () => {
+  const result = toSubmissionAnalysis({ aiAnalysisStatus: 'SKIPPED_LIMIT', riskAnalysis: {
+    analysisId: 7, complaintId: 42, riskScore: 95, riskLevel: 'EMERGENCY',
+    aiAnalysisStatus: 'COMPLETED', analysisMode: 'HYBRID',
+  } });
+  expect(result).toEqual({ aiAnalysisStatus: 'SKIPPED_LIMIT', analysisMessage: undefined });
+});
+
+test('최종 제출의 상태 별칭과 이전 서버의 상태 없는 응답을 지원한다', () => {
+  expect(toSubmissionAnalysis({ submissionAnalysisStatus: 'REUSED_RULE_ONLY', riskAnalysis: {
+    analysisId: 7, complaintId: 42, riskScore: 25, riskLevel: 'MEDIUM', analysisMode: 'RULE_ONLY',
+  } })).toMatchObject({ aiAnalysisStatus: 'REUSED_RULE_ONLY', riskScore: 25, analysisMode: 'RULE_ONLY' });
+  expect(toSubmissionAnalysis({})).toBeUndefined();
+});
+
+test('findings의 내부 안전 처리 오류는 수정안 조회 실패 폴백으로 바꾸지 않는다', async () => {
+  mockFetch(route({
+    'POST /complaints/42/risk-analysis': () => json(200, { analysisId: 7, complaintId: 42, riskScore: 30, riskLevel: 'MEDIUM' }),
+    'GET /risk-analyses/7/findings': () => json(500, { code: 'RISK_ANALYSIS_SAVE_FAILED' }),
+  }));
+  await expect(analyzeServerDraft(draft({ body: server().content, server: server() }), target, () => undefined,
+    new AbortController().signal)).rejects.toMatchObject({ code: 'RISK_ANALYSIS_SAVE_FAILED', status: 500 });
 });

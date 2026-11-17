@@ -1,3 +1,4 @@
+import type { RiskAnalysisMetadata } from '../../shared/types/risk';
 import type {
   EscalationScope,
   EscalationStatus,
@@ -28,7 +29,7 @@ export type EscalationStateResponse = {
   escalationStatus: EscalationStatus;
   // Status of that emergency review request; null when none was made.
   riskReviewStatus: RiskReviewStatus | null;
-  // 0~70: the system score, or the teacher's choice ×10 once reviewed. null only when the complaint has
+  // 0~100: the system score, or the teacher's choice ×10 once reviewed. null only when the complaint has
   // no completed analysis (NOT_SHARED).
   currentRiskScore: number | null;
   currentRiskLevel: RiskLevel | null;
@@ -189,10 +190,10 @@ export type LatestReview = {
   reviewedAt: string;
 };
 
-// GET /admin/escalations/{escalationId}/risk. Scores are 0~70 (LOW ≤20, MEDIUM ≤40, HIGH ≤60, EMERGENCY).
+// GET /admin/escalations/{escalationId}/risk. System scores are 0~100; teacher choices remain 1~7.
 // A complaint sent without a completed analysis (the AI failed on /send) answers 200 on the teacher path with
 // riskAnalysisId and every risk field null and no factors. That means "not analyzed", not "no risk".
-export type TeacherRiskResponse = {
+export type TeacherRiskResponse = RiskAnalysisMetadata & {
   complaintId: number;
   riskAnalysisId: number | null;
   // The system analysis: the sum of detected tag scores.
@@ -221,7 +222,7 @@ export type HistoryEvent = {
   referenceId?: number | null;
   previousStatus?: ComplaintStatus | null;
   newStatus?: ComplaintStatus | null;
-  // 0~70; RISK_REVIEWED scores are the teacher's choice ×10.
+  // 0~100; RISK_REVIEWED scores are the teacher's choice ×10.
   riskScore?: number | null;
   riskLevel?: RiskLevel | null;
   previousRiskScore?: number | null;

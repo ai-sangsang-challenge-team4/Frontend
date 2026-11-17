@@ -2,6 +2,7 @@ import type { WaitingFor } from '../../shared/types';
 import type { ReplyTemplateDraft } from '../message/replyTemplates';
 import type { ReplyDraftState, ReplyDraftTab } from '../message/types';
 import type { RiskSummaryResponse } from './api/parentComplaintTypes';
+import type { RiskAnalysisMetadata } from '../../shared/types/risk';
 
 export const MESSAGE_MAX_LENGTH = 1500;
 
@@ -31,7 +32,7 @@ export type ParentMessageAnalysis = {
   // The server already reviewed an earlier version of this message, so the edited content gets no new
   // suggestions and is analyzed again on submit.
   analyzeOnSubmit?: boolean;
-  riskSummary?: Pick<RiskSummaryResponse, 'riskScore' | 'riskLevel'>;
+  riskSummary?: Pick<RiskSummaryResponse, 'riskScore' | 'riskLevel'> & RiskAnalysisMetadata;
   revisionReason?: string | null;
   maskedContent?: string;
   maskingContentVersion?: number;
@@ -64,6 +65,8 @@ export type ThreadActivityLog = {
 };
 
 export type SentParentMessage = {
+  // Only metadata returned by the successful final send, never the pre-send analysis.
+  submissionAnalysis?: RiskAnalysisMetadata & { riskScore?: number; riskLevel?: RiskSummaryResponse['riskLevel'] };
   parentName?: string;
   messageId: string;
   // Set when the inquiry was submitted to the backend; the local record is a copy for the receipt and history.

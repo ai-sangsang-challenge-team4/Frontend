@@ -1,4 +1,4 @@
-import { ApiError, isAbortError, isApiError, toServerInstant } from '../../shared/api';
+import { ApiError, isAbortError, isApiError, isRiskAnalysisSafetyError, toServerInstant } from '../../shared/api';
 import type { DetectedFactorCode } from '../escalation/escalationTypes';
 import { requireMaskedText } from '../pii/masking';
 import { parentComplaintApi, type ComplaintRecipientResponse, type ParentFollowUpResponse, type RiskRevisionResponse, type RiskSummaryResponse } from './api/parentComplaintApi';
@@ -6,6 +6,7 @@ import { appendFollowUp, findSentSubmission } from './conversation';
 import { storeSentMessage, type MessageDraft, type ServerComplaintDraft } from './messageDraft';
 import { OFFICIAL_MEANING_WARNING } from './parentMessageApi';
 import { getRiskTagNames, type RiskTagNames } from '../risk-analysis/riskTagCatalog';
+import type { SubmissionAnalysisResponse } from './api/parentComplaintTypes';
 import {
   getSelectedMessage,
   validateFinalMessage,
@@ -217,7 +218,7 @@ export async function analyzeServerDraft(
   persist(server);
 
   const metadata = {
-    riskSummary: { riskScore: summary.riskScore, riskLevel: summary.riskLevel },
+    riskSummary: summary,
     maskedContent,
     ...(masking ? { maskingContentVersion: masking.contentVersion } : {}),
   };
@@ -228,7 +229,7 @@ export async function analyzeServerDraft(
     ]);
     return { server, analysis: { ...toServerAnalysis(findings, maskedContent, tagNames), ...metadata } };
   } catch (error) {
-    if (signal.aborted || isAbortError(error)) throw error;
+    if (signal.aborted || isAbortError(error) || isRiskAnalysisSafetyError(error)) throw error;
     // The analysis is stored, so the parent can still send; only the suggestions are missing.
     return { server, analysis: { ...failedAnalysis, ...metadata } };
   }
@@ -267,6 +268,7 @@ export async function submitServerDraft(
   const originalBody = requireMaskedText(draft.body);
 
   let sentAt = new Date().toISOString();
+  let submission: SubmissionAnalysisResponse | undefined;
   try {
     if (server.serverMessageId !== undefined) {
       const messageId = server.serverMessageId;
@@ -281,16 +283,17 @@ export async function submitServerDraft(
           message: '서버에 전송된 내용이 확인한 문장과 다릅니다. 문의 내역을 다시 확인해 주세요.' });
       }
       sentAt = toServerInstant(sent.sentAt) ?? sentAt;
+      submission = sent;
     } else {
       if (content !== server.content) {
         await parentComplaintApi.updateDraft(server.complaintId, { content }, signal);
         server = { ...server, content };
         onServerDraftUpdate?.(server);
       }
-      await parentComplaintApi.submit(server.complaintId, signal);
+      submission = await parentComplaintApi.submit(server.complaintId, signal);
     }
   } catch (error) {
-    if (signal.aborted || isAbortError(error)) throw error;
+    if (signal.aborted || isAbortError(error) || isRiskAnalysisSafetyError(error)) throw error;
     if (server.serverMessageId !== undefined) {
       const messageId = server.serverMessageId;
       // After a lost send response, only this exact message proves the request succeeded.
@@ -302,6 +305,7 @@ export async function submitServerDraft(
   }
 
   const message: SentParentMessage = {
+    ...(submission ? { submissionAnalysis: toSubmissionAnalysis(submission) } : {}),
     parentName,
     messageId: draft.messageId,
     serverComplaintId: server.complaintId,
@@ -325,4 +329,16 @@ export async function submitServerDraft(
     // The server already has the inquiry; only the local copy is missing.
     return message;
   }
+}
+
+export function toSubmissionAnalysis(response: SubmissionAnalysisResponse): SentParentMessage['submissionAnalysis'] {
+  const status = response.aiAnalysisStatus ?? response.submissionAnalysisStatus ?? response.riskAnalysis?.aiAnalysisStatus;
+  // A skipped analysis must not revive the earlier result (even if a stale payload includes it).
+  const summary = status === 'SKIPPED_LIMIT' ? null : response.riskAnalysis;
+  if (!status && !summary) return undefined;
+  return {
+    ...(summary ?? {}),
+    aiAnalysisStatus: status,
+    analysisMessage: response.aiAnalysisMessage ?? summary?.analysisMessage,
+  };
 }

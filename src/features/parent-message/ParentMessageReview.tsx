@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth';
-import { getApiErrorMessage, isApiError } from '../../shared/api';
+import { getApiErrorMessage, isApiError, isRiskAnalysisSafetyError } from '../../shared/api';
 import { Accordion, Button, EmptyState, Modal, Tabs, TextareaField, Toast } from '../../shared/components/ui';
 import { parentMessageApiMode } from './api/parentComplaintApi';
 import { clearMessageDraft, findSentMessage, mockConnectedTeachers, readMessageDraft, saveMessageDraft, type MessageDraft } from './messageDraft';
@@ -214,6 +214,11 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
       navigate(stored ? `/parent/messages/${sent.messageId}` : '/parent/messages', { replace: true, state: { justSent: true } });
     } catch (failure) {
       if (!controller.signal.aborted) {
+        if (isRiskAnalysisSafetyError(failure)) {
+          setError(getApiErrorMessage(failure));
+          setDialog(null);
+          return;
+        }
         if (failure instanceof MaskingError) {
           setMaskingFailed(true);
           setDialog(null);
