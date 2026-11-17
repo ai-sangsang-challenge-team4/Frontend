@@ -67,6 +67,65 @@ test('Tooltip을 비활성화하고 다시 활성화해도 이전 설명이 다�
   await expect(page.getByRole('tooltip')).toHaveText('전환 가능한 설명');
 });
 
+for (const kind of ['일반', '업무']) {
+  test(`${kind} 모달이 소유한 포털은 사용 가능하고 배경과 아래 창의 포털은 차단한다`, async ({ page }) => {
+    await page.evaluate(() => {
+      const background = document.createElement('button');
+      background.id = 'unowned-portal';
+      background.textContent = '배경 포털 작업';
+      document.body.append(background);
+    });
+    const trigger = page.getByRole('button', { name: `소유 포털 ${kind} 창 열기`, exact: true });
+    await trigger.click();
+    const portal = page.getByRole('group', { name: '모달 소유 포털', exact: true });
+    await expect(portal).toBeVisible();
+    await expect(portal).toHaveJSProperty('inert', false);
+    // The linked description shares #root with background controls. Only its branch is exposed.
+    await expect(page.locator('#portal-background-description')).toHaveJSProperty('inert', false);
+    await expect(trigger).toHaveJSProperty('inert', true);
+    await expect(page.locator('#unowned-portal')).toHaveJSProperty('inert', true);
+    const accessibilitySession = await page.context().newCDPSession(page);
+    const { nodes } = await accessibilitySession.send('Accessibility.getFullAXTree');
+    expect(nodes.some((node) => !node.ignored && node.name?.value === '포털 선택 0')).toBe(true);
+    expect(nodes.some((node) => !node.ignored && node.name?.value === `소유 포털 ${kind} 창 열기`)).toBe(false);
+    await accessibilitySession.detach();
+    await portal.getByRole('button', { name: '포털 선택 0', exact: true }).click();
+    await expect(portal.getByRole('button', { name: '포털 선택 1', exact: true })).toBeVisible();
+    await page.evaluate(() => {
+      const background = document.createElement('button');
+      background.id = 'late-background-portal';
+      document.body.append(background);
+    });
+    await expect(page.locator('#late-background-portal')).toHaveJSProperty('inert', true);
+    await portal.getByRole('button', { name: '소유 포털 도움말', exact: true }).focus();
+    const tooltip = page.getByRole('tooltip');
+    await expect(tooltip).toBeVisible();
+    await expect(tooltip).toHaveJSProperty('inert', false);
+    await tooltip.hover();
+    await page.keyboard.press('Escape');
+    await expect(tooltip).toHaveCount(0);
+    const upperTrigger = portal.getByRole('button', { name: '포털에서 위 창 열기', exact: true });
+    await upperTrigger.click();
+    const upper = page.getByRole('dialog', { name: '포털 위 확인창', exact: true });
+    await expect(upper).toBeVisible();
+    await expect(page.locator('[aria-label="모달 소유 포털"]')).toHaveJSProperty('inert', true);
+    await page.keyboard.press('Escape');
+    await expect(upper).toHaveCount(0);
+    await expect(portal).toHaveJSProperty('inert', false);
+    await expect(upperTrigger).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('dialog', { name: '포털 소유 확인', exact: true }).getByRole('button', { name: '닫기', exact: true })).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await expect(upperTrigger).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(portal).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+    await expect(page.locator('#root')).toHaveJSProperty('inert', false);
+    await expect(page.locator('#unowned-portal')).toHaveJSProperty('inert', false);
+    await expect(page.locator('#late-background-portal')).toHaveJSProperty('inert', false);
+  });
+}
+
 test.describe('터치에서 키보드로 입력 전환', () => {
   test.use({ hasTouch: true });
   for (const key of ['Enter', 'Space']) {
