@@ -137,12 +137,6 @@
   justify-content: center;
 }
 
-.board-evidence-package-button {
-  width: max-content;
-  min-width: 149px;
-  white-space: nowrap;
-}
-
 .board-risk-evidence-panel,
 .board-activity-panel {
   display: grid;
@@ -152,7 +146,97 @@
 }
 
 .board-risk-evidence-panel {
+  gap: var(--space-2);
   background: var(--color-bg-canvas);
+}
+
+.board-risk-evidence-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  min-height: 44px;
+  padding-right: calc(44px + var(--space-2));
+}
+
+.board-risk-evidence-header h2 {
+  min-width: 0;
+}
+
+.board-risk-evidence-toggle {
+  position: static;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.board-risk-evidence-toggle > span:not(.board-risk-evidence-indicator) {
+  min-width: 0;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.board-risk-evidence-indicator {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  width: 44px;
+  min-height: 44px;
+  place-items: center;
+  border-radius: var(--radius-sm);
+}
+
+.board-risk-evidence-toggle:hover .board-risk-evidence-indicator {
+  background: var(--color-bg-surface);
+}
+
+.board-risk-evidence-chevron {
+  width: 16px;
+  height: 10px;
+  flex: 0 0 auto;
+  color: var(--color-text-secondary);
+}
+
+.board-risk-evidence-toggle[aria-expanded="true"] .board-risk-evidence-chevron {
+  transform: rotate(180deg);
+}
+
+.board-risk-evidence-header .ui-information-tooltip {
+  margin-inline-start: 0;
+}
+
+.board-risk-classification-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.board-risk-evidence-content:not([hidden]) {
+  display: grid;
+  gap: var(--space-6);
+  min-width: 0;
+  padding-top: var(--space-4);
+}
+
+.board-risk-evidence-content .board-risk-section-actions {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border-divider);
+}
+
+@media (max-width: 640px) {
+  .board-risk-evidence-toggle {
+    gap: var(--space-2);
+    font-size: var(--font-size-body);
+    line-height: var(--line-height-body);
+  }
+
 }
 
 .board-risk-section-header {
@@ -377,19 +461,6 @@
   min-width: 0;
 }
 
-.board-risk-classifications h3 {
-  margin: 0;
-  font-size: 18px;
-  line-height: 1.6;
-}
-
-.board-risk-classifications > p {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 14px;
-  line-height: 1.7;
-}
-
 .board-classification-accordion {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -529,7 +600,6 @@
 
 .board-risk-review-overview,
 .board-risk-review-reason,
-.board-risk-lock-content,
 .board-student-safety-content {
   display: flex;
   width: 100%;
@@ -955,72 +1025,6 @@
 
 .board-risk-review-actions .ui-information-tooltip {
   margin-inline-start: 0;
-}
-
-.board-risk-lock-review {
-  display: flex;
-  width: 100%;
-  flex-direction: column;
-  align-items: flex-end;
-  justify-content: center;
-  gap: 8px;
-  padding: 16px;
-  border: var(--divider-default);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-surface);
-}
-
-.board-risk-lock-notice {
-  display: flex;
-  width: 100%;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-}
-
-.board-risk-lock-heading {
-  display: inline-flex;
-  width: 100%;
-  align-items: center;
-  gap: 8px;
-}
-
-.board-risk-lock-heading > strong {
-  min-width: 0;
-  flex: 1;
-  word-break: keep-all;
-  overflow-wrap: anywhere;
-}
-
-.board-risk-lock-review .board-lock-icon {
-  width: 20px;
-  height: 20px;
-  flex: 0 0 auto;
-}
-
-.board-risk-lock-review .board-lock-icon svg {
-  width: 20px;
-  height: 20px;
-}
-
-.board-risk-lock-review strong {
-  display: block;
-  color: var(--color-text-primary);
-  font-size: var(--font-size-body);
-  font-weight: var(--font-weight-medium);
-  line-height: 24px;
-}
-
-.board-risk-lock-review p {
-  width: 100%;
-  margin: 0;
-  padding-left: 28px;
-  color: var(--color-text-secondary);
-  font-size: 16px;
-  font-weight: 400;
-  line-height: 24px;
-  word-break: keep-all;
-  overflow-wrap: anywhere;
 }
 
 .board-student-safety-card {

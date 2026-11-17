@@ -131,6 +131,7 @@ test('교사가 1~7점으로 위험도를 평가하고 상향·하향 변경에 
 
 test('AI 판단 이의 제기는 유형과 사유를 남기고 처리 기록에 저장한다', async ({ page }) => {
   await openRiskTab(page, 'thread-002');
+  await page.getByRole('button', { name: '확인된 위험 요소와 판단 근거', exact: true }).click();
   await page.getByRole('button', { name: 'AI 판단이 틀렸어요', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'AI 판단이 틀렸나요?', exact: true });
   const submit = dialog.getByRole('button', { name: '이의 제기', exact: true });

@@ -186,7 +186,7 @@ test('잠정 분석의 100점 시스템 점수와 교사 7단계, 현재 적용 
   await expect(page.getByText('잠정 분석', { exact: true })).toBeVisible();
   await expect(page.getByText('교사의 직접 검토가 필요합니다.', { exact: true })).toBeVisible();
   const summary = page.locator('.board-risk-tab .board-admin-share-summary');
-  await expect(summary.locator('div').filter({ has: page.locator('dt', { hasText: '시스템 분석' }) })).toContainText('긴급 · 위험 점수 95/100');
+  await expect(summary.locator('div').filter({ has: page.locator('dt', { hasText: '규칙 기반 잠정 위험도' }) })).toContainText('긴급 · 위험 점수 95/100');
   await expect(summary.locator('div').filter({ has: page.locator('dt', { hasText: '교사 검토' }) })).toContainText('위험 · 7단계 중 5단계');
   await expect(summary.locator('div').filter({ has: page.locator('dt', { hasText: '현재 적용' }) })).toContainText('위험');
 });

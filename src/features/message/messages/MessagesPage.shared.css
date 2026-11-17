@@ -144,6 +144,7 @@
 
 /* Existing domain cards stay in place; shared interaction rules do not affect policy. */
 .board-card-meta-label { display: inline-flex; align-items: center; gap: var(--space-1); }
+.board-card-meta-label .ui-information-tooltip { margin-inline-start: 0; }
 .board-card-meta-label .ui-information-trigger { width: 44px; height: 44px; }
 .board-thread-button,
 .board-thread-star-button,

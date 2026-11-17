@@ -1,4 +1,9 @@
-import type { RiskFactorStatus, RiskTagCode } from '../../shared/types/risk';
+import type { RiskAnalysisMetadata, RiskFactorStatus, RiskTagCode } from '../../shared/types/risk';
+
+export function isProvisionalAnalysis(metadata: RiskAnalysisMetadata) {
+  return metadata.analysisMode === 'RULE_ONLY' || metadata.aiAnalysisStatus === 'REUSED_RULE_ONLY' ||
+    metadata.aiAnalysisStatus === 'RULE_ONLY_AI_UNAVAILABLE' || metadata.aiAnalysisStatus === 'RULE_ONLY_INVALID_RESPONSE';
+}
 
 // These are classification results supplied by analysis, not client-side predictions.
 export type RiskClassification = {

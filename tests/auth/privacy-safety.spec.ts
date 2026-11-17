@@ -115,11 +115,11 @@ test('실제 재검토 요청 하나와 대기 상태를 표시하고 중복 요
   await expect(page.getByRole('tooltip')).toContainText('승인되면 위험도 하향과 안전 잠금 해제가 함께 반영');
   await page.keyboard.press('Escape');
   await expect(page.getByRole('tooltip')).toHaveCount(0);
-  await expect(page.locator('.board-risk-lock-review')).toContainText('긴급 단계에서는 답변 생성과 전송이 제한돼요.');
+  await expect(page.locator('.board-risk-lock-review')).toHaveCount(0);
   await expect(request).toBeEnabled();
   await request.evaluate((button) => { (button as HTMLButtonElement).click(); (button as HTMLButtonElement).click(); });
   await expect(page.getByRole('button', { name: '검토자 확인 대기', exact: true })).toBeDisabled();
-  await expect(page.locator('.board-risk-lock-review')).toContainText('검토자가 확인하는 동안 답변 생성과 전송이 제한돼요.');
+  await expect(page.locator('.board-risk-lock-review')).toHaveCount(0);
   await expect(page.locator('.board-risk-review-info')).toContainText('검토자가 확인하고 있어요.');
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('teacher-hub.emergency-reviews.v2') ?? '[]').length)).toBe(1);
   if (testInfo.project.name === 'mobile') await page.setViewportSize({ width: 320, height: 812 });
@@ -127,13 +127,14 @@ test('실제 재검토 요청 하나와 대기 상태를 표시하고 중복 요
   const helpBox = await help.boundingBox();
   expect(helpBox!.x + helpBox!.width).toBeLessThanOrEqual(panelBox!.x + panelBox!.width);
   await page.locator('.board-risk-review-footer').screenshot({ path: testInfo.outputPath('review-pending.png') });
-  await page.locator('.board-risk-lock-review').screenshot({ path: testInfo.outputPath('safety-lock.png') });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name: '처리 기록', exact: true }).click();
   await expect(page.getByText('긴급 위험도 하향 승인 요청', { exact: true })).toHaveCount(1);
   await expect(page.getByText('위험도 재검토 요청', { exact: true })).toHaveCount(0);
   await conversationTab(page).click();
   await expect(page.getByText('긴급 단계에서는 답변 생성과 전송이 제한돼요.', { exact: true })).toBeVisible();
+  await expect(page.locator('.board-answer-box')).toHaveClass(/is-locked/);
+  await page.locator('.board-answer-box').screenshot({ path: testInfo.outputPath('safety-lock.png') });
   await expect(page.getByRole('button', { name: /답변 (작성하러 가기|이어서 작성하기)/ })).toHaveCount(0);
 });
 
@@ -147,7 +148,7 @@ test('잠금이 없으면 위험도 검토만 저장하고 가짜 재검토 접�
     initialTeacherThreads.find((thread: { id: string }) => thread.id === 'thread-002').riskReviewRequired = true;
   });
   await riskTab(page).click();
-  await expect(page.locator('.board-risk-lock-review')).toContainText('위험도 재검토가 필요합니다.');
+  await expect(page.locator('.board-risk-lock-review')).toHaveCount(0);
   await expect(page.getByRole('button', { name: '재검토 요청', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: '검토 완료', exact: true }).click();
   await expect(page.locator('.board-risk-lock-review')).toHaveCount(0);
@@ -190,7 +191,7 @@ test('긴급 이하의 safetyLock과 권한 제한을 안내하고 가짜 재검
     analysis.canReviewRisk = false;
   });
   await riskTab(page).click();
-  await expect(page.locator('.board-risk-lock-review')).toContainText('안전 잠금이 유지되는 동안 답변 생성과 전송이 제한돼요.');
+  await expect(page.locator('.board-risk-lock-review')).toHaveCount(0);
   await expect(page.getByRole('button', { name: '검토 완료', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: '재검토 요청', exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('teacher-hub.emergency-reviews.v2') ?? '[]').length)).toBe(0);

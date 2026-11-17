@@ -142,6 +142,65 @@ function teacherComplaintJson(key: string, current: typeof review): unknown {
   }
 }
 
+for (const canCreateEvidence of [true, false]) {
+  test(`공유 창의 증빙 ${canCreateEvidence ? '선택 첨부' : '생성 불가'}와 공유 실패 재시도는 선택한 HTTP scope를 유지한다`, async ({ page }) => {
+    let shared = false;
+    const submissions: unknown[] = [];
+    let completeShare: () => void = () => {};
+    const shareGate = new Promise<void>((resolve) => { completeShare = resolve; });
+    await setup(page, 'TEACHER', async (route, key) => {
+      if (key === 'POST /teacher/complaints/12/escalation') {
+        submissions.push(route.request().postDataJSON());
+        if (submissions.length === 1) await route.fulfill({ status: 503, json: { message: '일시적인 공유 오류' } });
+        else {
+          await shareGate;
+          shared = true;
+          await route.fulfill({ json: 'shared' });
+        }
+        return true;
+      }
+      if (key === 'GET /teacher/complaints/12/emergency-review/current') {
+        await route.fulfill({ status: 404, json: { code: 'EMERGENCY_REVIEW_NOT_FOUND' } }); return true;
+      }
+      let json = teacherComplaintJson(key, review);
+      if (json === undefined) return false;
+      if (key === 'GET /teacher/complaints/12/messages') json = { ...json as object, allowedActions: canCreateEvidence ? ['CREATE_EVIDENCE_PACKAGE'] : [] };
+      if (key === 'GET /teacher/complaints/12/escalation') json = {
+        ...json as object, escalationId: shared ? 3 : null, escalationStatus: shared ? 'SHARED' : 'NOT_SHARED',
+        emergencyReviewRequestId: null, riskReviewStatus: null,
+      };
+      await route.fulfill({ json }); return true;
+    });
+    await page.goto('/teacher/messages/12');
+    await page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name: '위험 요소', exact: true }).click();
+    const shareSection = page.getByRole('region', { name: '관리자 공유' });
+    await shareSection.getByRole('button', { name: '관리자에게 공유', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: '관리자에게 공유할까요?' });
+    const prepare = dialog.getByRole('button', { name: '증빙 패키지 생성 후 첨부', exact: true });
+    await dialog.getByLabel('공유 사유').fill('학교 공동 검토가 필요합니다.');
+    if (canCreateEvidence) {
+      await prepare.click();
+      await expect(dialog.getByRole('checkbox', { name: '증빙 패키지', exact: true })).toBeChecked();
+    } else {
+      await expect(prepare).toBeDisabled();
+      await expect(dialog).toContainText('현재 이 메시지의 증빙 패키지를 생성할 수 없습니다.');
+    }
+    await dialog.getByRole('button', { name: '공유하기', exact: true }).click();
+    await expect(dialog.getByRole('alert')).toBeVisible();
+    await expect(dialog.getByLabel('공유 사유')).toHaveValue('학교 공동 검토가 필요합니다.');
+    if (canCreateEvidence) await expect(dialog.getByRole('checkbox', { name: '증빙 패키지', exact: true })).toBeChecked();
+    await dialog.getByRole('button', { name: '공유하기', exact: true }).click();
+    await expect(dialog.getByLabel('공유 사유')).toBeDisabled();
+    await expect(dialog.getByRole('checkbox', { name: '원문 메시지', exact: true })).toBeDisabled();
+    if (canCreateEvidence) await expect(dialog.getByRole('checkbox', { name: '증빙 패키지', exact: true })).toBeDisabled();
+    completeShare();
+    await expect(dialog).toHaveCount(0);
+    const expected = { adminId: null, reason: '학교 공동 검토가 필요합니다.', scopes: canCreateEvidence ? ['MASKING_MESSAGES', 'MEDIATION_PACKAGE'] : ['MASKING_MESSAGES'] };
+    expect(submissions).toEqual([expected, expected]);
+    await expect(shareSection.getByRole('button', { name: '공유 완료', exact: true })).toBeDisabled();
+  });
+}
+
 test('완충 요약 실패 응답은 원문 말풍선 대신 명시적인 요약 실패 안내를 표시한다', async ({ page }) => {
   await setup(page, 'TEACHER', async (route, key) => {
     let json = teacherComplaintJson(key, review);
@@ -204,7 +263,7 @@ test('서버 메시지에서 공식 절차를 보고 돌아와도 위험 요소 
   await page.getByRole('button', { name: '이전 화면으로 돌아가기', exact: true }).click();
   await expect(page).toHaveURL(/\/teacher\/messages\/12$/);
   await expect(riskTab).toHaveClass(/is-active/);
-  await expect(page.getByText('현재 답변 작성이 제한되어 있습니다.', { exact: true })).toBeVisible();
+  await expect(page.locator('.board-risk-lock-review')).toHaveCount(0);
 });
 
 test('사용자 조회 5xx는 저장된 JWT로 우회하지 않고 재시도를 제공한다', async ({ page }) => {
@@ -241,11 +300,32 @@ test('긴급 재검토 조회 실패는 일반 검토를 막지 않고 긴급 �
   });
   await page.goto('/teacher/messages/12');
   await page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name: '위험 요소', exact: true }).click();
+  await page.getByRole('button', { name: '최근 긴급 재검토 요청 상세', exact: true }).click();
+  const reviewDetails = page.locator('.board-risk-workflow-accordion');
+  await expect(reviewDetails.getByRole('alert')).toBeVisible();
+  await expect(reviewDetails.getByText('관리자 검토 결과', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: '검토 완료', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: '5점 위험', exact: true }).click();
   await page.getByPlaceholder('하향 수정 사유를 입력해주세요.').fill('추가 근거를 확인했습니다.');
   await expect(page.getByRole('button', { name: '재검토 요청', exact: true })).toBeDisabled();
   await expect(page.getByText('현재 재검토 상태를 확인하지 못했습니다.', { exact: false })).toBeVisible();
+});
+
+test('서버 요약보다 오래된 관리자 요청 상세를 완료 결과로 표시하지 않는다', async ({ page }) => {
+  const current = { ...review, requestId: 10, status: 'APPLIED', decidedAt: '2026-10-30T12:00:00' };
+  await setup(page, 'TEACHER', async (route, key) => {
+    const json = key === 'GET /teacher/complaints/12/emergency-review/current'
+      ? { ...current, requestId: 9, requestedRiskLevel: 'LOW' } : teacherComplaintJson(key, current);
+    if (json === undefined) return false;
+    await route.fulfill({ json }); return true;
+  });
+  await page.goto('/teacher/messages/12');
+  await page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name: '위험 요소', exact: true }).click();
+  await page.getByRole('button', { name: '최근 긴급 재검토 요청 상세', exact: true }).click();
+  const reviewDetails = page.locator('.board-risk-workflow-accordion');
+  await expect(reviewDetails).toContainText('최신 재검토 정보가 일치하지 않아 결과를 표시할 수 없습니다.');
+  await expect(reviewDetails.getByText('관리자 검토 위험도', { exact: true })).toHaveCount(0);
+  await expect(reviewDetails.getByText('지정 검토자', { exact: true })).toHaveCount(0);
 });
 
 test('최신 거부 요청의 잠금이 유지되어도 교사가 재요청하며 승인 대기 중에는 중복을 막는다', async ({ page }, testInfo) => {
@@ -272,12 +352,12 @@ test('최신 거부 요청의 잠금이 유지되어도 교사가 재요청하�
   await reviewDetails.focus();
   await page.keyboard.press('Enter');
   await expect(reviewDetails).toHaveAttribute('aria-expanded', 'true');
-  await expect(page.getByText('지정 관리자', { exact: true })).toBeVisible();
+  await expect(page.locator('.board-risk-workflow-accordion').getByText('지정 관리자', { exact: true })).toBeVisible();
   await page.locator('.board-risk-workflow-accordion').screenshot({ path: testInfo.outputPath('emergency-review-expanded.png'), animations: 'disabled' });
   await page.keyboard.press('Space');
   await expect(reviewDetails).toHaveAttribute('aria-expanded', 'false');
   await page.locator('.board-risk-workflow-accordion').screenshot({ path: testInfo.outputPath('emergency-review-collapsed.png'), animations: 'disabled' });
-  await expect(page.getByText('현재 답변 작성이 제한되어 있습니다.', { exact: true })).toBeVisible();
+  await expect(page.locator('.board-risk-lock-review')).toHaveCount(0);
   await reviewDetails.click();
   await page.getByRole('button', { name: '5점 위험', exact: true }).click();
   await page.getByPlaceholder('하향 수정 사유를 입력해주세요.').fill('추가 근거를 확인했습니다.');
@@ -286,7 +366,7 @@ test('최신 거부 요청의 잠금이 유지되어도 교사가 재요청하�
   await expect(page.getByRole('button', { name: '검토자 확인 대기', exact: true })).toBeDisabled();
   expect(calls).toContain('POST /teacher/complaints/12/emergency-review');
   expect(calls).not.toContain('POST /teacher/complaints/12/risk-reviews');
-  await expect(page.getByText('현재 답변 작성이 제한되어 있습니다.')).toBeVisible();
+  await expect(page.locator('.board-risk-lock-review')).toHaveCount(0);
 });
 
 test('하나의 실제 재검토 요청은 실패 후 재시도하고 서버의 대기·승인·잠금 상태를 따른다', async ({ page }, testInfo) => {
@@ -338,7 +418,7 @@ test('하나의 실제 재검토 요청은 실패 후 재시도하고 서버의 
   await expect(page.getByRole('button', { name: '저장 중…', exact: true })).toBeDisabled();
   completeSave();
   await expect(page.getByRole('button', { name: '검토자 확인 대기', exact: true })).toBeDisabled();
-  await expect(page.locator('.board-risk-lock-review')).toContainText('검토자가 확인하는 동안 답변 생성과 전송이 제한돼요.');
+  await expect(page.locator('.board-risk-lock-review')).toHaveCount(0);
   await page.locator('.board-risk-review-panel').screenshot({ path: testInfo.outputPath('server-review-pending.png') });
   await page.reload();
   await riskTab.click();
@@ -348,11 +428,16 @@ test('하나의 실제 재검토 요청은 실패 후 재시도하고 서버의 
   await page.reload();
   await riskTab.click();
   await expect(page.getByRole('button', { name: '검토자 확인 대기', exact: true })).toHaveCount(0);
-  await expect(page.locator('.board-risk-lock-review')).toContainText('안전 잠금이 유지되는 동안 답변 생성과 전송이 제한돼요.');
+  await expect(page.locator('.board-risk-lock-review')).toHaveCount(0);
+  await page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name: '대화', exact: true }).click();
+  await expect(page.locator('.board-answer-box')).toHaveClass(/is-locked/);
+  await expect(page.locator('.board-answer-box')).toContainText('안전 잠금이 유지되는 동안 답변 생성과 전송이 제한돼요.');
   current = { ...current, safetyLock: false };
   await page.reload();
   await riskTab.click();
   await expect(page.locator('.board-risk-lock-review')).toHaveCount(0);
+  await page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name: '대화', exact: true }).click();
+  await expect(page.locator('.board-answer-box')).not.toHaveClass(/is-locked/);
   expect(writes).toBe(2);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

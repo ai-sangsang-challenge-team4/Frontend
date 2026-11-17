@@ -89,8 +89,7 @@
   .board-reply-context-heading,
   .board-reply-compose-header,
   .board-reply-bottom-actions,
-  .board-composer-action-group,
-  .board-risk-lock-review {
+  .board-composer-action-group {
     align-items: stretch;
     flex-direction: column;
   }
@@ -326,10 +325,6 @@
 
   .board-risk-review-textarea-shell {
     padding: 18px 20px;
-  }
-
-  .board-risk-lock-review p {
-    padding-left: 0;
   }
 
   .board-risk-guide-copy {

@@ -41,17 +41,15 @@ import { BoardConfirmDialog } from './components/BoardConfirmDialog';
 import { ConversationDateChip } from './components/ConversationDateChip';
 import { BufferedSummaryCard } from './components/BufferedSummaryCard';
 import { AnalysisStateNotice } from './components/AnalysisStateNotice';
-import { RiskClassificationPanel } from '../risk-analysis/RiskClassificationPanel';
+import { RiskClassificationPanel, RiskClassificationSummary } from '../risk-analysis/RiskClassificationPanel';
 import { RiskAnalysisNotice } from '../risk-analysis/RiskAnalysisNotice';
 import {
   BreadcrumbSeparator,
   CheckCircleIcon,
-  EvidencePackageIcon,
   ExternalLinkIcon,
   FileSearchIcon,
   OriginalViewerIcon,
   RiskGuideIcon,
-  RiskSectionIcon,
   SendIcon,
 } from './components/MessageIcons';
 import { MessageContextCard } from './components/MessageContextCard';
@@ -139,6 +137,7 @@ import { getServerCloseBlockReason, getServerReplyBlockReason } from './serverRe
 import { TEACHER_RESPONSE_MAX_LENGTH } from './api/teacherInboxTypes';
 
 const isServerInbox = messageApiMode === 'http';
+const replyLockExplanation = '긴급 단계 또는 안전 잠금이 유지되는 동안 답변 생성과 전송이 제한됩니다. 긴급 위험도 하향이 승인되면 잠금도 함께 해제되며, 이후에도 현재 위험도와 답변 차례 등 이용 조건을 확인합니다.';
 
 type TeacherMessagesProps = {
   initialThreadId?: string | null;
@@ -1113,7 +1112,7 @@ function RiskReviewPanel({
 type RiskAnalysisPanelProps = {
   onAdminShared: (threadId: string, escalation: { reason: string }) => void;
   onAiObjection: (threadId: string, objection: Pick<AiObjection, 'reason' | 'type'>) => void;
-  onEvidencePackageCreate: (threadId: string) => void;
+  onEvidencePackageCreate: (threadId: string) => boolean;
   // Rejects with the API error so the panel can show it.
   onReviewComplete: (threadId: string, review: RiskReviewSubmission) => Promise<void>;
   onOriginalOpen: (evidence?: string) => void;
@@ -1137,6 +1136,8 @@ function RiskAnalysisPanel({
   const navigate = useNavigate();
   const [isProcedureOpen, setIsProcedureOpen] = useState(false);
   const [isObjectionOpen, setIsObjectionOpen] = useState(false);
+  const [isEvidenceOpen, setIsEvidenceOpen] = useState(false);
+  const evidenceContentId = useId();
   const analysis = thread.analysis;
   const initialReviewScore =
     analysis?.teacherRiskScore ??
@@ -1171,6 +1172,10 @@ function RiskAnalysisPanel({
     [isLinked, thread.id, Boolean(thread.analysis), currentRequestId, currentStatus, currentLock],
   );
   const currentReview = useEscalationRequest(loadCurrentReview);
+  // Detail responses may lag behind a newer summary after an administrator decision.
+  const confirmedReview = !currentReview.error && !escalation.error &&
+    currentReview.data?.requestId === currentRequestId && currentReview.data?.status === currentStatus
+    ? currentReview.data : null;
   useEffect(() => {
     if (escalation.data) onServerStateLoaded(thread.id, escalation.data);
   }, [escalation.data, onServerStateLoaded, thread.id]);
@@ -1237,11 +1242,7 @@ function RiskAnalysisPanel({
     thread.riskReviewRequired;
   const canShowStudentSafetyCard = analysis.studentSafetySignal !== 'NONE';
   const hasAiObjection = Boolean(analysis.aiObjections?.length);
-  // The server's safety lock keeps the emergency policy even after the level was lowered.
-  const replyLocked = isReplyLocked(thread) || serverSafetyLock;
   const isAwaitingAdminApproval = serverReviewStatus === 'PENDING_ADMIN_APPROVAL';
-  const canShowEvidencePackage =
-    effectiveRiskLevel === 'high' || effectiveRiskLevel === 'emergency';
   const handleGuideAction = () => {
     if (isEmergencyGuide) {
       openGuidePostFromMessages(
@@ -1345,13 +1346,45 @@ function RiskAnalysisPanel({
       </section>
 
       <section className="board-risk-evidence-panel">
-        <div className="board-risk-section-header">
-          <div>
-            <RiskSectionIcon />
-            <h2 className="board-risk-section-title">
-              확인된 위험 요소와 판단 근거
-            </h2>
-          </div>
+        <div className="board-risk-evidence-header">
+          <h2 className="board-risk-section-title">
+            <button
+              aria-controls={evidenceContentId}
+              aria-expanded={isEvidenceOpen}
+              className="board-risk-evidence-toggle"
+              onClick={() => setIsEvidenceOpen((open) => !open)}
+              type="button"
+            >
+              <span>확인된 위험 요소와 판단 근거</span>
+              <span aria-hidden="true" className="board-risk-evidence-indicator">
+                <ChevronDownIcon className="board-risk-evidence-chevron" />
+              </span>
+            </button>
+          </h2>
+          <InformationTooltip label="위험 요소와 판단 근거 설명" content={<>
+            <strong>8개 위험 요소 분류</strong><br />
+            각 항목을 펼쳐 판단 이유와 근거 구간을 확인할 수 있습니다. 미확인은 분석 결과가 제공되지 않은 상태입니다.
+          </>} />
+        </div>
+
+        <RiskClassificationSummary results={analysis.riskClassifications} />
+
+        <div className="board-risk-evidence-content" hidden={!isEvidenceOpen} id={evidenceContentId}>
+          <RiskClassificationPanel
+            canInspectOriginal={canInspectOriginal}
+            onOriginalOpen={onOriginalOpen}
+            results={analysis.riskClassifications}
+          />
+
+          {riskFactorItems.length > 0 ? (
+            <Accordion
+              allowMultiple
+              className="board-risk-factor-accordion"
+              items={riskFactorItems}
+            />
+          ) : (
+            <p className="board-risk-factor-note">추가 판단 근거가 제공되지 않았어요.</p>
+          )}
           <div className="board-risk-section-actions">
             <button
               className="board-outline-button board-risk-action-button board-ai-objection-button"
@@ -1373,22 +1406,6 @@ function RiskAnalysisPanel({
             ) : null}
           </div>
         </div>
-
-        <RiskClassificationPanel
-          canInspectOriginal={canInspectOriginal}
-          onOriginalOpen={onOriginalOpen}
-          results={analysis.riskClassifications}
-        />
-
-        {riskFactorItems.length > 0 ? (
-          <Accordion
-            allowMultiple
-            className="board-risk-factor-accordion"
-            items={riskFactorItems}
-          />
-        ) : (
-          <p className="board-risk-factor-note">추가 판단 근거가 제공되지 않았어요.</p>
-        )}
       </section>
 
       <AiObjectionDialog
@@ -1421,80 +1438,27 @@ function RiskAnalysisPanel({
       {isLinked ? <Accordion className="board-risk-workflow-panel board-risk-workflow-accordion" items={[{
         id: `recent-emergency-review-${thread.id}`,
         title: '최근 긴급 재검토 요청 상세',
-        content: currentReview.error ? <div role="alert"><p>{getApiErrorMessage(currentReview.error, '최근 재검토 요청을 불러오지 못했습니다.')}</p><button className="board-outline-button" onClick={currentReview.retry} type="button">다시 불러오기</button></div>
-          : currentReview.isInitialLoading ? <p role="status">최근 요청을 불러오고 있습니다.</p>
-          : currentReview.data ? <dl className="admin-share-summary">
-            <div><dt>상태</dt><dd>{riskReviewStatusLabel[currentReview.data.status]}</dd></div>
-            <div><dt>요청 위험도</dt><dd>기존 {currentReview.data.previousRiskScore}점 → 교사 검토 {currentReview.data.requestedRiskScale}/7단계</dd></div>
-            <div><dt>요청 사유</dt><dd>{currentReview.data.reason}</dd></div>
-            <div><dt>지정 검토자</dt><dd>{currentReview.data.reviewerName}</dd></div>
-            <div><dt>요청 시각</dt><dd>{formatEscalationTime(currentReview.data.requestedAt)}</dd></div>
-            <div><dt>결정 시각</dt><dd>{currentReview.data.decidedAt ? formatEscalationTime(currentReview.data.decidedAt) : '미결정'}</dd></div>
+        content: currentReview.error || escalation.error ? <div role="alert"><p>{getApiErrorMessage(currentReview.error ?? escalation.error, '최근 재검토 요청을 불러오지 못했습니다.')}</p><button className="board-outline-button" onClick={() => { escalation.retry(); currentReview.retry(); }} type="button">다시 불러오기</button></div>
+          : currentReview.isInitialLoading || escalation.isInitialLoading ? <p role="status">최근 요청을 불러오고 있습니다.</p>
+          : currentReview.data && !confirmedReview ? <div><p>최신 재검토 정보가 일치하지 않아 결과를 표시할 수 없습니다.</p><button className="board-outline-button" onClick={() => { escalation.retry(); currentReview.retry(); }} type="button">다시 불러오기</button></div>
+          : confirmedReview ? <>
+            {confirmedReview.status === 'PENDING_ADMIN_APPROVAL' ? <p>관리자 검토 대기 중입니다. 요청한 위험도는 아직 반영되지 않았습니다.</p> : null}
+            <dl className="admin-share-summary">
+            <div><dt>상태</dt><dd>{riskReviewStatusLabel[confirmedReview.status]}</dd></div>
+            <div><dt>요청 위험도</dt><dd>기존 {confirmedReview.previousRiskScore}점 → 교사 검토 {confirmedReview.requestedRiskScale}/7단계</dd></div>
+            {confirmedReview.status !== 'PENDING_ADMIN_APPROVAL' ? <div><dt>관리자 검토 결과</dt><dd>{confirmedReview.status === 'APPLIED' ? '승인 · 요청 위험도 반영 완료' : '반려 · 요청 위험도 미반영'}</dd></div> : null}
+            {confirmedReview.status === 'APPLIED' ? <div><dt>관리자 검토 위험도</dt><dd>{systemRiskLabel[systemRiskLevelFromApi[confirmedReview.requestedRiskLevel]]}</dd></div> : null}
+            <div><dt>현재 적용 위험도</dt><dd>{systemRiskLabel[effectiveRiskLevel]}</dd></div>
+            <div><dt>요청 사유</dt><dd>{confirmedReview.reason}</dd></div>
+            <div><dt>지정 검토자</dt><dd>{confirmedReview.reviewerName}</dd></div>
+            <div><dt>요청 시각</dt><dd>{formatEscalationTime(confirmedReview.requestedAt)}</dd></div>
+            {confirmedReview.status !== 'PENDING_ADMIN_APPROVAL' && confirmedReview.decidedAt ? <div><dt>검토 완료 시각</dt><dd>{formatEscalationTime(confirmedReview.decidedAt)}</dd></div> : null}
             <div><dt>안전 잠금</dt><dd>{serverSafetyLock ? '유지 중' : '해제됨'}</dd></div>
-          </dl> : <p>긴급 재검토 요청 내역이 없습니다.</p>,
+          </dl></> : <p>긴급 재검토 요청 내역이 없습니다.</p>,
       }]} /> : null}
 
-      {replyLocked || thread.riskReviewRequired ? (
-        <section className="board-risk-lock-review">
-          <div className="board-risk-lock-content">
-            <div className="board-risk-lock-notice">
-              <div className="board-risk-lock-heading">
-                <span className="board-lock-icon" aria-hidden="true">
-                  <svg
-                    fill="none"
-                    viewBox="0 0 25 25"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <circle cx="12.5" cy="12.5" fill="#FF4B6C" r="12.5" />
-                    <path
-                      d="M8.375 19C7.99688 19 7.67318 18.8788 7.40391 18.6363C7.13464 18.3938 7 18.1024 7 17.7619V11.5714C7 11.231 7.13464 10.9395 7.40391 10.697C7.67318 10.4546 7.99688 10.3333 8.375 10.3333H9.0625V9.09524C9.0625 8.23889 9.39766 7.50893 10.068 6.90536C10.7383 6.30179 11.549 6 12.5 6C13.451 6 14.2617 6.30179 14.932 6.90536C15.6023 7.50893 15.9375 8.23889 15.9375 9.09524V10.3333H16.625C17.0031 10.3333 17.3268 10.4546 17.5961 10.697C17.8654 10.9395 18 11.231 18 11.5714V17.7619C18 18.1024 17.8654 18.3938 17.5961 18.6363C17.3268 18.8788 17.0031 19 16.625 19H8.375ZM13.4711 15.5411C13.7404 15.2986 13.875 15.0071 13.875 14.6667C13.875 14.3262 13.7404 14.0347 13.4711 13.7923C13.2018 13.5498 12.8781 13.4286 12.5 13.4286C12.1219 13.4286 11.7982 13.5498 11.5289 13.7923C11.2596 14.0347 11.125 14.3262 11.125 14.6667C11.125 15.0071 11.2596 15.2986 11.5289 15.5411C11.7982 15.7835 12.1219 15.9048 12.5 15.9048C12.8781 15.9048 13.2018 15.7835 13.4711 15.5411ZM10.4375 10.3333H14.5625V9.09524C14.5625 8.57937 14.362 8.14087 13.9609 7.77976C13.5599 7.41865 13.0729 7.2381 12.5 7.2381C11.9271 7.2381 11.4401 7.41865 11.0391 7.77976C10.638 8.14087 10.4375 8.57937 10.4375 9.09524V10.3333Z"
-                      fill="white"
-                    />
-                  </svg>
-                </span>
-                <strong>{replyLocked ? '현재 답변 작성이 제한되어 있습니다.' : '위험도 재검토가 필요합니다.'}</strong>
-                {replyLocked ? <InformationTooltip label="답변 제한 안내" content="긴급 단계 또는 안전 잠금이 유지되는 동안 답변 생성과 전송이 제한됩니다. 긴급 위험도 하향이 승인되면 잠금도 함께 해제되며, 이후에도 현재 위험도와 답변 차례 등 이용 조건을 확인합니다." /> : null}
-              </div>
-              <p>{isAwaitingAdminApproval
-                ? '검토자가 확인하는 동안 답변 생성과 전송이 제한돼요.'
-                : replyLocked ? getReplyLockNotice(thread).lockDescription
-                  : analysis.canReviewRisk ? '위험도와 판단 근거를 확인하고 검토를 완료해 주세요.'
-                    : '담당 교사에게 위험도 검토를 요청해 주세요.'}</p>
-            </div>
-          </div>
-        </section>
-      ) : null}
-
-      {canShowEvidencePackage ? (
-        <section className="board-risk-workflow-panel">
-          <div className="board-risk-section-header">
-            <div>
-              <EvidencePackageIcon />
-              <h2 className="board-risk-section-title">증빙 패키지</h2>
-            </div>
-            <button
-              className="board-outline-button board-risk-action-button board-evidence-package-button"
-              disabled={!analysis.packageAvailable || thread.evidencePackageGenerated}
-              onClick={() => onEvidencePackageCreate(thread.id)}
-              type="button"
-            >
-              <span>
-                {thread.evidencePackageGenerated
-                  ? '증빙 패키지 생성됨'
-                  : '증빙 패키지 생성'}
-              </span>
-              <ExternalLinkIcon />
-            </button>
-          </div>
-          <p>
-            완충 요약, 원문, 위험 요소, 판단 근거, 처리 기록을 하나의 확인
-            묶음으로 보존합니다.
-          </p>
-        </section>
-      ) : null}
-
       {canShareWithAdmin(thread) ? (
-        <AdminShareSection escalation={escalation} onShared={onAdminShared} thread={thread} />
+        <AdminShareSection escalation={escalation} onEvidencePackageCreate={onEvidencePackageCreate} onShared={onAdminShared} thread={thread} />
       ) : null}
 
       {canShowStudentSafetyCard ? (
@@ -1611,7 +1575,7 @@ type DetailProps = {
   initialOriginalViewer?: OriginalMessageRequest;
   initialTab?: DetailTab;
   onBack: () => void;
-  onEvidencePackageCreate: (threadId: string) => void;
+  onEvidencePackageCreate: (threadId: string) => boolean;
   onOpenReplyComposer: (threadId: string) => void;
   // Resolves once the original can be shown; a server thread fetches it first
   // (POST /messages/{messageId}/original-views).
@@ -1916,7 +1880,12 @@ function ThreadDetail({
                   </svg>
                 </span>
                 <div>
-                  <strong>{lockedGuide.lockTitle}</strong>
+                  <div className="board-lock-message-heading">
+                    <strong>{lockedGuide.lockTitle}</strong>
+                    {effectiveRiskLevel === 'emergency' || thread.analysis?.safetyLock ? (
+                      <InformationTooltip label="답변 제한 안내" content={replyLockExplanation} />
+                    ) : null}
+                  </div>
                   <p>{lockedGuide.lockDescription}</p>
                 </div>
               </div>
@@ -2837,14 +2806,13 @@ export function TeacherMessages({
   };
 
   const handleEvidencePackageCreate = (threadId: string) => {
-    updateThread(threadId, (thread) => {
-      if (
-        !thread.analysis?.packageAvailable ||
-        !['high', 'emergency'].includes(getThreadRiskLevel(thread))
-      ) {
-        return thread;
-      }
+    const target = threads.find((thread) => thread.id === threadId);
+    if (!target?.analysis?.packageAvailable || !['high', 'emergency'].includes(getThreadRiskLevel(target))) return false;
+    if (target.evidencePackageGenerated) return true;
 
+    // Existing browser-local preparation; a server package-generation endpoint is not connected yet.
+    return updateThread(threadId, (thread) => {
+      if (!thread.analysis) return thread;
       return {
         ...thread,
         evidencePackageGenerated: true,
