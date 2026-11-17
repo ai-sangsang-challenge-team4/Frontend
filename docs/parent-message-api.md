@@ -11,7 +11,7 @@
 | 서버 초안 | POST | `/complaints` | `{ studentId, teacherId, title, content }`. "AI 분석 시작"을 처음 누를 때 생성 |
 | 본문 수정 | PATCH | `/complaints/{id}` | `{ content }`. 분석 전 본문을 바꿨거나, 검토 화면에서 고른 문장이 서버 내용과 다를 때 |
 | 서버 마스킹 | POST | `/complaints/{id}/mask` | 최초 민원 초안의 분석 전 호출. `maskedContent`와 `contentVersion`을 검토 결과에 반영 |
-| 분석 | POST | `/complaints/{id}/risk-analysis` | 점수·등급만 반환. 같은 내용이면 기존 분석을 다시 돌려줌 |
+| 분석 | POST | `/complaints/{id}/risk-analysis` | 점수·등급·AI 분석 상태·모드·수동 검토 필요 여부 반환. 같은 내용이면 기존 분석을 다시 돌려줌 |
 | 근거·수정안 | GET | `/risk-analyses/{analysisId}/findings` | 태그별 근거와 수정 제안, 최종 수정안(AI 초안 탭) |
 | 상세 탐지 | GET | `/risk-analyses/{analysisId}/detector-results` | 검토 화면의 규칙·AI 분석 상태, 신뢰도, 복수 근거, 모델 정보. 실패하면 조회만 재시도 가능 |
 | 추가 문의 초안 | GET / PUT | `/complaints/{id}/message-draft` | 교사 답변 후 학부모 작성 차례에 저장·복원. 반환된 숫자 `messageId` 사용. 기존 초안 수정 시 `expectedContentVersion` 필수(최초 저장은 생략) |
@@ -30,6 +30,21 @@
 
 검토 화면은 서버의 `riskScore`·`riskLevel`과 `finalRevision.reason`을 표시합니다. 상세 탐지는 `finalState`·`state`·`evidenceSpans`를 읽고, 이전 boolean·문자열 근거 응답도 지원합니다. 재분석이 제출 시점으로 미뤄진 경우 이전 본문의 상세 분석을 새 결과처럼 표시하지 않습니다.
 
+### AI 장애·예외 및 Severity 연동 (#77)
+
+시스템 위험 점수는 서버가 반환한 **0~100점**을 그대로 표시합니다. 등급과 행동 정책은 서버의 `riskLevel`·`currentRiskLevel`을 따르며, 교사 검토는 별도의 **1~7단계**를 유지합니다.
+
+- `aiAnalysisStatus=COMPLETED`·`REUSED`는 정상 완료·기존 결과 재사용으로 구분합니다. `REUSED_RULE_ONLY`·`RULE_ONLY_AI_UNAVAILABLE`·`RULE_ONLY_INVALID_RESPONSE` 또는 `analysisMode=RULE_ONLY`이면 잠정 분석 배지와 직접 검토 안내를 표시합니다. `manualReviewRequired=true`를 별도로 강조합니다. `analysisMessage`는 설명으로만 사용합니다.
+- 최종 전송의 `aiAnalysisStatus`와 현재 백엔드의 별칭 `submissionAnalysisStatus`를 모두 지원합니다. 전송 완료 안내에는 **해당 send 응답의** `riskAnalysis`만 사용합니다. `SKIPPED_LIMIT`이면 점수와 이전 분석을 표시하지 않습니다. 응답을 놓친 재시도에서도 이전 검토 결과를 최종 분석처럼 복사하지 않습니다.
+- 전송 메타데이터(`submissionAnalysis`)는 해당 학부모 메시지에만 속합니다. 서버 대화 동기화에서 최신 학부모 메시지의 ID 또는 본문이 바뀌면 지우고, 교사 답변만 추가된 경우에는 유지합니다. 다른 기기의 새 추가 문의에 이전 전송의 분석을 붙이지 않습니다.
+- HTTP 500의 `PRIVACY_MASKING_FAILED`·`RISK_RULE_PROCESSING_FAILED`·`RISK_SCORE_CALCULATION_FAILED`·`RISK_ANALYSIS_SAVE_FAILED`는 코드별 안내를 표시하고 입력·초안을 유지합니다. 안전 처리 오류를 AI 폴백이나 전송 성공으로 처리하지 않습니다.
+- 상세 탐지의 **LLM 결과**에서 `severity`를 해당 없음(0)·경미(1)·보통(2)·심각(3)으로 표시합니다. null/누락은 상태에 따라 경계 사례·판단 정보 부족·심각도 정보 없음으로 구분합니다. Rule의 심각도·반복 횟수는 사용하지 않습니다.
+- `repeatCount`는 현재 민원에서 감지된 횟수이며 null/누락은 정보 없음입니다. 횟수로 위험 점수를 다시 계산하지 않습니다.
+- `safetyFlags`의 `credibleThreat`·`studentSafetyConcern`·`privacyExposure`가 각각 true이면 긴급 안전 신호를 표시하고, false이면 경고하지 않습니다. null/누락은 판단 불가 안내이며 false로 간주하지 않습니다. 전체 객체가 없으면 정보 미제공으로 표시합니다. 안전 신호로 프론트에서 점수나 등급을 덮어쓰지 않습니다.
+- 분석 상태·모드·수동 검토 필드는 이전 응답과 호환되도록 선택 필드로 받습니다. 필드가 없다는 이유로 정상 완료나 잠정 분석 상태를 만들어 넣지 않습니다.
+
+2026-11-17 최종 검증은 인증·UI 494건, 학부모 HTTP 88건, 관리자 HTTP 14건, HTTP 통합 8건으로 **총 604건 통과**했습니다. build·lint·앱/테스트 TypeScript·diff 검사도 통과했습니다. HTTP 검증은 백엔드 계약에 따른 fixture 응답 interception 기반이며, 실제 배포 AI 연결 테스트는 실행하지 않았습니다. 아래의 2026-10-29·30 수동 확인은 당시 결과로 구분합니다.
+
 ### 추가 문의
 
 서버에 제출한 로컬 문의 사본의 추가 문의 화면에서 `message-draft`를 조회·저장한 뒤 반환된 `messageId`로 분석합니다. 브라우저에 초안이 없으면 서버 초안을 복원합니다. 분석·전송 전에는 마지막으로 확인한 `contentVersion`을 `expectedContentVersion`으로 붙여 초안을 저장합니다. 내용이 같아도 저장해 버전을 확인합니다(같은 내용이면 서버가 버전을 올리지 않음). 전송에도 같은 버전을 보냅니다. 서버는 버전 검사와 저장·전송을 한 트랜잭션에서 처리하고, 어긋나면 409 `CONTENT_VERSION_CONFLICT`로 저장·전송하지 않습니다(학부모 차례가 아닌 409와 구분됨). 버전이 없는 예전 브라우저 초안은 서버 초안을 한 번 조회해 내용이 같을 때만 그 버전을 씁니다. 충돌 시 현재 입력을 유지하며 사용자가 `서버 초안 불러오기`로 전환할 수 있습니다. 전송 단계의 충돌은 검토 화면에서 안내하고, 작성 화면으로 돌아가 다시 분석하면 같은 충돌이 감지되어 불러오기 버튼이 나옵니다. 저장 응답을 놓친 재시도처럼 서버 초안이 이미 같은 내용이면 충돌로 보지 않고 그 초안을 이어 씁니다. 불러오기 응답을 기다리는 동안 새로 입력한 내용은 덮어쓰지 않습니다. 서버 저장·전송 여부의 최종 판단은 백엔드의 학부모 작성 차례 검증에 따릅니다.
@@ -44,7 +59,7 @@
 
 - AI 검토는 메시지당 1회입니다. 분석 후 작성 화면으로 돌아가 본문을 고치고 다시 "AI 분석 시작"을 누르면 서버가 409 `FINAL_ANALYSIS_ON_SUBMIT`를 줍니다. 이때 검토 화면으로 넘어가되 새 수정안 없이 "전송할 때 수정한 내용을 한 번 더 분석합니다"를 안내합니다(`REANALYSIS_LIMIT_REACHED`도 같음).
 - 재분석이 제한돼도 이미 성공한 `/mask`의 본문·버전은 유지합니다. 최종 수정 이유가 `null`이면 이유만 생략하고 수정문과 위험 근거는 그대로 표시합니다.
-- findings 조회만 실패하면 분석은 저장돼 있어 전송할 수 있습니다. 검토 화면은 기존 "AI 수정안을 불러오지 못했습니다" 상태로 열립니다.
+- findings 조회만 실패하면 분석은 저장돼 있어 전송할 수 있습니다. 검토 화면은 기존 "AI 수정안을 불러오지 못했습니다" 상태로 열립니다. 단, 위 4개 내부 안전 처리 오류(HTTP 500)는 이 대체 흐름으로 넘기지 않고 작성 화면에서 중단합니다.
 - 그 밖의 분석 실패(네트워크·500 등)는 서버 분석이 없어 제출이 거부되므로, 검토 화면으로 넘어가지 않고 작성 화면에서 다시 시도하게 합니다. mock 모드는 기존처럼 실패 상태로 검토 화면을 엽니다.
 
 ## 개인정보 마스킹
@@ -66,12 +81,13 @@
 ## 아직 연동하지 않은 것
 
 - **생성 응답 유실**: `POST /complaints`가 서버에서 처리됐는데 응답이 시간 초과 등으로 오지 않으면 프론트는 서버 초안 ID를 알 수 없어, 다시 시도할 때 새 초안을 만들고 처음 것은 연결 없이 서버에 남습니다. 프론트만으로는 복구할 수 없어 백엔드와 재시도 식별자(같은 요청이면 기존 초안 ID 반환)나 작성 중 초안 조회·정리 API를 정해야 합니다.
-- **학부모 문의 내역·상세·대화 조회**(`GET /complaints`, `/{id}`, `/messages`, `/close`): 화면은 아직 브라우저 사본을 읽으므로, 서버로 낸 문의에 교사가 답해도 학부모 화면에는 반영되지 않습니다.
+- **학부모 상담 완료 요청**(`/close`): 학부모 화면에서 직접 완료하는 API는 연결하지 않았습니다. 문의 목록·상세·대화 조회(`GET /complaints`, `/{id}`, `/messages`)는 `serverHistory.ts`로 브라우저 사본에 동기화하며 교사 답변도 반영합니다([문의 내역](parent-message-history.md)).
 
 ## 코드
 
 - `api/`: `parentComplaintTypes.ts`(DTO), `parentComplaintApiContract.ts`, `httpParentComplaintApi.ts`, `parentComplaintApi.ts`(모드). mock 모드는 DTO 수준 mock 대신 기존 `parentMessageApi.ts` 로컬 흐름을 씁니다(교사 메시지함과 같은 방식).
 - `serverComplaint.ts`: 자녀 목록(`listServerChildren`), 교사 선택지, findings → 검토 모델(`toServerAnalysis`), 초안·분석(`analyzeServerDraft`), 제출(`submitServerDraft`).
+- `serverHistory.ts`: 서버 목록·대화 동기화, 최신 학부모 메시지와 전송 분석 메타데이터의 일치 여부 확인.
 - `useServerRecipients.ts`: 작성 화면의 자녀·교사 목록.
 - `messageDraft.ts`: 로컬 초안의 `studentId`, `server`(서버 초안 ID·고정 필드·서버에 저장된 본문·분석 ID).
 
@@ -84,7 +100,7 @@ npx playwright test --config=playwright.parent-http.config.ts
 
 fetch를 대체해 요청 경로·메서드·본문, 마스킹한 본문 전송, PATCH 조건, 409 처리, 재시도 시 이미 제출된 민원 처리, findings 매핑을 확인합니다. 실제 서버 호출은 아닙니다. 기존 mock 화면 흐름은 `parent-message-write`·`parent-message-review` 테스트가 그대로 확인합니다. `.env.local`이 http 모드면 화면 테스트가 실패하므로 환경 변수를 덮어 실행합니다.
 
-`playwright.parent-http.config.ts`는 HTTP 어댑터를 켠 데스크톱·모바일 화면에서 새 문의·추가 문의, 서버 마스킹 실패, 상세 탐지 재시도, 초안 충돌을 검사합니다. 백엔드 응답을 테스트 fixture로 대체하며 실서버 테스트와 구분합니다.
+`playwright.parent-http.config.ts`는 HTTP 어댑터를 켠 데스크톱·모바일 화면에서 새 문의·추가 문의, 서버 마스킹 실패, 상세 탐지 재시도, 초안 충돌을 검사합니다. #77은 분석 상태·잠정 분석·Severity 0~3/null·반복 횟수 0/null·안전 신호 true/false/null·누락, 내부 오류의 분석/전송 중단·초안 보존, 최종 send 결과와 `SKIPPED_LIMIT` 구분을 추가로 확인합니다. 백엔드 응답을 테스트 fixture로 대체하며 실서버 테스트와 구분합니다.
 
 ```bash
 VITE_AUTH_API=mock VITE_MESSAGE_API=mock VITE_ESCALATION_API=mock VITE_API_PROXY_TARGET= npm run test:auth
