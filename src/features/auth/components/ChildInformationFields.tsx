@@ -1,3 +1,4 @@
+import { SIGNUP_STUDENT_NAME_MAX_LENGTH } from '../api/authTypes';
 import { useCallback, useId } from 'react';
 import { getApiErrorMessage, useApiRequest, type ApiError } from '../../../shared/api';
 import { Select, TextField } from '../../../shared/components/ui';
@@ -128,6 +129,7 @@ export function ChildInformationFields({ disabled, errors, value, onChange }: Ch
           fieldSize="lg"
           label={<span>자녀 이름 <span className="auth-required">*</span></span>}
           name="childName"
+          maxLength={SIGNUP_STUDENT_NAME_MAX_LENGTH}
           onChange={(event) => onChange({ ...value, name: event.target.value })}
           placeholder="자녀 이름을 입력해 주세요."
           value={value.name}

@@ -55,9 +55,13 @@ export const riskReviewStatusChip: Record<RiskReviewStatus, StatusChipStatus> = 
 export const historyEventLabel: Record<HistoryEventType, string> = {
   STATUS_CHANGED: '민원 상태 변경',
   RISK_ANALYZED: '위험 분석',
+  AI_ANALYSIS_SKIPPED: 'AI 분석 생략',
+  AI_ANALYSIS_RULE_FALLBACK: '규칙 기반 잠정 분석',
   RISK_REVIEWED: '교사 위험도 검토',
   ORIGINAL_VIEWED: '원문 열람',
   AI_DRAFT_GENERATED: 'AI 답변 초안 생성',
+  AI_DRAFT_BLOCKED_BY_RISK_POLICY: '위험도 정책으로 AI 초안 생성 차단',
+  RESPONSE_BLOCKED_BY_RISK_POLICY: '위험도 정책으로 답변 차단',
   RESPONSE_BLOCKED_BY_SAFETY_LOCK: '안전 잠금으로 답변 차단',
   RESPONSE_TEMPLATE_ADOPTED: '답변 템플릿 채택',
   MESSAGE_SENT: '메시지 전송',

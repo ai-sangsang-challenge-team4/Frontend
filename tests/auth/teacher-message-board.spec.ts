@@ -61,7 +61,7 @@ test('필터상세에서 위험도로 거르고 위험도 순으로 정렬한 �
   await expect(page.getByRole('button', { name: '초기화', exact: true })).toBeDisabled();
 });
 
-test('교사가 1~7점으로 위험도를 평가하고 하향 시에는 사유를 요구한다', async ({ page }) => {
+test('교사가 1~7점으로 위험도를 평가하고 상향·하향 변경에 사유를 요구한다', async ({ page }) => {
   await openRiskTab(page, 'thread-002');
   const guide = page.locator('.board-risk-score-guide');
   await expect(page.getByRole('button', { name: '4점 주의', exact: true })).toHaveAttribute('aria-pressed', 'true');
@@ -70,11 +70,15 @@ test('교사가 1~7점으로 위험도를 평가하고 하향 시에는 사유�
   await page.getByRole('button', { name: '6점 높은 위험', exact: true }).click();
   await expect(guide).toContainText('6점 · 높은 위험');
   await expect(guide).toContainText('위험 단계');
+  await expect(page.getByRole('button', { name: '상향 반영', exact: true })).toBeDisabled();
+  await page.getByPlaceholder('상향 수정 사유를 입력해주세요.').fill('추가 위험 표현을 확인했습니다.');
   await page.getByRole('button', { name: '상향 반영', exact: true }).click();
   // The saved 6 becomes the new reference, so moving to 2 is now a downgrade.
   await expect(page.getByRole('button', { name: '검토 완료', exact: true })).toBeVisible();
+  await expect(page.getByPlaceholder('검토 사유를 입력해주세요.')).toHaveValue('추가 위험 표현을 확인했습니다.');
 
   await page.getByRole('button', { name: '2점 안전', exact: true }).click();
+  await page.getByPlaceholder('하향 수정 사유를 입력해주세요.').fill('');
   const submit = page.getByRole('button', { name: '하향 반영', exact: true });
   await expect(submit).toBeDisabled();
   await page.getByPlaceholder('하향 수정 사유를 입력해주세요.').fill('단순 일정 확인 문의입니다.');

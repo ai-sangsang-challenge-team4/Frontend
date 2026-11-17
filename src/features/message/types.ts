@@ -99,6 +99,7 @@ export type BoardReply = {
   deliveryStatus?: 'SENT_TO_PARENT';
   // Server inbox: a parent message above LOW arrives as its buffered summary instead of the original.
   summarized?: boolean;
+  summaryUnavailable?: boolean;
   readByParent?: boolean;
   time: string;
   sentAt?: string;

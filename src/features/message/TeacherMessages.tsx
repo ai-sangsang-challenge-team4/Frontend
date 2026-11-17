@@ -927,7 +927,7 @@ function RiskReviewPanel({
   const isUpwardReview = score > referenceScore;
   const isEmergencyDowngrade =
     riskScoreToLevel(referenceScore) === 'emergency' && level !== 'emergency';
-  const isReasonRequired = isDownwardReview;
+  const isReasonRequired = isDownwardReview || isUpwardReview;
   const isSubmitDisabledByReason =
     isReasonRequired && trimmedReason.length === 0;
   const reviewInfoText = notice ?? (isEmergencyDowngrade
@@ -1063,7 +1063,7 @@ function RiskReviewPanel({
             onChange={(event) => onReasonChange(event.target.value)}
             placeholder={
               isReasonRequired
-                ? '하향 수정 사유를 입력해주세요.'
+                ? `${isDownwardReview ? '하향' : '상향'} 수정 사유를 입력해주세요.`
                 : '검토 사유를 입력해주세요.'
             }
             value={reason}
@@ -1075,7 +1075,7 @@ function RiskReviewPanel({
             className="board-risk-review-required-note"
             id={reasonRequirementId}
           >
-            하향 검토 시 검토 사유를 입력해야 하향 반영할 수 있습니다.
+            {isDownwardReview ? '하향' : '상향'} 검토 시 검토 사유를 입력해야 반영할 수 있습니다.
           </p>
         ) : null}
       </div>
@@ -1270,7 +1270,7 @@ function RiskAnalysisPanel({
       isReviewSubmitting ||
       reviewNotice ||
       !analysis.canReviewRisk ||
-      (reviewScore < initialReviewScore && !reason)
+      (reviewScore !== initialReviewScore && !reason)
     ) {
       return;
     }
@@ -1884,7 +1884,8 @@ function ThreadDetail({
                   onOpenOriginal={() => openOriginalViewer(undefined, reply.id)}
                   onOpenRiskEvidence={() => setActiveDetailTab('risk')}
                   sentAt={reply.sentAt}
-                  summaryText={reply.content}
+                  summaryText={reply.summaryUnavailable ? '완충 요약을 생성하지 못했습니다. 필요한 경우 원문 보기에서 내용을 직접 확인해 주세요.' : reply.content}
+                  unavailable={reply.summaryUnavailable}
                   thread={thread}
                 />
               ) : (

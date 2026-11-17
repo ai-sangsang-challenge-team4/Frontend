@@ -1,4 +1,5 @@
 import { SIGNUP_GRADES } from './api/signupOptionsApiContract';
+import { SIGNUP_STUDENT_NAME_MAX_LENGTH } from './api/authTypes';
 
 // Parent signup form state. IDs come from the signup option APIs (/auth/schools…);
 // schoolName and grade only drive the form and are not sent.
@@ -30,5 +31,6 @@ export function validateChildSignupInfo(child: ChildSignupInfo | undefined): Chi
   if (!isPositiveId(child?.schoolClassId)) errors.schoolClassId = '반을 선택해 주세요.';
   if (!isPositiveId(child?.studentId)) errors.studentId = '번호를 선택해 주세요.';
   if (!child?.name.trim()) errors.name = '자녀 이름을 입력해 주세요.';
+  else if (child.name.trim().length > SIGNUP_STUDENT_NAME_MAX_LENGTH) errors.name = `자녀 이름은 ${SIGNUP_STUDENT_NAME_MAX_LENGTH}자 이내로 입력해 주세요.`;
   return errors;
 }

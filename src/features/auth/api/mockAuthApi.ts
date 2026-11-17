@@ -16,6 +16,7 @@ import {
   writeStoredJson,
 } from './authStorage';
 import type { PolicyConsentResponse, SignupRequest } from './authTypes';
+import { SIGNUP_NAME_MAX_LENGTH, SIGNUP_PASSWORD_MAX_LENGTH, SIGNUP_PASSWORD_MIN_LENGTH } from './authTypes';
 import { hasMockSchool, hasMockStudentPlacement } from './mockSignupOptionsApi';
 
 // What the server links on signup: the parent's student, or the teacher's roster entry.
@@ -99,6 +100,9 @@ async function signup(input: SignupInput): Promise<User> {
   // Same order and wording as the backend SignupRequest validation and AuthService.
   if (!input.name?.trim()) {
     throw new AuthApiError({ code: 'VALIDATION_FAILED', message: '이름은 필수입니다.' });
+  }
+  if (input.name.trim().length > SIGNUP_NAME_MAX_LENGTH) {
+    throw new AuthApiError({ code: 'VALIDATION_FAILED', message: `이름은 ${SIGNUP_NAME_MAX_LENGTH}자 이내로 입력해 주세요.` });
   }
   // Mirrors the backend SignupRequest requiredAgreed check.
   if (!input.policyAgreed) {
@@ -290,8 +294,8 @@ function assertValidEmail(email: string) {
 }
 
 function assertValidPassword(password: string) {
-  if (password.length < 8 || password.length > 20) {
-    throw new AuthApiError({ code: 'INVALID_PASSWORD', message: '비밀번호는 8자 이상 20자 이하로 입력해 주세요.' });
+  if (password.length < SIGNUP_PASSWORD_MIN_LENGTH || password.length > SIGNUP_PASSWORD_MAX_LENGTH) {
+    throw new AuthApiError({ code: 'INVALID_PASSWORD', message: `비밀번호는 ${SIGNUP_PASSWORD_MIN_LENGTH}자 이상 ${SIGNUP_PASSWORD_MAX_LENGTH}자 이하로 입력해 주세요.` });
   }
 }
 

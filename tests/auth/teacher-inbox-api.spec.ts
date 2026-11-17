@@ -309,6 +309,31 @@ test('처리 기록 조회가 실패하면 기존 기록을 유지하고 실패 
   expect(mergeServerDetail(toListThread(listItem), bundle({ history: null })).analysis?.activityLogs).toEqual([]);
 });
 
+test('summaryStatus UNAVAILABLE은 생성된 요약과 구분하며 원문 말풍선으로 표시하지 않는다', () => {
+  const thread = mergeServerDetail(toListThread(listItem), bundle({ conversation: {
+    ...conversation,
+    messages: [{ ...conversation.messages[0], summarized: false, summaryStatus: 'UNAVAILABLE', content: '완충 요약을 생성하지 못했습니다.' }],
+  } }));
+  expect(thread.analysis?.summary.status).toBe('failed');
+  expect(thread.replies[0].summarized).toBe(true);
+  expect(thread.replies[0].summaryUnavailable).toBe(true);
+});
+
+test('교사 답변의 READ 상태나 readAt이 있을 때만 학부모 읽음으로 표시한다', () => {
+  const thread = mergeServerDetail(toListThread(listItem), bundle({ conversation: {
+    ...conversation,
+    messages: [
+      ...conversation.messages,
+      ...(['SENT', 'READ', 'SENT'] as const).map((status, index) => ({
+        messageId: `message:${index + 2}`, senderRole: 'TEACHER' as const, senderName: '선생님',
+        content: '답변입니다.', sentAt: '2026-11-17T10:00:00', summarized: false, status,
+        readAt: index === 2 ? '2026-11-17T10:01:00' : null,
+      })),
+    ],
+  } }));
+  expect(thread.replies.slice(1).map((reply) => reply.readByParent)).toEqual([false, true, true]);
+});
+
 test('목록 재조회는 서버 필드만 갱신하고 별표·상세·교사 답변 여부를 유지한다', () => {
   const opened = {
     ...mergeServerDetail(toListThread(listItem), bundle({

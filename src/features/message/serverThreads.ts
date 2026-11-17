@@ -124,7 +124,10 @@ function toReplies(conversation: TeacherConversationResponse): BoardReply[] {
       label: isParent ? '학부모 문의' : '선생님 답변',
       time: formatConversationTime(sentAt),
       sentAt,
-      ...(isParent ? { summarized: message.summarized } : { deliveryStatus: 'SENT_TO_PARENT' as const }),
+      ...(isParent ? {
+        summarized: message.summarized || message.summaryStatus === 'UNAVAILABLE',
+        summaryUnavailable: message.summaryStatus === 'UNAVAILABLE',
+      } : { deliveryStatus: 'SENT_TO_PARENT' as const, readByParent: Boolean(message.readAt) || message.status === 'READ' }),
     };
   });
 }
@@ -200,7 +203,10 @@ function toAnalysis(
     riskFactors: [],
     safetyLock: risk?.safetyLock ?? false,
     studentSafetySignal: 'NONE',
-    summary: { status: 'ready', text: latestParent?.summarized ? latestParent.content : '' },
+    summary: {
+      status: latestParent?.summaryStatus === 'UNAVAILABLE' ? 'failed' : 'ready',
+      text: latestParent?.summarized && latestParent.summaryStatus !== 'UNAVAILABLE' ? latestParent.content : '',
+    },
     systemRiskLevel: systemRiskLevelFromApi[risk?.riskLevel ?? detail.riskLevel ?? 'LOW'],
   };
   // Without a completed analysis the factors are unknown; toClassifications would mark them all ABSENT.

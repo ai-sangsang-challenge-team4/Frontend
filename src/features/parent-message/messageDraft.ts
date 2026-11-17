@@ -65,6 +65,7 @@ function isMessageReview(value: unknown): value is MessageReview {
     (analysis.meaningWarning === null || typeof analysis.meaningWarning === 'string') &&
     (analysis.analyzeOnSubmit === undefined || typeof analysis.analyzeOnSubmit === 'boolean') &&
     (analysis.revisionReason === undefined || analysis.revisionReason === null || typeof analysis.revisionReason === 'string') &&
+    (analysis.revisionStatus === undefined || ['PENDING', 'COMPLETED', 'UNAVAILABLE', 'NOT_REQUESTED'].includes(String(analysis.revisionStatus))) &&
     (analysis.maskedContent === undefined || typeof analysis.maskedContent === 'string') &&
     (analysis.riskSummary === undefined || (isRecord(analysis.riskSummary) &&
       typeof analysis.riskSummary.riskScore === 'number' && Number.isFinite(analysis.riskSummary.riskScore) &&

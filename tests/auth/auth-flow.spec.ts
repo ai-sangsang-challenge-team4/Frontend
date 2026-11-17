@@ -129,8 +129,9 @@ for (const role of ['PARENT', 'TEACHER'] as const) {
     await page.locator('input[name="verificationCode"]').fill('123456');
     await page.getByRole('button', { name: '인증하기', exact: true }).click();
     await expect(page.getByRole('button', { name: '인증 완료', exact: true })).toBeVisible();
-    await page.locator('input[name="password"]').fill('newpassword123');
-    await page.locator('input[name="passwordConfirmation"]').fill('newpassword123');
+    const signupPassword = 'p'.repeat(role === 'PARENT' ? 100 : 21);
+    await page.locator('input[name="password"]').fill(signupPassword);
+    await page.locator('input[name="passwordConfirmation"]').fill(signupPassword);
     if (role === 'PARENT') await fillChildInformation(page);
     await page.getByRole('checkbox', { name: /서비스 이용약관/ }).check();
     await page.getByRole('button', { name: '회원가입', exact: true }).click();
@@ -151,7 +152,7 @@ for (const role of ['PARENT', 'TEACHER'] as const) {
       // 상상중학교 is school 2 in mockSignupOptionsApi.
       expect(account).toMatchObject({ schoolId: 2, employeeNo: '00123' });
     }
-    await page.locator('input[name="password"]').fill('newpassword123');
+    await page.locator('input[name="password"]').fill(signupPassword);
     await page.getByRole('button', { name: '로그인', exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`${role === 'PARENT' ? '/parent/messages/new' : '/teacher/messages'}$`));
     expect((await readSession(page))?.user.role).toBe(role);
@@ -220,7 +221,7 @@ test('회원가입 필수값, 이메일 형식, 비밀번호 불일치를 표시
   await expect(page.getByText('이름을 입력해 주세요.', { exact: true })).toBeVisible();
   await expect(page.getByText('검색 결과에서 소속학교를 선택해 주세요.', { exact: true })).toBeVisible();
   await expect(page.getByText('교번을 입력해 주세요.', { exact: true })).toBeVisible();
-  await expect(page.getByText('비밀번호는 8자 이상 20자 이하로 입력해 주세요.', { exact: true })).toBeVisible();
+  await expect(page.getByText('비밀번호는 8자 이상 100자 이하로 입력해 주세요.', { exact: true })).toBeVisible();
   await expect(page.getByText('필수 약관에 동의해 주세요.', { exact: true })).toBeVisible();
   await page.locator('input[name="email"]').fill('invalid-email');
   await page.getByRole('button', { name: '인증번호 받기', exact: true }).click();

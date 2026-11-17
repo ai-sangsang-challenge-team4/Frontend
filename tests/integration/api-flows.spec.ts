@@ -143,6 +143,48 @@ function teacherComplaintJson(key: string, current: typeof review): unknown {
   }
 }
 
+test('완충 요약 실패 응답은 원문 말풍선 대신 명시적인 요약 실패 안내를 표시한다', async ({ page }) => {
+  await setup(page, 'TEACHER', async (route, key) => {
+    let json = teacherComplaintJson(key, review);
+    if (key === 'GET /teacher/complaints/12/emergency-review/current') json = review;
+    if (key === 'GET /teacher/complaints/12/messages') json = {
+      complaintId: 12, allowedActions: [], messages: [{
+        messageId: 'message:1', senderRole: 'PARENT', senderName: '학부모',
+        content: '실패한 요약에 섞인 원문은 표시하지 않습니다.', sentAt: '2026-10-30T09:00:00',
+        summarized: false, summaryStatus: 'UNAVAILABLE', status: 'SENT', readAt: null,
+      }],
+    };
+    if (json === undefined) return false;
+    await route.fulfill({ json }); return true;
+  });
+  await page.goto('/teacher/messages/12');
+  await expect(page.locator('.board-moderation-card')).toContainText('완충 요약을 확인할 수 없습니다');
+  await expect(page.getByText('실패한 요약에 섞인 원문은 표시하지 않습니다.', { exact: true })).toHaveCount(0);
+  await expect(page.locator('.board-answer-box')).toHaveClass(/is-locked/);
+});
+
+test('사용자 조회 5xx는 저장된 JWT로 우회하지 않고 재시도를 제공한다', async ({ page }) => {
+  await setup(page, 'ADMIN', async () => false);
+  await page.evaluate(() => {
+    const key = 'teacher-hub.auth-session';
+    const session = JSON.parse(localStorage.getItem(key)!);
+    const encode = (value: unknown) => btoa(JSON.stringify(value)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+    const claims = { sub: String(session.user.userId), email: session.user.email, role: session.user.role, exp: Math.floor(Date.now() / 1000) + 3600 };
+    session.accessToken = `${encode({ alg: 'HS384' })}.${encode(claims)}.signature`;
+    localStorage.setItem(key, JSON.stringify(session));
+  });
+  let failMe = true;
+  await page.route((url) => url.pathname === '/api/users/me', (route) => failMe
+    ? route.fulfill({ status: 503, json: { code: 'INTERNAL_SERVER_ERROR' } }) : route.fallback());
+  await page.reload();
+  await expect(page.getByRole('alert')).toBeVisible();
+  const retry = page.getByRole('button', { name: '다시 시도', exact: true });
+  await expect(retry).toBeVisible();
+  failMe = false;
+  await retry.click();
+  await expect(page.getByRole('heading', { name: '공유받은 메시지', exact: true })).toBeVisible();
+});
+
 test('긴급 재검토 조회 실패는 일반 검토를 막지 않고 긴급 하향 요청만 막는다', async ({ page }) => {
   const current = { ...review, status: 'REJECTED', decidedAt: '2026-10-30T11:00:00' as string | null };
   await setup(page, 'TEACHER', async (route, key) => {

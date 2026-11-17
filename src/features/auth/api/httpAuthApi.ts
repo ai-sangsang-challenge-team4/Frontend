@@ -2,7 +2,6 @@ import { apiClient, getApiErrorMessage, isApiError } from '../../../shared/api';
 import type { User } from '../../../shared/types';
 import { isUser, toSignupRequest } from '../authState';
 import { AuthApiError, type AuthApi } from './authApiContract';
-import { readAuthSession } from './authStorage';
 import type {
   LoginResponse,
   PolicyConsentRequest,
@@ -34,35 +33,6 @@ function toUser(response: UserInfoResponse): User {
     throw new AuthApiError({ code: 'INVALID_USER', message: '사용자 정보를 확인하지 못했습니다.', status: 502 });
   }
   return { ...user, ...(response.students !== undefined ? { students: response.students } : {}) };
-}
-
-type JwtClaims = { sub?: unknown; email?: unknown; role?: unknown; exp?: unknown };
-
-function readJwtClaims(accessToken: string): JwtClaims | null {
-  const payload = accessToken.split('.')[1];
-  if (!payload) return null;
-  try {
-    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(payload.length / 4) * 4, '=');
-    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
-    const claims: unknown = JSON.parse(new TextDecoder().decode(bytes));
-    return claims && typeof claims === 'object' ? claims as JwtClaims : null;
-  } catch {
-    return null;
-  }
-}
-
-// Workaround: GET /users/me answers 500 for every valid token (UserController takes
-// @AuthenticationPrincipal Long while the principal is UserDetails). Until the backend fixes it, a server
-// error keeps the user saved at login when the token still names that user and has not expired.
-// The claims are not verified here; every other request still sends the token, and a 401 signs out.
-export function fallbackUserForToken(accessToken: string, stored: { accessToken: string; user: User } | null, now = Date.now()) {
-  if (!stored || stored.accessToken !== accessToken) return null;
-  const claims = readJwtClaims(accessToken);
-  if (!claims || typeof claims.exp !== 'number' || claims.exp * 1000 <= now) return null;
-  const { user } = stored;
-  return String(claims.sub) === String(user.userId) && claims.email === user.email && claims.role === user.role
-    ? user
-    : null;
 }
 
 export const httpAuthApi: AuthApi = {
@@ -97,10 +67,6 @@ export const httpAuthApi: AuthApi = {
     const request = apiClient.get<UserInfoResponse>('/users/me', {
       auth: false,
       headers: { Authorization: `Bearer ${accessToken}` },
-    }).catch((error: unknown) => {
-      const user = isApiError(error) && error.status >= 500 ? fallbackUserForToken(accessToken, readAuthSession()) : null;
-      if (user) return user;
-      throw error;
     });
     const response = await toAuthError(
       request,

@@ -121,6 +121,50 @@ async function analyze(page: Page) {
   await expect(page).toHaveURL(/\/review$/);
 }
 
+test('비동기 수정안이 도착해도 원문에서 작성한 내용과 선택한 탭을 유지한다', async ({ page }) => {
+  await setup(page);
+  let revisionReady = false;
+  await page.route((url) => url.pathname === '/api/risk-analyses/7/findings', (route) => route.fulfill({ json: {
+    revisionStatus: revisionReady ? 'COMPLETED' : 'PENDING', findings: [],
+    finalRevision: revisionReady ? { content: '늦게 준비된 AI 수정안입니다.', reason: '표현을 다듬었습니다.' } : null,
+  } }));
+  await analyze(page);
+  await expect(page.getByText('AI 수정안을 준비하고 있습니다.', { exact: false })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'AI 초안', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: '직접 수정', exact: true }).click();
+  const original = page.getByLabel('직접 수정한 문의 내용', { exact: true });
+  await original.fill('원문을 확인하며 직접 작성한 문장입니다.');
+  revisionReady = true;
+  await expect(page.getByRole('tab', { name: 'AI 초안', exact: true })).toBeEnabled({ timeout: 10_000 });
+  await expect(page.getByRole('tab', { name: '원문', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(original).toHaveValue('원문을 확인하며 직접 작성한 문장입니다.');
+  await page.getByRole('tab', { name: 'AI 초안', exact: true }).click();
+  await expect(page.getByLabel('AI 초안 내용', { exact: true })).toHaveValue('늦게 준비된 AI 수정안입니다.');
+});
+
+for (const firstLookupFails of [false, true]) {
+  test(`수정안 ${firstLookupFails ? '최초' : '대기 중'} 조회 실패는 같은 분석을 재조회하고 분석 요청을 추가로 보내지 않는다`, async ({ page }) => {
+    const calls = await setup(page, { summary: { revisionStatus: 'PENDING' } });
+    let findingsCalls = 0;
+    let revisionReady = false;
+    await page.route((url) => url.pathname === '/api/risk-analyses/7/findings', (route) => {
+      findingsCalls += 1;
+      if ((firstLookupFails || findingsCalls > 1) && !revisionReady) return route.fulfill({ status: 503, json: { code: 'INTERNAL_SERVER_ERROR' } });
+      return route.fulfill({ json: {
+        revisionStatus: revisionReady ? 'COMPLETED' : 'PENDING', findings: [],
+        finalRevision: revisionReady ? { content: '재조회한 AI 수정안입니다.', reason: '확인됨' } : null,
+      } });
+    });
+    await analyze(page);
+    const retry = page.getByRole('button', { name: '수정안 다시 확인', exact: true });
+    await expect(retry).toBeVisible();
+    revisionReady = true;
+    await retry.click();
+    await expect(page.getByRole('tab', { name: 'AI 초안', exact: true })).toBeEnabled();
+    expect(calls.filter((call) => call === 'POST /complaints/42/risk-analysis')).toHaveLength(1);
+  });
+}
+
 test('서버 초안 생성 중 다시 연 작성 화면에서도 선생님 목록 오류를 재시도한다', async ({ page }) => {
   const calls = await setup(page);
   let releaseCreation!: () => void;

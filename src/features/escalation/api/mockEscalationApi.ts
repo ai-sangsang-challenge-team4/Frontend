@@ -444,11 +444,11 @@ export const mockEscalationApi: EscalationApi = {
     const previousScale = toMockScale(previous.score);
     const direction: RiskReviewDirection =
       riskScore < previousScale ? 'LOWERED' : riskScore > previousScale ? 'RAISED' : 'UNCHANGED';
-    if (direction === 'LOWERED' && !reason) {
+    if (direction !== 'UNCHANGED' && !reason) {
       throw new ApiError({
         status: 400,
         code: 'RISK_REVIEW_REASON_REQUIRED',
-        message: '위험도를 하향 조정할 때는 검토 사유가 필요합니다.',
+        message: '위험도를 변경할 때는 검토 사유가 필요합니다.',
       });
     }
 

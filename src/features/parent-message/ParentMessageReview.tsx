@@ -14,6 +14,7 @@ import { ParentRiskAnalysisDetails } from './ParentRiskAnalysisDetails';
 import { createMockAnalysis, sendParentMessage } from './parentMessageApi';
 import { findSentSubmission, findSentSubmissionById, getDraftPath } from './conversation';
 import { submitServerDraft } from './serverComplaint';
+import { useServerRevision } from './useServerRevision';
 import { checkPersonalInfo, MaskingError, PrivacyMaskingNotice } from '../pii';
 import { AiJudgmentNotice } from '../safety/AiJudgmentNotice';
 import {
@@ -142,6 +143,22 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
   // The server analyzes the final text again on send when it differs from the reviewed content.
   const analyzedOnSend = isServer && (review.analysis.analyzeOnSubmit === true ||
     masked.text !== (review.analysis.maskedContent ?? draft.server?.content));
+  const revision = useServerRevision(
+    isServer ? draft.server?.analysisId ?? undefined : undefined,
+    review.analysis.maskedContent ?? draft.body,
+    review.analysis.revisionStatus === 'PENDING' && !isSending,
+  );
+
+  useEffect(() => {
+    if (!revision.analysis) return;
+    const update = revision.analysis;
+    setReview((previous) => ({
+      ...previous,
+      analysis: { ...previous.analysis, ...update },
+      // Keep the selected source and any original-text edits when a late AI revision arrives.
+      aiText: update.revisedText ?? '',
+    }));
+  }, [revision.analysis]);
 
   useEffect(() => () => sendController.current?.abort(), []);
 
@@ -332,13 +349,23 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
             value={review.source}
           />
           {!hasAiDraft ? (
-            <p className="parent-review-analysis-notice" role="status">
+            <div className="parent-review-analysis-notice" role="status">
               {review.analysis.analyzeOnSubmit
                 ? 'AI 검토는 문의마다 한 번만 받을 수 있어 수정한 내용에는 새 수정안이 없습니다. 전송할 때 수정한 내용을 한 번 더 분석합니다.'
+                : review.analysis.revisionStatus === 'PENDING'
+                  ? revision.needsRetry
+                    ? 'AI 수정안이 아직 준비되지 않았거나 조회하지 못했습니다. 원문을 확인하거나 잠시 후 다시 확인해 주세요.'
+                    : 'AI 수정안을 준비하고 있습니다. 원문을 확인하거나 직접 수정하면서 기다릴 수 있습니다.'
+                : review.analysis.revisionStatus === 'UNAVAILABLE'
+                  ? 'AI 수정안을 제공하지 못했습니다. 원문을 확인하거나 직접 수정해 전송할 수 있습니다.'
+                : review.analysis.revisionStatus === 'NOT_REQUESTED'
+                  ? '이번 분석에서는 AI 수정안을 생성하지 않았습니다. 원문을 확인해 주세요.'
                 : review.analysis.status === 'failed'
                   ? 'AI 수정안을 불러오지 못했습니다. 원문을 확인하거나 직접 수정해 전송할 수 있습니다.'
                   : '원문과 다른 AI 수정안이 없습니다. 원문을 확인해 주세요.'}
-            </p>
+              {review.analysis.revisionStatus === 'PENDING' && revision.needsRetry
+                ? <Button onClick={revision.retry} size="sm" variant="outline">수정안 다시 확인</Button> : null}
+            </div>
           ) : review.source === 'AI' && review.analysis.meaningWarning ? (
             <p className="parent-review-meaning-notice" role="note">{review.analysis.meaningWarning}</p>
           ) : null}

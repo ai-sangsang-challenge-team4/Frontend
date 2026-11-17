@@ -59,6 +59,13 @@ function expressionLines(text: string) {
 
 // One expression per evidence line, plus suggestion lines that are not among the evidence.
 export function toServerAnalysis(revision: RiskRevisionResponse, maskedContent: string, tagNames: RiskTagNames = {}): ParentMessageAnalysis {
+  // The status is authoritative: pending or unavailable output must not revive a stale revision.
+  if (revision.revisionStatus && revision.revisionStatus !== 'COMPLETED') {
+    revision = {
+      ...revision, finalRevision: null,
+      findings: revision.findings.map((finding) => ({ ...finding, revisionSuggestions: [] })),
+    };
+  }
   const risks: RiskExpression[] = revision.findings.flatMap((finding) => {
     const tag = riskTags[finding.code];
     if (!tag) return [];
@@ -82,6 +89,7 @@ export function toServerAnalysis(revision: RiskRevisionResponse, maskedContent: 
   const revised = revision.finalRevision?.content.trim() || null;
   return {
     status: 'ready',
+    revisionStatus: revision.revisionStatus,
     revisedText: revised && revised !== maskedContent ? revised : null,
     revisionReason: revision.finalRevision?.reason?.trim() || null,
     risks,
@@ -91,6 +99,14 @@ export function toServerAnalysis(revision: RiskRevisionResponse, maskedContent: 
 
 // A slow catalog must not hold the parent back from the review screen; the local names are used instead.
 const RISK_TAG_WAIT_MS = 1500;
+
+export async function loadServerRevision(analysisId: number, maskedContent: string, signal: AbortSignal): Promise<ParentMessageAnalysis> {
+  const [findings, tagNames] = await Promise.all([
+    parentComplaintApi.getFindings(analysisId, signal),
+    Promise.race([getRiskTagNames(signal), new Promise<RiskTagNames>((resolve) => setTimeout(() => resolve({}), RISK_TAG_WAIT_MS))]),
+  ]);
+  return toServerAnalysis(findings, maskedContent, tagNames);
+}
 
 const failedAnalysis: ParentMessageAnalysis = { status: 'failed', revisedText: null, risks: [], meaningWarning: null };
 
@@ -223,15 +239,16 @@ export async function analyzeServerDraft(
     ...(masking ? { maskingContentVersion: masking.contentVersion } : {}),
   };
   try {
-    const [findings, tagNames] = await Promise.all([
-      parentComplaintApi.getFindings(analysisId, signal),
-      Promise.race([getRiskTagNames(signal), new Promise<RiskTagNames>((resolve) => setTimeout(() => resolve({}), RISK_TAG_WAIT_MS))]),
-    ]);
-    return { server, analysis: { ...toServerAnalysis(findings, maskedContent, tagNames), ...metadata } };
+    const revision = await loadServerRevision(analysisId, maskedContent, signal);
+    return { server, analysis: { ...revision, ...metadata } };
   } catch (error) {
     if (signal.aborted || isAbortError(error) || isRiskAnalysisSafetyError(error)) throw error;
     // The analysis is stored, so the parent can still send; only the suggestions are missing.
-    return { server, analysis: { ...failedAnalysis, ...metadata } };
+    return { server, analysis: {
+      ...failedAnalysis, ...metadata,
+      // A failed first findings request must not lose a known background revision job.
+      ...(summary.revisionStatus === 'PENDING' ? { revisionStatus: summary.revisionStatus } : {}),
+    } };
   }
 }
 
