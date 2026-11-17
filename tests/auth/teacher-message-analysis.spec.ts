@@ -24,6 +24,56 @@ async function openTab(page: Page, name: string) {
   await page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name, exact: true }).click();
 }
 
+for (const back of ['page', 'browser'] as const) {
+  test(`공식 절차를 보고 ${back === 'page' ? '가이드 뒤로가기' : '브라우저 뒤로가기'}로 같은 메시지의 위험 요소 탭에 돌아온다`, async ({ page }) => {
+    await openTeacherMessage(page, 'thread-001');
+    await openTab(page, '위험 요소');
+    await page.getByRole('button', { name: '공식 절차 보기', exact: true }).click();
+    await expect(page).toHaveURL(/\/teacher\/guide\?post=guide-emergency-official-procedure$/);
+    if (back === 'page') await page.getByRole('button', { name: '이전 화면으로 돌아가기', exact: true }).click();
+    else await page.goBack();
+    await expect(page).toHaveURL(/\/teacher\/messages\/thread-001$/);
+    await expect(page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name: '위험 요소', exact: true })).toHaveClass(/is-active/);
+    await expect(page.getByRole('button', { name: '공식 절차 보기', exact: true })).toBeVisible();
+    if (back === 'browser') {
+      await page.goForward();
+      await expect(page).toHaveURL(/\/teacher\/guide\?post=guide-emergency-official-procedure$/);
+      await page.getByRole('button', { name: '이전 화면으로 돌아가기', exact: true }).click();
+      await expect(page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name: '위험 요소', exact: true })).toHaveClass(/is-active/);
+    }
+  });
+}
+
+test('가이드에서 목록과 다른 글을 열고 새로고침해도 원래 메시지로 돌아간다', async ({ page }) => {
+  await openTeacherMessage(page, 'thread-001');
+  await openTab(page, '위험 요소');
+  await page.getByRole('button', { name: '공식 절차 보기', exact: true }).click();
+  await page.getByRole('navigation', { name: '현재 위치' }).getByRole('button', { name: '대응 가이드', exact: true }).click();
+  await expect(page).toHaveURL(/\/teacher\/guide$/);
+  await page.getByRole('region', { name: '대응 가이드 게시글 목록', exact: true }).getByRole('button').first().click();
+  await expect(page).toHaveURL(/\/teacher\/guide\?post=/);
+  await page.reload();
+  await page.getByRole('button', { name: '이전 화면으로 돌아가기', exact: true }).click();
+  await expect(page).toHaveURL(/\/teacher\/messages\/thread-001$/);
+  await expect(page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name: '위험 요소', exact: true })).toHaveClass(/is-active/);
+});
+
+test('추가 근거가 없으면 짧게 안내하고 미확인·미탐지 분류는 구분해 표시한다', async ({ page }, testInfo) => {
+  await openTeacherMessage(page);
+  await changeAnalysis(page, { riskFactors: [], riskClassifications: [] });
+  await openTab(page, '위험 요소');
+  const classifications = page.getByRole('region', { name: '8개 위험 요소 분류', exact: true });
+  await expect(page.getByText('추가 판단 근거가 제공되지 않았어요.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '추가로 표시할 판단 근거가 없습니다', exact: true })).toHaveCount(0);
+  await expect(classifications.getByText('미확인', { exact: true })).toHaveCount(8);
+  await changeAnalysis(page, { riskClassifications: riskCategories.map(({ code }) => ({ code, status: 'ABSENT' })) });
+  await openTab(page, '대화');
+  await openTab(page, '위험 요소');
+  await expect(classifications.getByText('미탐지', { exact: true })).toHaveCount(8);
+  await expect(classifications.getByText('미확인', { exact: true })).toHaveCount(0);
+  await page.locator('.board-risk-evidence-panel').screenshot({ path: testInfo.outputPath('compact-evidence-note.png') });
+});
+
 test('누락·중복 분류를 미탐지로 오인하지 않고 8개 분류를 반환한다', () => {
   const results = getRiskClassifications([
     { code: 'THREAT', status: 'PRESENT', evidenceSpan: '위협 표현' },

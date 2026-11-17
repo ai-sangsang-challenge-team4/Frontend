@@ -276,6 +276,18 @@
     padding: 20px;
   }
 
+  .board-risk-workflow-accordion .ui-accordion-trigger {
+    padding: var(--space-4);
+  }
+
+  .board-risk-workflow-accordion .ui-accordion-panel {
+    padding: 0 var(--space-4) var(--space-4);
+  }
+
+  .board-risk-workflow-accordion .admin-share-summary > div {
+    grid-template-columns: 88px minmax(0, 1fr);
+  }
+
   .board-risk-review-panel {
     gap: 36px;
   }

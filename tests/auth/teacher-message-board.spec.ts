@@ -24,6 +24,47 @@ test.beforeEach(async ({ page }) => {
   await loginTeacher(page);
 });
 
+test('미열람 답변에만 1을 표시하고 읽은 답변은 시간만 표시한다', async ({ page }) => {
+  await page.goto('/teacher/messages/thread-002');
+  const time = page.locator('.board-reply-teacher .board-reply-time');
+  await expect(time.locator('.board-reply-unread')).toHaveCount(1);
+  await expect(time.locator('time')).toBeVisible();
+  await page.goto('/teacher/messages/thread-005');
+  await expect(time.locator('.board-reply-unread')).toHaveCount(0);
+  await expect(time.locator('time')).toBeVisible();
+});
+
+test('학부모 확인 시각은 확인한 답변까지만 반영하고 이후 답변은 미열람으로 유지한다', async ({ page }) => {
+  await page.evaluate(() => {
+    localStorage.setItem('teacher-hub.parent-sent-messages.101', JSON.stringify([{
+      messageId: 'receipt-check', teacherId: 'teacher-102', teacherName: '김OO 선생님', title: '읽음 표시 확인',
+      originalBody: '문의드립니다.', finalBody: '문의드립니다.', selectionType: 'ORIGINAL', selectionSource: 'ORIGINAL',
+      status: 'SENT', sentAt: '2026-11-17T09:00:00+09:00', auditLog: [],
+      parentAcknowledgedAt: '2026-11-17T01:30:00Z',
+      conversation: [
+        { id: 'receipt-parent', authorRole: 'parent', body: '문의드립니다.', sentAt: '2026-11-17T09:00:00+09:00' },
+        { id: 'receipt-first', authorRole: 'teacher', body: '첫 번째 답변입니다.', sentAt: '2026-11-17T10:00:00+09:00' },
+        { id: 'receipt-second', authorRole: 'teacher', body: '두 번째 답변입니다.', sentAt: '2026-11-17T11:00:00+09:00' },
+      ],
+    }]));
+  });
+  await page.goto('/teacher/messages/receipt-check');
+  const first = page.locator('.board-reply-teacher').filter({ hasText: '첫 번째 답변입니다.' });
+  const second = page.locator('.board-reply-teacher').filter({ hasText: '두 번째 답변입니다.' });
+  await expect(first.locator('.board-reply-unread')).toHaveCount(0);
+  await expect(second.locator('.board-reply-unread')).toHaveCount(1);
+  await page.evaluate(() => {
+    const key = 'teacher-hub.parent-sent-messages.101';
+    const messages = JSON.parse(localStorage.getItem(key)!);
+    messages[0].parentAcknowledgedAt = '2026-11-17T11:30:00+09:00';
+    localStorage.setItem(key, JSON.stringify(messages));
+    window.dispatchEvent(new Event('parent-messages-changed'));
+  });
+  await expect(second.locator('.board-reply-unread')).toHaveCount(0);
+  await expect(first.locator('time')).toBeVisible();
+  await expect(second.locator('time')).toBeVisible();
+});
+
 test('완료된 상담은 기본으로 숨기고 상담 상태로 다시 볼 수 있다', async ({ page }) => {
   await page.goto('/teacher/messages');
   await expect(rowTitles(page)).toHaveCount(4);

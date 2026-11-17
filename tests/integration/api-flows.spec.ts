@@ -163,6 +163,51 @@ test('완충 요약 실패 응답은 원문 말풍선 대신 명시적인 요약
   await expect(page.locator('.board-answer-box')).toHaveClass(/is-locked/);
 });
 
+test('학부모가 읽은 서버 답변의 1을 숨기고 새 답변의 미열람 표시는 유지한다', async ({ page }) => {
+  let latestReadAt: string | null = null;
+  await setup(page, 'TEACHER', async (route, key) => {
+    let json = teacherComplaintJson(key, review);
+    if (key === 'GET /teacher/complaints/12/emergency-review/current') json = review;
+    if (key === 'GET /teacher/complaints/12/messages') json = {
+      complaintId: 12, allowedActions: [], messages: [
+        { messageId: 'message:1', senderRole: 'PARENT', senderName: '학부모', content: '문의 요약', sentAt: '2026-10-30T09:00:00', summarized: true },
+        { messageId: 'message:2', senderRole: 'TEACHER', senderName: '선생님', content: '이미 읽은 답변입니다.', sentAt: '2026-10-30T10:00:00', summarized: false, status: 'READ', readAt: '2026-10-30T10:05:00' },
+        { messageId: 'message:3', senderRole: 'TEACHER', senderName: '선생님', content: '새로 보낸 답변입니다.', sentAt: '2026-10-30T11:00:00', summarized: false, status: 'SENT', readAt: latestReadAt },
+      ],
+    };
+    if (json === undefined) return false;
+    await route.fulfill({ json }); return true;
+  });
+  await page.goto('/teacher/messages/12');
+  const earlier = page.locator('.board-reply-teacher').filter({ hasText: '이미 읽은 답변입니다.' });
+  const latest = page.locator('.board-reply-teacher').filter({ hasText: '새로 보낸 답변입니다.' });
+  await expect(earlier.locator('time')).toBeVisible();
+  await expect(earlier.locator('.board-reply-unread')).toHaveCount(0);
+  await expect(latest.locator('.board-reply-unread')).toHaveCount(1);
+  latestReadAt = '2026-10-30T11:05:00';
+  await page.reload();
+  await expect(latest.locator('time')).toBeVisible();
+  await expect(latest.locator('.board-reply-unread')).toHaveCount(0);
+});
+
+test('서버 메시지에서 공식 절차를 보고 돌아와도 위험 요소 탭과 잠금을 유지한다', async ({ page }) => {
+  await setup(page, 'TEACHER', async (route, key) => {
+    const json = key === 'GET /teacher/complaints/12/emergency-review/current'
+      ? review : teacherComplaintJson(key, review);
+    if (json === undefined) return false;
+    await route.fulfill({ json }); return true;
+  });
+  await page.goto('/teacher/messages/12');
+  const riskTab = page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name: '위험 요소', exact: true });
+  await riskTab.click();
+  await page.getByRole('button', { name: '공식 절차 보기', exact: true }).click();
+  await expect(page).toHaveURL(/\/teacher\/guide\?post=guide-emergency-official-procedure$/);
+  await page.getByRole('button', { name: '이전 화면으로 돌아가기', exact: true }).click();
+  await expect(page).toHaveURL(/\/teacher\/messages\/12$/);
+  await expect(riskTab).toHaveClass(/is-active/);
+  await expect(page.getByText('현재 답변 작성이 제한되어 있습니다.', { exact: true })).toBeVisible();
+});
+
 test('사용자 조회 5xx는 저장된 JWT로 우회하지 않고 재시도를 제공한다', async ({ page }) => {
   await setup(page, 'ADMIN', async () => false);
   await page.evaluate(() => {
@@ -204,7 +249,7 @@ test('긴급 재검토 조회 실패는 일반 검토를 막지 않고 긴급 �
   await expect(page.getByText('현재 재검토 상태를 확인하지 못했습니다.', { exact: false })).toBeVisible();
 });
 
-test('최신 거부 요청의 잠금이 유지되어도 교사가 재요청하며 승인 대기 중에는 중복을 막는다', async ({ page }) => {
+test('최신 거부 요청의 잠금이 유지되어도 교사가 재요청하며 승인 대기 중에는 중복을 막는다', async ({ page }, testInfo) => {
   let current = { ...review, status: 'REJECTED', decidedAt: '2026-10-30T11:00:00' as string | null };
   const calls: string[] = [];
   await setup(page, 'TEACHER', async (route, key) => {
@@ -222,8 +267,19 @@ test('최신 거부 요청의 잠금이 유지되어도 교사가 재요청하�
   });
   await page.goto('/teacher/messages/12');
   await page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name: '위험 요소', exact: true }).click();
-  await page.getByText('최근 긴급 재검토 요청 상세', { exact: true }).click();
+  const reviewDetails = page.getByRole('button', { name: '최근 긴급 재검토 요청 상세', exact: true });
+  await expect(reviewDetails).toHaveAttribute('aria-expanded', 'false');
+  await expect(reviewDetails.locator('path')).toHaveAttribute('d', 'm2 2 6 6 6-6');
+  await reviewDetails.focus();
+  await page.keyboard.press('Enter');
+  await expect(reviewDetails).toHaveAttribute('aria-expanded', 'true');
   await expect(page.getByText('지정 관리자', { exact: true })).toBeVisible();
+  await page.locator('.board-risk-workflow-accordion').screenshot({ path: testInfo.outputPath('emergency-review-expanded.png'), animations: 'disabled' });
+  await page.keyboard.press('Space');
+  await expect(reviewDetails).toHaveAttribute('aria-expanded', 'false');
+  await page.locator('.board-risk-workflow-accordion').screenshot({ path: testInfo.outputPath('emergency-review-collapsed.png'), animations: 'disabled' });
+  await expect(page.getByText('현재 답변 작성이 제한되어 있습니다.', { exact: true })).toBeVisible();
+  await reviewDetails.click();
   await page.getByRole('button', { name: '5점 위험', exact: true }).click();
   await page.getByPlaceholder('하향 수정 사유를 입력해주세요.').fill('추가 근거를 확인했습니다.');
   await page.getByRole('button', { name: '확인 요청', exact: true }).click();

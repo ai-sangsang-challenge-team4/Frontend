@@ -217,6 +217,9 @@ test('Emergency 잠금은 위험도 검토 후에도 유지되고 답변 생성�
   await expect(page.getByRole('button', { name: '절차 안내 보기', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '절차 안내 보기', exact: true }).click();
   await expect(page).toHaveURL(/\/teacher\/guide\?post=guide-emergency-official-procedure$/);
+  await page.getByRole('button', { name: '이전 화면으로 돌아가기', exact: true }).click();
+  await expect(page).toHaveURL(/\/teacher\/messages\/thread-001\/response$/);
+  await expect(page.getByRole('heading', { name: '이 메시지는 개별 답변을 보낼 수 없습니다', exact: true })).toBeVisible();
 
   await page.goto('/teacher/messages/thread-001');
   await page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name: '위험 요소', exact: true }).click();

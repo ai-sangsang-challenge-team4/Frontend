@@ -8,7 +8,7 @@ import {
   useState,
   type CSSProperties,
 } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, type NavigateFunction } from 'react-router-dom';
 import { Sidebar } from '../../shared/components/teacher-shell/TeacherSidebar';
 import { ChevronDownIcon, SearchIcon, StarIcon } from '../../shared/components/teacher-shell/icons';
 import {
@@ -230,31 +230,19 @@ function isMessagesHashPath(hashPath: string) {
 }
 
 function openGuidePostFromMessages(
+  navigate: NavigateFunction,
   threadId: string,
   view: MessagesRouteView,
   postId: string,
 ) {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  window.history.replaceState(
-    null,
-    '',
-    getTeacherMessagePath(threadId, view),
-  );
-  window.history.pushState(
-    {
-      ...(typeof window.history.state === 'object' &&
-      window.history.state !== null
-        ? window.history.state
-        : {}),
-      showGuideBackButton: true,
-    },
-    '',
-    `/teacher/guide?post=${encodeURIComponent(postId)}`,
-  );
-  window.dispatchEvent(new PopStateEvent('popstate'));
+  // Save the source tab on its own history entry, including browser Back/Forward.
+  navigate(getTeacherMessagePath(threadId, view), {
+    replace: true,
+    state: view === 'detail' ? { messageDetailTab: { threadId, tab: 'risk' } } : null,
+  });
+  navigate(`/teacher/guide?post=${encodeURIComponent(postId)}`, {
+    state: { showGuideBackButton: true, guideBackSteps: 1 },
+  });
 }
 
 
@@ -1139,6 +1127,7 @@ function RiskAnalysisPanel({
   onReloadServerDetail,
   thread,
 }: RiskAnalysisPanelProps) {
+  const navigate = useNavigate();
   const [isProcedureOpen, setIsProcedureOpen] = useState(false);
   const [isObjectionOpen, setIsObjectionOpen] = useState(false);
   const analysis = thread.analysis;
@@ -1248,6 +1237,7 @@ function RiskAnalysisPanel({
   const handleGuideAction = () => {
     if (isEmergencyGuide) {
       openGuidePostFromMessages(
+        navigate,
         thread.id,
         'detail',
         emergencyOfficialProcedurePostId,
@@ -1387,11 +1377,7 @@ function RiskAnalysisPanel({
             items={riskFactorItems}
           />
         ) : (
-          <EmptyState
-            className="board-risk-empty board-risk-factor-empty"
-            description="분류 결과의 미탐지와 미확인 상태를 구분해 확인해 주세요."
-            title="추가로 표시할 판단 근거가 없습니다"
-          />
+          <p className="board-risk-factor-note">추가 판단 근거가 제공되지 않았어요.</p>
         )}
       </section>
 
@@ -1421,9 +1407,10 @@ function RiskAnalysisPanel({
         />
       ) : null}
 
-      {isLinked ? <details className="board-risk-workflow-panel">
-        <summary>최근 긴급 재검토 요청 상세</summary>
-        {currentReview.error ? <div role="alert"><p>{getApiErrorMessage(currentReview.error, '최근 재검토 요청을 불러오지 못했습니다.')}</p><button className="board-outline-button" onClick={currentReview.retry} type="button">다시 불러오기</button></div>
+      {isLinked ? <Accordion className="board-risk-workflow-panel board-risk-workflow-accordion" items={[{
+        id: `recent-emergency-review-${thread.id}`,
+        title: '최근 긴급 재검토 요청 상세',
+        content: currentReview.error ? <div role="alert"><p>{getApiErrorMessage(currentReview.error, '최근 재검토 요청을 불러오지 못했습니다.')}</p><button className="board-outline-button" onClick={currentReview.retry} type="button">다시 불러오기</button></div>
           : currentReview.isInitialLoading ? <p role="status">최근 요청을 불러오고 있습니다.</p>
           : currentReview.data ? <dl className="admin-share-summary">
             <div><dt>상태</dt><dd>{riskReviewStatusLabel[currentReview.data.status]}</dd></div>
@@ -1433,8 +1420,8 @@ function RiskAnalysisPanel({
             <div><dt>요청 시각</dt><dd>{formatEscalationTime(currentReview.data.requestedAt)}</dd></div>
             <div><dt>결정 시각</dt><dd>{currentReview.data.decidedAt ? formatEscalationTime(currentReview.data.decidedAt) : '미결정'}</dd></div>
             <div><dt>안전 잠금</dt><dd>{serverSafetyLock ? '유지 중' : '해제됨'}</dd></div>
-          </dl> : <p>긴급 재검토 요청 내역이 없습니다.</p>}
-      </details> : null}
+          </dl> : <p>긴급 재검토 요청 내역이 없습니다.</p>,
+      }]} /> : null}
 
       {replyLocked || thread.riskReviewRequired ? (
         <section className="board-risk-lock-review">
@@ -1898,7 +1885,7 @@ function ThreadDetail({
                   <div className="board-reply-row">
                     {reply.authorRole === 'teacher' ? (
                       <div className="board-reply-time">
-                        {reply.readByParent ? <span>1</span> : null}
+                        {!reply.readByParent ? <span className="board-reply-unread"><span aria-hidden="true">1</span><span className="sr-only">상대방이 아직 읽지 않음</span></span> : null}
                         <time dateTime={reply.sentAt}>{time}</time>
                       </div>
                     ) : null}
@@ -2186,6 +2173,7 @@ function ReplyComposerPage({
   serverReplyAction = null,
   thread,
 }: ReplyComposerPageProps) {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const teacherName = user?.name ?? '담임';
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
@@ -2397,7 +2385,7 @@ function ReplyComposerPage({
           onDraftReset={() => onDraftReset(thread.id)}
           onDraftSave={() => onDraftSave(thread.id)}
           onSubmit={() => setIsConfirmOpen(true)}
-          onOpenProcedure={() => openGuidePostFromMessages(thread.id, 'reply', emergencyOfficialProcedurePostId)}
+          onOpenProcedure={() => openGuidePostFromMessages(navigate, thread.id, 'reply', emergencyOfficialProcedurePostId)}
           saveDisabled={Boolean(serverBlockReason) || draftErrors.length > 0}
           showAssistButton={isOfficialTemplateAvailable || canRequestAiDraft}
           stageNotice={stageNotice}
@@ -2470,7 +2458,12 @@ export function TeacherMessages({
   const [initialDetailTabRequest, setInitialDetailTabRequest] = useState<{
     tab: DetailTab;
     threadId: string;
-  } | null>(null);
+  } | null>(() => {
+    const saved = (location.state as { messageDetailTab?: { threadId?: unknown; tab?: unknown } } | null)?.messageDetailTab;
+    return typeof saved?.threadId === 'string' && saved.threadId === initialMessagesRouteState.threadId &&
+      detailTabs.includes(saved.tab as DetailTab)
+      ? { threadId: saved.threadId, tab: saved.tab as DetailTab } : null;
+  });
   const [initialOriginalViewerRequest, setInitialOriginalViewerRequest] =
     useState<{
       request: OriginalMessageRequest;

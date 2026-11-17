@@ -201,6 +201,66 @@
   background: var(--color-bg-canvas);
 }
 
+.board-risk-workflow-accordion.ui-accordion {
+  display: block;
+  padding: 0;
+  border: 0;
+}
+
+.board-risk-workflow-accordion .ui-accordion-item {
+  border-bottom: 0;
+}
+
+.board-risk-workflow-accordion .ui-accordion-trigger {
+  min-height: 56px;
+  padding: var(--space-4) var(--space-8);
+  border-radius: var(--radius-panel);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-body);
+}
+
+.board-risk-workflow-accordion .ui-accordion-trigger > span {
+  min-width: 0;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.board-risk-workflow-accordion .ui-accordion-icon {
+  width: 16px;
+  height: 10px;
+  color: var(--color-bg-icon);
+}
+
+.board-risk-workflow-accordion .ui-accordion-panel {
+  padding: 0 var(--space-8) var(--space-6);
+  background: transparent;
+}
+
+.board-risk-workflow-accordion .admin-share-summary {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.board-risk-workflow-accordion .admin-share-summary > div {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+.board-risk-workflow-accordion .admin-share-summary dt {
+  color: var(--color-text-muted-readable);
+}
+
+.board-risk-workflow-accordion .admin-share-summary dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--color-text-primary);
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
 .board-risk-factor-accordion .ui-accordion-item {
   display: flex;
   height: auto;
@@ -1044,6 +1104,15 @@
 .board-risk-empty {
   min-height: 240px;
   border: var(--divider-default);
+}
+
+.board-risk-factor-note {
+  margin: 0;
+  color: var(--color-text-muted-readable);
+  font-size: var(--font-size-helper);
+  line-height: 20px;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 .board-risk-factor-empty .ui-empty-state-icon {

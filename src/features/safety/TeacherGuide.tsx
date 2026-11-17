@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type SVGProps } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useMemo, useState, type SVGProps } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth';
 import { useActiveMessageCount } from '../message/useActiveMessageCount';
 import { Sidebar } from '../../shared/components/teacher-shell/TeacherSidebar';
@@ -376,45 +376,12 @@ function getGuidePostContent(post: GuidePost) {
   return guidePostContentById[post.id] ?? guidePostContentByCategory[post.category];
 }
 
-function getGuidePostIdFromLocation() {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-
-  return new URLSearchParams(window.location.search).get('post');
-}
-
-function pushTeacherGuideRoute(postId?: string | null) {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  const path = postId
-    ? `/teacher/guide?post=${encodeURIComponent(postId)}`
-    : '/teacher/guide';
-
-  window.history.pushState(window.history.state, '', path);
-  window.dispatchEvent(new PopStateEvent('popstate'));
-}
-
 function findGuidePostById(postId: string | null) {
   if (!postId) {
     return null;
   }
 
   return allGuidePosts.find((post) => post.id === postId) ?? null;
-}
-
-function shouldShowGuidePageBackButton() {
-  if (typeof window === 'undefined') {
-    return false;
-  }
-
-  const state = window.history.state as {
-    showGuideBackButton?: unknown;
-  } | null;
-
-  return state?.showGuideBackButton === true;
 }
 
 function BreadcrumbSeparator() {
@@ -680,17 +647,16 @@ export function TeacherGuide() {
   const { logout, user } = useAuth();
   const activeMessageCount = useActiveMessageCount(user?.userId ?? 0);
   const navigate = useNavigate();
+  const location = useLocation();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [query, setQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [selectedPost, setSelectedPost] = useState<GuidePost | null>(() =>
-    typeof window === 'undefined'
-      ? null
-      : findGuidePostById(getGuidePostIdFromLocation()),
-  );
-  const [shouldShowPageBack, setShouldShowPageBack] = useState(
-    shouldShowGuidePageBackButton,
-  );
+  const selectedPost = findGuidePostById(new URLSearchParams(location.search).get('post'));
+  const navigationState = location.state as { showGuideBackButton?: boolean; guideBackSteps?: number } | null;
+  const shouldShowPageBack = navigationState?.showGuideBackButton === true;
+  const savedBackSteps = navigationState?.guideBackSteps;
+  const guideBackSteps = typeof savedBackSteps === 'number' && Number.isSafeInteger(savedBackSteps) && savedBackSteps > 0
+    ? savedBackSteps : 1;
   const normalizedQuery = query.trim().toLowerCase();
   const filteredNoticePosts = useMemo(() => {
     if (!normalizedQuery) {
@@ -737,33 +703,23 @@ export function TeacherGuide() {
     setCurrentPage(1);
   };
   const handleSelectPost = (post: GuidePost) => {
-    setSelectedPost(post);
     pushTeacherGuideRoute(post.id);
   };
   const handleBackToList = () => {
-    setSelectedPost(null);
     pushTeacherGuideRoute();
   };
+  const pushTeacherGuideRoute = (postId?: string) => {
+    navigate(postId ? `/teacher/guide?post=${encodeURIComponent(postId)}` : '/teacher/guide', {
+      state: shouldShowPageBack ? { showGuideBackButton: true, guideBackSteps: guideBackSteps + 1 } : null,
+    });
+  };
   const handlePageBack = () => {
-    if (window.history.length > 1) {
-      window.history.back();
+    if (window.history.length > guideBackSteps) {
+      navigate(-guideBackSteps);
       return;
     }
-
-    window.history.pushState(null, '', '/teacher/messages');
-    window.dispatchEvent(new PopStateEvent('popstate'));
+    navigate('/teacher/messages', { replace: true });
   };
-
-  useEffect(() => {
-    const handlePopState = () => {
-      setSelectedPost(findGuidePostById(getGuidePostIdFromLocation()));
-      setShouldShowPageBack(shouldShowGuidePageBackButton());
-    };
-
-    window.addEventListener('popstate', handlePopState);
-
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
 
   return (
     <section className={pageClassName} aria-labelledby="guide-page-title">
