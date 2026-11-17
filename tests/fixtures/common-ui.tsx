@@ -1,6 +1,7 @@
 // Vite-only fixture: exercise shared components without adding a product/demo route.
 import { StrictMode, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { createPortal, flushSync } from 'react-dom';
 import { BrowserRouter } from 'react-router-dom';
 import { Accordion, Badge, Button, ButtonLink, Dropdown, InformationTooltip, Modal, Popover, Select, StatusChip, Tabs, TextareaField, TextField, Tooltip } from '../../src/shared/components/ui';
 import { BoardConfirmDialog } from '../../src/features/message/components/BoardConfirmDialog';
@@ -20,18 +21,28 @@ function PortalDialogCase() {
   </>;
 }
 
+function PortalContent() {
+  return createPortal(<button type="button">포털 내부 작업</button>, document.body);
+}
+
 function ReviewCases() {
   const [controlledOpen, setControlledOpen] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [lowerOpen, setLowerOpen] = useState(false);
   const [upperOpen, setUpperOpen] = useState(false);
   const [selectOpen, setSelectOpen] = useState(false);
+  const [tooltipDisabled, setTooltipDisabled] = useState(false);
+  const [radioOpen, setRadioOpen] = useState(false);
+  const [radioChecked, setRadioChecked] = useState(false);
   return <>
     <Popover ariaLabel="제어 설명" open={controlledOpen} onOpenChange={setControlledOpen} trigger="제어 설명 열기">
       <TextField label="제어 설명 입력" />
     </Popover>
-    <Button onClick={() => setControlledOpen(false)}>설명 밖 작업</Button>
+    <Button onClick={() => setControlledOpen(false)} onFocus={() => flushSync(() => setControlledOpen(false))}>설명 밖 작업</Button>
     <Popover ariaLabel="포털 설명" trigger="포털 설명 열기"><PortalDialogCase /></Popover>
+    <Popover ariaLabel="일반 포털 설명" trigger="일반 포털 설명 열기"><PortalContent /></Popover>
+    <Tooltip content="전환 가능한 설명" disabled={tooltipDisabled}><Button>전환 설명 대상</Button></Tooltip>
+    <Button onClick={() => setTooltipDisabled((current) => !current)}>설명 비활성 전환</Button>
     <Tooltip content="입력 형식 설명">
       <TextField id="tooltip-validating-field" label="설명 입력 필드" helperText="도움말" error={hasError ? '오류 안내' : undefined} />
     </Tooltip>
@@ -50,6 +61,12 @@ function ReviewCases() {
       <Dropdown ariaLabel="대화상자 값 선택" defaultValue="a" options={[
         { label: '선택 첫 항목', value: 'a' }, { label: '선택 마지막 항목', value: 'b' },
       ]} />
+    </Modal>
+    <Button onClick={() => { setRadioChecked(false); setRadioOpen(true); }}>라디오 창 열기</Button>
+    <Button onClick={() => { setRadioChecked(true); setRadioOpen(true); }}>선택된 라디오 창 열기</Button>
+    <Modal open={radioOpen} onOpenChange={setRadioOpen} title="라디오 확인">
+      <label><input type="radio" name="modal-radio" value="a" defaultChecked={radioChecked} />라디오 첫 항목</label>
+      <label><input type="radio" name="modal-radio" value="b" />라디오 마지막 항목</label>
     </Modal>
   </>;
 }

@@ -55,11 +55,22 @@ export function useModalFocus(
         return;
       }
       if (event.key !== 'Tab') return;
-      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(
+      const candidates = Array.from(dialog.querySelectorAll<HTMLElement>(
         'button, [href], input, select, textarea, [tabindex]',
       )).filter((element) => element.tabIndex >= 0 && !element.matches(':disabled') &&
         !element.closest('[inert]') && element.getClientRects().length > 0 &&
         getComputedStyle(element).visibility !== 'hidden');
+      const focusable = candidates.filter((element) => {
+        if (!(element instanceof HTMLInputElement) || element.type !== 'radio' || !element.name) return true;
+        const group = candidates.filter((candidate): candidate is HTMLInputElement => (
+          candidate instanceof HTMLInputElement && candidate.type === 'radio' &&
+          candidate.name === element.name && candidate.form === element.form
+        ));
+        // An unchecked group enters at either end; once focused it leaves from that member.
+        const stop = group.find((radio) => radio.checked) ?? group.find((radio) => radio === document.activeElement)
+          ?? (event.shiftKey ? group[group.length - 1] : group[0]);
+        return element === stop;
+      });
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
       const active = document.activeElement;
