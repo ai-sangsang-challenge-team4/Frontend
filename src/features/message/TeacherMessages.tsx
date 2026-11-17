@@ -16,6 +16,7 @@ import {
   Button,
   Dropdown,
   EmptyState,
+  InformationTooltip,
   Modal,
   Badge,
   Toast,
@@ -895,6 +896,7 @@ type RiskReviewPanelProps = {
   reason: string;
   referenceScore: RiskScore;
   score: RiskScore;
+  systemRiskScore?: number | null;
   threadId: string;
 };
 
@@ -909,12 +911,16 @@ function RiskReviewPanel({
   reason,
   referenceScore,
   score,
+  systemRiskScore,
   threadId,
 }: RiskReviewPanelProps) {
   const trimmedReason = reason.trim();
   const reasonInputId = `board-risk-review-reason-${threadId}`;
   const reasonRequirementId = `${reasonInputId}-requirement`;
   const guideId = `board-risk-review-guide-${threadId}`;
+  const systemScoreDescription = systemRiskScore != null
+    ? `시스템 위험 점수: ${systemRiskScore}/100.`
+    : '시스템 위험 점수는 0~100점 척도입니다.';
   const level = riskScoreToLevel(score);
   const guide = riskScoreGuides[score];
   const isDownwardReview = score < referenceScore;
@@ -951,9 +957,14 @@ function RiskReviewPanel({
     >
       <div className="board-risk-review-overview">
         <div className="board-risk-review-copy">
-          <h2 className="board-risk-section-title" id="board-risk-review-title">
-            위험도 검토
-          </h2>
+          <div className="board-risk-review-heading">
+            <h2 className="board-risk-section-title" id="board-risk-review-title">
+              위험도 검토
+            </h2>
+            <InformationTooltip label="위험도 점수 기준" content={
+              <span className="board-risk-score-help">{systemScoreDescription} 교사 검토는 별도의 1~7단계 척도를 사용합니다.</span>
+            } />
+          </div>
           <p>이 메시지의 위험도를 어떻게 판단하시나요?</p>
         </div>
 
@@ -1281,7 +1292,6 @@ function RiskAnalysisPanel({
   return (
     <div className="board-risk-tab">
       <RiskAnalysisNotice metadata={analysis} />
-      {analysis.systemRiskScore != null ? <p>시스템 위험 점수: {analysis.systemRiskScore}/100 · 교사 검토는 1~7단계 척도입니다.</p> : null}
       <section
         className={`board-risk-guide board-risk-guide--${currentTone}${
           isProcedureOpen ? ' is-expanded' : ''
@@ -1405,6 +1415,7 @@ function RiskAnalysisPanel({
           reason={reviewReason}
           referenceScore={initialReviewScore}
           score={reviewScore}
+          systemRiskScore={analysis.systemRiskScore}
           threadId={thread.id}
         />
       ) : null}
