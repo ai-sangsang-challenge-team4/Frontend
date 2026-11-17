@@ -14,7 +14,7 @@
 
 2026-11-17 계약 점검에서 과거 `/users/me` 500 임시 우회를 제거했습니다. Backend의 `UserController`는 `Authentication`에서 이메일을 읽어 사용자를 조회합니다. 프론트는 5xx일 때 저장된 JWT의 내용으로 조회 성공을 대신하지 않고, 세션을 보존한 채 `다시 시도` 화면을 표시합니다. 401은 기존처럼 인증 정보를 초기화합니다.
 
-dev 프로필 계정: `parent@test.com`, `teacher@test.com`, `admin@test.com` / `TeacherHubDemo`. 로컬에서는 Vite 프록시(`VITE_API_BASE_URL=/api`, `VITE_API_PROXY_TARGET`)를 거치며, 프록시가 `Origin` 헤더를 제거합니다(백엔드 CORS는 Vercel Origin만 허용해 다른 Origin은 403).
+dev 프로필 계정: `parent@test.com`, `teacher@test.com`, `admin@test.com` / `Test1234!`. 로컬에서는 Vite 프록시(`VITE_API_BASE_URL=/api`, `VITE_API_PROXY_TARGET`)를 거치며, 프록시가 `Origin` 헤더를 제거합니다(백엔드 CORS는 Vercel Origin만 허용해 다른 Origin은 403).
 
 Mock 계정과 비밀번호, 발급 토큰 기록은 테스트를 위해 브라우저 저장소에 보관됩니다. 실제 서비스의 서버 인증이나 토큰 서명 검증을 대신하지 않습니다. 이전 버전에서 로그인한 세션에는 만료 정보와 발급 기록이 없으므로 한 번 다시 로그인해야 합니다.
 

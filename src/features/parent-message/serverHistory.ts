@@ -92,6 +92,10 @@ function applyListItem(thread: SentParentMessage, item: ListItem): SentParentMes
 function applyConversation(thread: SentParentMessage, response: ParentConversationResponse): SentParentMessage {
   const local = getConversation(thread);
   const sent = response.messages.filter((message) => message.status !== 'DRAFT' && message.sentAt);
+  // Sent messages are immutable and /messages returns the whole conversation. A
+  // response missing a message already confirmed by the server is an older snapshot.
+  const serverMessageIds = new Set(sent.map((message) => message.messageId));
+  if (local.some((entry) => entry.serverMessageId !== undefined && !serverMessageIds.has(entry.serverMessageId))) return thread;
   let firstParent = true;
   const conversation = sent.map((message): ConversationMessage => {
     const sentAt = toInstant(message.sentAt)!;
