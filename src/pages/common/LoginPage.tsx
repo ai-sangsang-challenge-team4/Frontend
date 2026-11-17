@@ -166,7 +166,7 @@ export function LoginPage() {
               size="lg"
               type="submit"
             >
-              로그인
+              {isLoading ? '로그인 중' : '로그인'}
             </Button>
           </div>
         </form>

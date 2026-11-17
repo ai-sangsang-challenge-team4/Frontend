@@ -24,6 +24,17 @@
   .board-thread-time {
     text-align: left;
   }
+
+  /* Keep the topic readable before the sidebar switches to its mobile header. */
+  .board-parent-card {
+    grid-template-columns: 204px minmax(0, 1fr);
+    gap: var(--space-6) var(--space-4);
+  }
+
+  .board-card-meta-group {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
 }
 
 @media (max-width: 980px) {
@@ -50,7 +61,7 @@
   }
 
   .board-thread-row {
-    grid-template-columns: 32px minmax(0, 1fr);
+    grid-template-columns: 44px minmax(0, 1fr);
     gap: 16px;
     padding: 16px 0;
   }

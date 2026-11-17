@@ -11,10 +11,6 @@
   justify-content: center;
 }
 
-.board-tabs .ui-tabs-panel {
-  outline: 0;
-}
-
 .board-tab-label {
   display: inline-flex;
   min-width: 0;
@@ -35,7 +31,7 @@
   height: 24px;
   place-items: center;
   padding: 0 7px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--color-bg-canvas);
   color: var(--color-text-secondary);
   font-size: 12px;
@@ -47,7 +43,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-top: 33px;
+  margin-top: var(--space-8);
 }
 
 .board-filter-select {
@@ -59,8 +55,8 @@
 .board-search-field .ui-input-shell {
   height: 47px;
   min-height: 47px;
-  border: var(--border-default);
-  border-radius: 8px;
+  border: var(--border-control);
+  border-radius: var(--radius-sm);
   background: var(--color-bg-surface);
   color: var(--color-text-primary);
   font-size: 16px;
@@ -83,17 +79,6 @@
   background: var(--color-bg-canvas);
 }
 
-.board-filter-select .ui-dropdown-option.is-selected {
-  background: transparent;
-}
-
-.board-filter-select .ui-dropdown-option:hover,
-.board-filter-select .ui-dropdown-option:focus-visible,
-.board-filter-select .ui-dropdown-option.is-selected:hover,
-.board-filter-select .ui-dropdown-option.is-selected:focus-visible {
-  background: var(--color-bg-canvas);
-}
-
 .board-search-field {
   width: auto;
   min-width: 0;
@@ -109,7 +94,7 @@
   gap: 6px;
   margin-left: 8px;
   padding: 0 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   color: var(--color-text-primary);
   font-size: 16px;
   font-weight: 500;
@@ -152,8 +137,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 16px 32px;
-  /* Same spacing as .board-toolbar's margin-top so the tabs, toolbar and detail filter sit on an even rhythm. */
-  margin-top: 33px;
+  margin-top: var(--space-8);
   padding: 20px 0;
   border-top: 1px solid var(--color-border-divider);
   border-bottom: 1px solid var(--color-border-divider);
@@ -204,7 +188,7 @@
 .board-thread-row {
   display: grid;
   min-height: 112px;
-  grid-template-columns: 32px minmax(0, 1fr);
+  grid-template-columns: 44px minmax(0, 1fr);
   align-items: center;
   gap: 20px;
   border-top: 0.7px solid var(--color-border-default);
@@ -216,8 +200,9 @@
 
 .board-thread-star-button {
   display: grid;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-sm);
   place-items: center;
   color: var(--color-border-default);
 }
@@ -240,7 +225,7 @@
   align-items: center;
   gap: 16px;
   padding: 0 16px 0 0;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   color: inherit;
   text-align: left;
 }
@@ -304,7 +289,7 @@
   flex: 0 0 auto;
   align-items: flex-start;
   gap: 6px;
-  color: #fd2d27;
+  color: var(--color-text-danger-readable);
   font-size: 16px;
   font-weight: 500;
   line-height: 19px;
@@ -331,29 +316,13 @@
 }
 
 .board-status-chip {
-  width: 83px;
-  height: 37px;
-  min-width: 83px;
+  width: fit-content;
+  min-width: 73px;
   min-height: 37px;
   padding: 0 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   font-size: 16px;
   font-weight: 500;
-}
-
-.board-status-chip.ui-status-chip--pending {
-  color: var(--color-text-primary);
-  background: var(--color-bg-canvas);
-}
-
-.board-status-chip.ui-status-chip--progress {
-  color: var(--color-text-primary);
-  background: var(--color-primary-subtle);
-}
-
-.board-status-chip.ui-status-chip--complete {
-  color: var(--color-text-inverse);
-  background: var(--color-primary);
 }
 
 .board-thread-time {
@@ -362,6 +331,7 @@
   font-weight: 500;
   line-height: 24px;
   text-align: left;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 

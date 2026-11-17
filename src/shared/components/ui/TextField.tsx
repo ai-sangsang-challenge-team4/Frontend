@@ -40,7 +40,7 @@ export function TextField({
 }: TextFieldProps) {
   const generatedId = useId();
   const fieldId = id ?? generatedId;
-  const helperId = helperText ? `${fieldId}-helper` : undefined;
+  const helperId = helperText && !error ? `${fieldId}-helper` : undefined;
   const errorId = error ? `${fieldId}-error` : undefined;
   const {
     'aria-describedby': ariaDescribedBy,
@@ -121,7 +121,7 @@ export function TextareaField({
 }: TextareaFieldProps) {
   const generatedId = useId();
   const fieldId = id ?? generatedId;
-  const helperId = helperText ? `${fieldId}-helper` : undefined;
+  const helperId = helperText && !error ? `${fieldId}-helper` : undefined;
   const errorId = error ? `${fieldId}-error` : undefined;
   const {
     'aria-describedby': ariaDescribedBy,

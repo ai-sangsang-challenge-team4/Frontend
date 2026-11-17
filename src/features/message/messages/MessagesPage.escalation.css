@@ -32,7 +32,7 @@
 }
 
 .board-admin-share-summary dt {
-  color: var(--color-text-muted);
+  color: var(--color-text-muted-readable);
   font-size: 15px;
   font-weight: 500;
   line-height: 24px;
@@ -64,7 +64,7 @@
 }
 
 .board-admin-share-options input:disabled + span {
-  color: var(--color-text-muted);
+  color: var(--color-text-muted-readable);
 }
 
 .board-admin-share-error {

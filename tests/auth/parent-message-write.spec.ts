@@ -26,6 +26,62 @@ async function expectMenuLabelsAligned(labels: Locator) {
   for (const position of positions) expect(position).toBeCloseTo(positions[0], 1);
 }
 
+test('유의사항은 기본 접힘이며 핵심 안내를 유지하고 키보드·클릭으로 펼쳐도 입력값을 보존한다', async ({ page }, testInfo) => {
+  await openComposer(page);
+  await fillMessage(page);
+  const title = page.getByLabel('문의 제목', { exact: true });
+  const body = page.getByLabel('문의 내용', { exact: true });
+  const titleValue = await title.inputValue();
+  const bodyValue = await body.inputValue();
+  const trigger = page.getByRole('button', { name: /^문의 작성 시 유의사항/ });
+  const notice = page.locator('.parent-write-notice');
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  await expect(notice.getByText('문의는 전송 후 수정하거나 삭제할 수 없습니다.', { exact: true })).toBeVisible();
+  await expect(notice.getByRole('region')).toHaveCount(0);
+  await trigger.focus();
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Shift+Tab');
+  await expect(trigger).toBeFocused();
+  await expect(trigger).toHaveCSS('outline-style', 'solid');
+  await page.keyboard.press('Enter');
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  const details = notice.getByRole('region');
+  await expect(details.getByRole('listitem')).toHaveCount(3);
+  await expect(details).toContainText('서로를 배려하는 표현으로 문의를 작성해 주세요.');
+  await expect(details).toContainText('폭언, 욕설 등 부적절한 표현은 관련 법령에 따라 문제가 될 수 있습니다.');
+  await expect(details).toContainText('금융사기일 수 있으니 주의해 주세요.');
+  await page.keyboard.press('Space');
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  await title.click();
+  await trigger.click();
+  await expect(details).toBeVisible();
+  await expect(trigger).toHaveCSS('outline-style', 'none');
+  await trigger.hover();
+  await expect(trigger).not.toHaveCSS('background-color', 'rgb(235, 239, 251)');
+  await details.hover();
+  await expect(details).toHaveCSS('background-color', 'rgb(248, 248, 248)');
+  // Expanded is conveyed by content and the chevron, without a persistent blue fill.
+  await expect(trigger).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await expect(title).toHaveValue(titleValue);
+  await expect(body).toHaveValue(bodyValue);
+  await trigger.click();
+  for (const width of [320, 375, 620, 980, 1440]) {
+    await page.setViewportSize({ width, height: 1100 });
+    for (const expanded of [false, true]) {
+      await expect(trigger).toHaveAttribute('aria-expanded', String(expanded));
+      await expect.poll(() => notice.evaluate((element) => (
+        document.querySelector('.parent-write-form')!.getBoundingClientRect().top - element.getBoundingClientRect().bottom
+      ))).toBe(width <= 620 ? 24 : 32);
+      await trigger.click();
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  await page.screenshot({ path: testInfo.outputPath('parent-disclosure-desktop.png'), fullPage: true });
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: testInfo.outputPath('parent-disclosure-mobile.png'), fullPage: true });
+});
+
 test('학부모 홈과 잘못된 경로는 새 문의로 연결되고 새 문의 작성에는 뒤로가기가 없다', async ({ page }) => {
   await openComposer(page);
   for (const pathname of ['/parent', '/parent/unknown']) {
@@ -46,25 +102,33 @@ test('학부모 홈과 잘못된 경로는 새 문의로 연결되고 새 문의
   await expect(page).toHaveURL(/\/parent\/messages\/new$/);
 });
 
-test('320px 화면에서도 제목과 breadcrumb가 헤더 안에 겹치지 않고 표시된다', async ({ page }, testInfo) => {
+test('작성 헤더는 모바일에서 제목과 breadcrumb를 나누고 데스크톱 한 줄 배치를 유지한다', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 320, height: 720 });
   await openComposer(page);
   const header = page.locator('.parent-write-header');
-  const heading = page.locator('.parent-write-heading');
   const breadcrumb = page.getByRole('navigation', { name: '현재 위치', exact: true });
   const currentPage = breadcrumb.locator('[aria-current="page"]');
   await expect(currentPage).toHaveText('새 문의 작성');
   await expect(currentPage).toHaveCSS('text-overflow', 'ellipsis');
 
-  for (const width of [320, 375, 620]) {
+  for (const width of [320, 375, 620, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: 720 });
-    const headerBox = (await header.boundingBox())!;
-    const headingBox = (await heading.boundingBox())!;
-    const breadcrumbBox = (await breadcrumb.boundingBox())!;
-    expect(breadcrumbBox.x).toBeGreaterThanOrEqual(headingBox.x + headingBox.width);
+    const { headerBox, headingBox, breadcrumbBox } = await header.evaluate((element) => ({
+      headerBox: element.getBoundingClientRect().toJSON(),
+      headingBox: element.querySelector('.parent-write-heading')!.getBoundingClientRect().toJSON(),
+      breadcrumbBox: element.querySelector('.parent-write-breadcrumb')!.getBoundingClientRect().toJSON(),
+    }));
+    if (width <= 620) {
+      const gap = breadcrumbBox.y - (headingBox.y + headingBox.height);
+      expect(gap).toBeGreaterThanOrEqual(12);
+      expect(gap).toBeLessThanOrEqual(16);
+      expect(breadcrumbBox.x).toBeCloseTo(headingBox.x, 0);
+    } else {
+      expect(breadcrumbBox.x).toBeGreaterThanOrEqual(headingBox.x + headingBox.width + 12);
+      expect(breadcrumbBox.y).toBeLessThan(headingBox.y + headingBox.height);
+      expect(breadcrumbBox.y + breadcrumbBox.height).toBeGreaterThan(headingBox.y);
+    }
     expect(breadcrumbBox.x + breadcrumbBox.width).toBeLessThanOrEqual(headerBox.x + headerBox.width + 1);
-    expect(breadcrumbBox.y).toBeLessThan(headingBox.y + headingBox.height);
-    expect(breadcrumbBox.y + breadcrumbBox.height).toBeGreaterThan(headingBox.y);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   }
   await page.setViewportSize({ width: 320, height: 720 });
@@ -181,4 +245,22 @@ test('다른 계정의 임시저장 내용과 손상된 데이터를 불러오�
   await page.reload();
   await expect(page.getByLabel('문의 제목', { exact: true })).toHaveValue('');
   await expect(page.getByLabel('문의 내용', { exact: true })).toHaveValue('');
+});
+
+test('학부모 작성 field의 텍스트 시작선은 같은 열에 맞춰지고 주요 버튼은 기본 크기를 유지한다', async ({ page }) => {
+  await openComposer(page);
+  for (const width of [1440, 1240, 980, 820, 620, 375, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    const starts = await page.locator('.parent-write-field .ui-field-control').evaluateAll((controls) => controls.map((control) => {
+      const style = getComputedStyle(control);
+      return control.getBoundingClientRect().left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft);
+    }));
+    expect(Math.max(...starts) - Math.min(...starts), `${width}px input text alignment`).toBeLessThanOrEqual(1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    for (const action of await page.locator('.parent-write-actions .ui-button').all()) {
+      // The shell animates its padding across breakpoints; measure after it settles.
+      await expect.poll(async () => (await action.boundingBox())!.height).toBeLessThanOrEqual(48);
+      expect((await action.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    }
+  }
 });

@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../features/auth';
 import { Sidebar } from '../shared/components/teacher-shell/TeacherSidebar';
-import '../shared/styles/teacher-prototype.css';
 import './ParentLayout.css';
 
 export function ParentLayout() {

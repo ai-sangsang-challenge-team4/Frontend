@@ -183,6 +183,7 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
   async function handleSend() {
     if (sendPending.current) return;
     sendPending.current = true;
+    setNotice(null);
     setIsSending(true);
     const controller = new AbortController();
     sendController.current = controller;
@@ -397,6 +398,10 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
           <Button disabled={isSending} onClick={() => setDialog(null)} variant="outline">취소</Button>
           <Button isLoading={isSending} leftIcon={<Send size={20} />} onClick={() => { void handleSend(); }}>확인 후 전송</Button>
         </> : <Button onClick={() => setDialog(null)} variant="outline">닫기</Button>}>
+        {notice ? <div className="parent-review-analysis-notice">
+          <p role="alert">{notice}</p>
+          <Button aria-label="알림 닫기" onClick={dismissNotice} size="sm" variant="ghost">닫기</Button>
+        </div> : null}
         <dl className="parent-review-preview-meta">
           <dt>문의 대상</dt><dd>{teacher?.label}</dd>
           <dt>문의 제목</dt><dd>{maskContactInfo(draft.title).text}</dd>
@@ -406,7 +411,7 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
         {dialog === 'confirm' && analyzedOnSend ? <p className="parent-review-meaning-notice">AI 검토를 받은 내용과 달라 전송할 때 한 번 더 분석합니다. 전송이 조금 늦어질 수 있습니다.</p> : null}
         <p className="parent-review-preview-body">{masked.text}</p>
       </Modal>
-      {notice ? <Toast message={notice} onClose={dismissNotice} /> : null}
+      {notice && dialog === null ? <Toast message={notice} onClose={dismissNotice} /> : null}
     </>
   );
 }

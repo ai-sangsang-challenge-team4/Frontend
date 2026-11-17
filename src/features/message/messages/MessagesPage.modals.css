@@ -5,7 +5,7 @@
   min-height: 37px;
   place-items: center;
   padding: 4px 6px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--color-primary);
   color: var(--color-text-inverse);
   font-size: 16px;
@@ -15,7 +15,7 @@
 
 .board-primary-button:disabled {
   background: var(--color-bg-canvas);
-  color: var(--color-text-muted);
+  color: var(--color-text-muted-readable);
 }
 
 .board-confirm-modal-overlay {
@@ -36,9 +36,9 @@
   min-height: 180px;
   max-height: calc(100vh - 32px);
   overflow: hidden;
-  border-radius: 12px;
+  border-radius: var(--radius-panel);
   background: var(--color-bg-canvas);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-dialog);
 }
 
 .board-confirm-modal-content {
@@ -70,14 +70,14 @@
 
 .board-confirm-modal-close {
   position: absolute;
-  top: 18px;
-  right: 14px;
+  top: 8px;
+  right: 8px;
   display: grid;
-  width: 28px;
-  height: 28px;
+  width: 44px;
+  height: 44px;
   place-items: center;
   border-radius: var(--radius-xs);
-  color: var(--color-border-default);
+  color: var(--color-bg-icon);
 }
 
 .board-confirm-modal-close:hover {
@@ -93,7 +93,7 @@
 .board-confirm-modal-actions {
   display: flex;
   width: 100%;
-  border-top: 1px solid #f0f0f0;
+  border-top: var(--divider-default);
 }
 
 .board-confirm-modal-action {
@@ -110,11 +110,11 @@
 }
 
 .board-confirm-modal-action + .board-confirm-modal-action {
-  border-left: 1px solid #f0f0f0;
+  border-left: var(--divider-default);
 }
 
 .board-confirm-modal-action:hover {
-  background: #f0f0f0;
+  background: var(--color-border-divider);
 }
 
 .board-confirm-modal-action--danger {
@@ -127,7 +127,7 @@
 
 .board-confirm-modal-action:disabled {
   cursor: not-allowed;
-  color: var(--color-text-muted);
+  color: var(--color-text-muted-readable);
   background: transparent;
 }
 
