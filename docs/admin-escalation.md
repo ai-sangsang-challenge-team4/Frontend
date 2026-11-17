@@ -40,11 +40,11 @@
 - 검토 시작: `escalationStatus === 'SHARED'`
 - 처리 완료: `escalationStatus === 'UNDER_REVIEW' && riskReviewStatus !== 'PENDING_ADMIN_APPROVAL'` (승인 대기면 서버 409 `ESCALATION_STATE_INVALID`)
 - 위험도 변경 승인/거부: `emergencyReviewRequestId !== null && riskReviewStatus === 'PENDING_ADMIN_APPROVAL'` → `PATCH /admin/emergency-review/{requestId}` `{ status, message }`. 공유 상태와 무관
-- 안전 잠금 해제: 결정 후 `safetyLock === true`일 때 → `PATCH … { safetyLock: false }`. **승인해도 잠금은 자동 해제되지 않습니다.** 서버는 승인 대기 중 해제도 받지만 UI는 결정을 먼저 요구합니다
+- 긴급 하향 승인: `PATCH … { status: APPLIED, message }`가 요청 위험도와 안전 잠금 해제를 함께 반영합니다. 응답·재조회한 `safetyLock`을 사용하고 프론트가 승인 상태만으로 잠금을 해제하지 않습니다. 승인된 이전 기록에서 `safetyLock === true`가 명시된 경우에만 `PATCH … { safetyLock: false }`를 제공하며 승인 전·반려 상태에서는 제공하지 않습니다.
 
 처리 메모(검토 시작·처리 완료)는 필수입니다(백엔드 `@NotBlank`). 재검토 결정 사유는 백엔드에서 선택이지만 기록을 남기도록 UI에서 필수로 받습니다.
 
-교사 위험도 검토는 현재 교사 검토 기준 점수에서 상향·하향하는 경우 모두 검토 사유(최대 300자)가 필수입니다. 같은 점수를 유지하는 검토는 사유 없이 저장할 수 있습니다. 긴급 단계의 하향 승인·잠금 해제 절차는 그대로 유지합니다.
+교사 위험도 검토는 현재 교사 검토 기준 점수에서 상향·하향하는 경우 모두 검토 사유(최대 300자)가 필수입니다. 같은 점수를 유지하는 검토는 사유 없이 저장할 수 있습니다. 긴급 단계의 하향은 `재검토 요청` 하나로 지정 검토자에게 전송하며, 실제 접수 후 `검토자 확인 대기`를 표시합니다. 하향 승인 시 서버가 잠금도 함께 해제합니다. 교사가 요청한 것만으로 잠금을 해제하지 않습니다.
 
 ### 관리자 상세 응답 표시
 
@@ -78,7 +78,7 @@
 - 교사의 "내가 공유한 목록" API가 없습니다(`/teacher/admin-share`는 mock 전용). **엔드포인트 추가 필요.**
 - 미공유 상태 응답은 `escalationId`가 `null`이고, 재검토 요청이 없으면 `emergencyReviewRequestId`·`riskReviewStatus`도 `null`입니다. 완료된 분석이 없으면 `currentRiskScore`·`currentRiskLevel`도 `null`입니다(백엔드 dev 코드로 확인).
 - `SHARED → COMPLETED` 직접 완료는 불가합니다(백엔드 코드로 확인). 재검토 결정은 공유 상태와 무관합니다.
-- `/admin/emergency-reviews`에서 지정 검토자의 전체 재검토 요청을 조회합니다. 공유되지 않은 민원도 `/admin/emergency-reviews/:requestId`에서 요청 상세 확인, 승인·거부 및 별도 안전 잠금 해제가 가능합니다.
+- `/admin/emergency-reviews`에서 지정 검토자의 전체 재검토 요청을 조회합니다. 공유되지 않은 민원도 `/admin/emergency-reviews/:requestId`에서 요청 상세 확인과 승인·거부가 가능합니다. 하향 승인 시 잠금도 함께 해제됩니다.
 - 관리자 목록·상세 응답에 민원 제목·학생·학급 정보가 없어 `민원 #{complaintId}`와 공유 교사(`sharedBy`)만 표시합니다.
 - 관리자 처리 메모·결정 사유는 응답에 없고 `/history`의 `reason`으로만 확인됩니다. 처리 이력의 빈 필드는 `null`이 아니라 생략됩니다(`@JsonInclude(NON_NULL)`).
 - 시스템 위험 점수는 0~100점으로 표시하고, 교사 검토는 별도의 1~7단계(`reviewScale`)로 표시합니다(#77). 교사가 고른 값은 서버가 10을 곱해 `reviewScore`(10~70)로 저장합니다. 현재 적용 등급은 `currentRiskLevel`을 따르고 시스템 점수를 교사 7점 척도로 환산하지 않습니다. 이력·공유 요약의 점수는 서버 값을 그대로 표시합니다. 등급 판정은 서버가 하며, 프론트 슬라이더 미리보기와 mock 서버만 교사 척도의 기준을 흉내 냅니다.
@@ -98,7 +98,7 @@ npx playwright test admin-escalation escalation-http-api
 npx playwright test --config=playwright.admin-http.config.ts
 ```
 
-- `admin-escalation`: mock 어댑터로 교사 공유 → 관리자 검토 시작·처리 완료, 긴급 하향 승인 대기(중복 요청 차단) → 결정 전 완료 불가 → 승인 후에도 잠금 유지 → 잠금 해제, 미공유 하향의 승인 대기, HIGH 공유 버튼 비활성, 권한 차단을 확인합니다.
+- `admin-escalation`: mock 어댑터로 교사 공유 → 관리자 검토 시작·처리 완료, 긴급 하향 승인 대기(중복 요청 차단) → 결정 전 완료 불가 → 승인 시 위험도와 잠금 해제 반영, 미공유 하향의 승인 대기, HIGH 공유 버튼 비활성, 권한 차단을 확인합니다.
 - `escalation-http-api`: fetch를 대체해 HTTP 어댑터의 경로·본문·`current` 404 → `null`·409 메시지 노출을 확인합니다. **실제 서버 호출은 아닙니다.**
 - `playwright.admin-http.config.ts`: HTTP 어댑터를 켜고 실제 관리자 화면에서 7개 API 호출, 검토 시작→완료, 새 응답 필드·이전 응답 호환성·로그 누락을 확인합니다. #77의 잠정 분석·직접 검토 안내와 시스템 95/100·교사 5/7단계·현재 적용 등급 구분도 확인합니다. 데스크톱·모바일과 UTC 브라우저에서 실행하며, 백엔드 응답은 명세 기반 fixture로 대체합니다. 실제 배포 AI 연결 테스트는 아닙니다.
 

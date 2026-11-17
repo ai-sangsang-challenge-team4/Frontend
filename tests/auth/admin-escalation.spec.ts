@@ -115,14 +115,15 @@ test('관리자는 공유받은 메시지를 확인하고 검토 중 → 처리 
   // Emergency review is independent of the share, so a completed share still takes a request.
   await page.getByRole('button', { name: '5점 위험', exact: true }).click();
   await page.getByPlaceholder('하향 수정 사유를 입력해주세요.').fill('공격적 표현이 일부 오탐입니다.');
-  await page.getByRole('button', { name: '확인 요청', exact: true }).click();
+  await page.getByRole('button', { name: '재검토 요청', exact: true }).click();
   await expect(section.getByText('관리자 승인 대기', { exact: true })).toBeVisible();
 });
 
 async function requestEmergencyDowngrade(page: Page) {
   await page.getByRole('button', { name: '5점 위험', exact: true }).click();
   await page.getByPlaceholder('하향 수정 사유를 입력해주세요.').fill('공격적 표현이 일부 오탐입니다.');
-  await page.getByRole('button', { name: '확인 요청', exact: true }).click();
+  await expect(page.getByRole('button', { name: '재검토 요청', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: '재검토 요청', exact: true }).click();
 }
 
 test('거부 후 안전 잠금이 유지되어도 긴급 재검토를 다시 요청할 수 있다', async ({ page }) => {
@@ -137,24 +138,21 @@ test('거부 후 안전 잠금이 유지되어도 긴급 재검토를 다시 요
   await openDetailTab(page, EMERGENCY_THREAD, '위험 요소');
   await page.getByRole('button', { name: '5점 위험', exact: true }).click();
   await page.getByPlaceholder('하향 수정 사유를 입력해주세요.').fill('추가 근거를 확인했습니다.');
-  const submit = page.getByRole('button', { name: '확인 요청', exact: true });
+  const submit = page.getByRole('button', { name: '재검토 요청', exact: true });
   await expect(submit).toBeEnabled();
   await submit.click();
   await expect(page.getByRole('region', { name: '관리자 공유' }).getByText('관리자 승인 대기', { exact: true })).toBeVisible();
   await expect(page.getByText('현재 답변 작성이 제한되어 있습니다.')).toBeVisible();
 });
 
-test('긴급 위험도 하향은 관리자 승인 대기가 되고, 승인해도 안전 잠금은 별도로 해제해야 한다', async ({ page }) => {
+test('긴급 하향 승인 시 위험도와 안전 잠금 해제가 함께 반영된다', async ({ page }) => {
   await shareAsTeacher(page);
   await requestEmergencyDowngrade(page);
   const section = page.getByRole('region', { name: '관리자 공유' });
   await expect(section.getByText('관리자 승인 대기', { exact: true })).toBeVisible();
   await expect(section.getByText(/유지 중/)).toBeVisible();
-  // A second request is blocked while the first one is pending (server: 409 EMERGENCY_REVIEW_DUPLICATE).
-  await expect(page.getByText(/관리자 승인 대기 중입니다\. 관리자가 승인하거나 거부한 뒤/)).toBeVisible();
-  // The slider returns to the current score (7), so the submit button reads 검토 완료.
-  await expect(page.getByRole('button', { name: '검토 완료', exact: true })).toBeDisabled();
-  await expect(page.getByRole('button', { name: '관리자 승인 대기', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '검토자 확인 대기', exact: true })).toBeDisabled();
+  await expect(page.locator('.board-risk-lock-review')).toContainText('검토자가 확인하는 동안 답변 생성과 전송이 제한돼요.');
 
   const processPanel = await openSharedAsAdmin(page);
   // The summary carries riskReviewStatus, so the decision is available on load.
@@ -173,32 +171,18 @@ test('긴급 위험도 하향은 관리자 승인 대기가 되고, 승인해도
   await approve.click();
   await expect(processPanel.getByText('위험도 변경 반영됨')).toBeVisible();
   await expect(processPanel.getByRole('button', { name: '처리 완료', exact: true })).toBeVisible();
-  // Approval keeps the lock.
-  await expect(processPanel.getByText('안전 잠금 유지 중')).toBeVisible();
+  await expect(processPanel.getByText('안전 잠금 유지 중')).toHaveCount(0);
+  await expect(processPanel.getByRole('button', { name: '안전 잠금 해제', exact: true })).toHaveCount(0);
 
   await login(page, 'TEACHER');
   await openDetailTab(page, EMERGENCY_THREAD, '위험 요소');
   const teacherSection = page.getByRole('region', { name: '관리자 공유' });
   await expect(teacherSection.getByText('위험 (50점)')).toBeVisible();
-  await expect(teacherSection.getByText(/유지 중/)).toBeVisible();
-  await expect(page.getByText('현재 답변 작성이 제한되어 있습니다.')).toBeVisible();
-  // The approval reaches the thread: 5 is now the teacher's score, so choosing it is an unchanged
-  // review (not another EMERGENCY request), and the locked thread no longer asks for a review first.
+  await expect(teacherSection.getByText(/유지 중/)).toHaveCount(0);
+  await expect(page.getByText('현재 답변 작성이 제한되어 있습니다.')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '검토자 확인 대기', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: '5점 위험', exact: true }).click();
   await expect(page.getByRole('button', { name: '검토 완료', exact: true })).toBeVisible();
-  await expect(page.getByText('위험도 검토를 먼저 완료해야 재검토를 요청할 수 있습니다.')).toHaveCount(0);
-
-  const adminPanel = await openSharedAsAdminAgain(page);
-  await adminPanel.getByRole('button', { name: '안전 잠금 해제', exact: true }).click();
-  await page.getByRole('dialog', { name: '안전 잠금을 해제할까요?' }).getByRole('button', { name: '잠금 해제', exact: true }).click();
-  await expect(adminPanel.getByText('안전 잠금 유지 중')).toHaveCount(0);
-  await expect(adminPanel.getByRole('button', { name: '안전 잠금 해제', exact: true })).toHaveCount(0);
-
-  await login(page, 'TEACHER');
-  await openDetailTab(page, EMERGENCY_THREAD, '위험 요소');
-  await expect(page.getByRole('region', { name: '관리자 공유' }).getByText(/유지 중/)).toHaveCount(0);
-  // Only the designated reviewer lifts the lock; once lifted, the thread follows the approved level.
-  await expect(page.getByText('현재 답변 작성이 제한되어 있습니다.')).toHaveCount(0);
   await openSharedAsAdminAgain(page);
 
   await page.getByRole('navigation', { name: '공유 메시지 상세 탭' }).getByRole('button', { name: '처리 기록', exact: true }).click();

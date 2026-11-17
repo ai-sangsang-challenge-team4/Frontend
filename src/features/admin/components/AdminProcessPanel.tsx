@@ -178,7 +178,7 @@ export function AdminProcessPanel({ summary, onConflict }: AdminProcessPanelProp
           {safetyLock ? (
             <p>
               안전 잠금이 유지되는 동안 담당 교사 화면에는 위험도와 관계없이 긴급 단계 정책(개별 답변 작성 차단)이
-              적용됩니다. 승인해도 잠금은 자동으로 해제되지 않습니다.
+              적용됩니다. 긴급 위험도 하향이 승인되면 안전 잠금도 함께 해제됩니다.
             </p>
           ) : null}
         </div>

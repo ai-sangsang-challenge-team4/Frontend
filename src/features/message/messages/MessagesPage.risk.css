@@ -939,8 +939,22 @@
 }
 
 .board-risk-review-submit {
-  width: 111px;
+  min-width: 111px;
+  min-height: 44px;
   flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.board-risk-review-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 4px;
+}
+
+.board-risk-review-actions .ui-information-tooltip {
+  margin-inline-start: 0;
 }
 
 .board-risk-lock-review {
@@ -949,11 +963,11 @@
   flex-direction: column;
   align-items: flex-end;
   justify-content: center;
-  gap: 40px;
-  padding: 20px 32px;
-  border-radius: var(--radius-panel);
+  gap: 8px;
+  padding: 16px;
+  border: var(--divider-default);
+  border-radius: var(--radius-sm);
   background: var(--color-bg-surface);
-  box-shadow: 0 0 10px rgb(0 0 0 / 10%);
 }
 
 .board-risk-lock-notice {
@@ -961,58 +975,52 @@
   width: 100%;
   flex-direction: column;
   align-items: flex-start;
-  gap: 12px;
-  padding: 12px 0;
+  gap: 4px;
 }
 
 .board-risk-lock-heading {
   display: inline-flex;
+  width: 100%;
   align-items: center;
   gap: 8px;
 }
 
+.board-risk-lock-heading > strong {
+  min-width: 0;
+  flex: 1;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
 .board-risk-lock-review .board-lock-icon {
-  width: 25px;
-  height: 25px;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
 }
 
 .board-risk-lock-review .board-lock-icon svg {
-  width: 25px;
-  height: 25px;
+  width: 20px;
+  height: 20px;
 }
 
 .board-risk-lock-review strong {
   display: block;
   color: var(--color-text-primary);
-  font-size: 20px;
-  font-weight: 600;
-  line-height: 28px;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-medium);
+  line-height: 24px;
 }
 
 .board-risk-lock-review p {
   width: 100%;
   margin: 0;
-  padding-left: 33px;
+  padding-left: 28px;
   color: var(--color-text-secondary);
   font-size: 16px;
   font-weight: 400;
-  line-height: 20px;
-}
-
-.board-risk-lock-actions {
-  display: inline-flex;
-  width: 100%;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 20px;
-  padding-left: 33px;
-}
-
-.board-risk-recheck-button {
-  min-width: 111px;
-  height: 37px;
-  padding: 4px 12px;
-  white-space: nowrap;
+  line-height: 24px;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 .board-student-safety-card {

@@ -225,7 +225,7 @@ test('Emergency 잠금은 위험도 검토 후에도 유지되고 답변 생성�
   await page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name: '위험 요소', exact: true }).click();
   await page.getByRole('button', { name: '검토 완료', exact: true }).click();
   await page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name: '대화', exact: true }).click();
-  await expect(page.getByText('지정 검토자가 잠금을 해제하기 전까지 답변 생성과 전송이 차단됩니다.')).toBeVisible();
+  await expect(page.getByText('긴급 단계에서는 답변 생성과 전송이 제한돼요.')).toBeVisible();
   await expect(page.getByRole('button', { name: /답변 (작성하러 가기|이어서 작성하기)/ })).toHaveCount(0);
 });
 

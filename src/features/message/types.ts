@@ -76,7 +76,6 @@ export type ThreadAnalysis = RiskAnalysisMetadata & {
   originalMessageAvailable: boolean;
   packageAvailable: boolean;
   riskFactors: RiskFactor[];
-  riskReviewRequestedAt?: string;
   safetyLock: boolean;
   // Last known server state of the teacher's own emergency review request. The admin decides on the
   // server, so the thread syncs from GET /escalation once the status or lock changes.

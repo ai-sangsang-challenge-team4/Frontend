@@ -188,9 +188,8 @@ function toAnalysis(
     manualReviewRequired: risk?.manualReviewRequired,
     systemRiskScore: risk?.riskScore,
     currentRiskLevel: risk?.currentRiskLevel ? systemRiskLevelFromApi[risk.currentRiskLevel] : undefined,
-    // Kept from the browser: the server has no AI objections or reviewer re-check requests.
+    // Kept from the browser: the server has no AI objections endpoint.
     aiObjections: local?.aiObjections,
-    riskReviewRequestedAt: local?.riskReviewRequestedAt,
     emergencyReview: local?.emergencyReview,
     activityLogs: history ? toActivityLogs(history) : local?.activityLogs ?? [],
     activityLogsUnavailable: history === null,

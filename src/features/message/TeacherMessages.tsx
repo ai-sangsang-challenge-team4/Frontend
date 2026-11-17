@@ -78,7 +78,6 @@ import {
   hasOriginalMessage,
   isReplyLocked,
   matchesStatusFilter,
-  needsTeacherReviewBeforeRequest,
   riskFilterOptions,
   riskScoreGuides,
   riskScores,
@@ -876,6 +875,7 @@ function AiObjectionDialog({ onClose, onSubmit, open }: AiObjectionDialogProps) 
 type RiskReviewPanelProps = {
   canReview: boolean;
   errorMessage: string | null;
+  isReviewPending: boolean;
   isSubmitting: boolean;
   // Shown instead of the info text when the review cannot reach the server.
   notice: string | null;
@@ -892,6 +892,7 @@ type RiskReviewPanelProps = {
 function RiskReviewPanel({
   canReview,
   errorMessage,
+  isReviewPending,
   isSubmitting,
   notice,
   onReasonChange,
@@ -920,19 +921,21 @@ function RiskReviewPanel({
   const isSubmitDisabledByReason =
     isReasonRequired && trimmedReason.length === 0;
   const reviewInfoText = notice ?? (isEmergencyDowngrade
-    ? '긴급 단계 하향은 관리자 승인 후 반영되며, 안전 잠금이 해제되기 전까지 긴급 단계 정책이 유지됩니다.'
+    ? '긴급 단계의 하향 조정은 검토자 승인이 필요해요.'
     : isDownwardReview
       ? '하향 수정 사유는 오탐 원인 분석과 임계값 재조정에 활용됩니다.'
       : isUpwardReview
         ? '상향 수정은 즉시 반영되며 수정 전후 기록이 저장됩니다.'
         : '수정 전·후 위험도, 수정자, 수정 시각은 처리 기록에 저장됩니다.');
-  const submitLabel = isSubmitting ? '저장 중…' : isEmergencyDowngrade
-    ? '확인 요청'
-    : isDownwardReview
-      ? '하향 반영'
-      : isUpwardReview
-        ? '상향 반영'
-        : '검토 완료';
+  const submitLabel = isSubmitting ? '저장 중…' : isReviewPending
+    ? '검토자 확인 대기'
+    : isEmergencyDowngrade
+      ? '재검토 요청'
+      : isDownwardReview
+        ? '하향 반영'
+        : isUpwardReview
+          ? '상향 반영'
+          : '검토 완료';
   const scorePosition = (value: RiskScore) => (value - 1) / (riskScores.length - 1);
   const sliderStyle = {
     '--board-risk-review-selected-ratio': scorePosition(score),
@@ -1070,7 +1073,7 @@ function RiskReviewPanel({
       </div>
 
       <div className="board-risk-review-footer">
-        <div className="board-risk-review-info">
+        <div className="board-risk-review-info" role={isReviewPending ? 'status' : undefined}>
           <svg
             aria-hidden="true"
             fill="none"
@@ -1085,17 +1088,23 @@ function RiskReviewPanel({
           <span>{reviewInfoText}</span>
         </div>
         {errorMessage ? <p className="board-admin-share-error" role="alert">{errorMessage}</p> : null}
-        <button
-          aria-describedby={
-            isSubmitDisabledByReason ? reasonRequirementId : undefined
-          }
-          className="board-primary-button board-risk-review-submit"
-          disabled={!canReview || isSubmitDisabledByReason || isSubmitting || Boolean(notice)}
-          onClick={onSubmit}
-          type="button"
-        >
-          {submitLabel}
-        </button>
+        <div className="board-risk-review-actions">
+          <button
+            aria-describedby={
+              isSubmitDisabledByReason ? reasonRequirementId : undefined
+            }
+            className="board-primary-button board-risk-review-submit"
+            disabled={!canReview || isSubmitDisabledByReason || isSubmitting || isReviewPending || Boolean(notice)}
+            onClick={onSubmit}
+            type="button"
+          >
+            {submitLabel}
+          </button>
+          {isEmergencyDowngrade || isReviewPending ? <InformationTooltip
+            label="재검토 요청 안내"
+            content="선택한 위험도와 사유를 지정 검토자에게 보냅니다. 승인되면 위험도 하향과 안전 잠금 해제가 함께 반영되며, 거부되면 잠금이 유지됩니다."
+          /> : null}
+        </div>
       </div>
     </section>
   );
@@ -1108,7 +1117,6 @@ type RiskAnalysisPanelProps = {
   // Rejects with the API error so the panel can show it.
   onReviewComplete: (threadId: string, review: RiskReviewSubmission) => Promise<void>;
   onOriginalOpen: (evidence?: string) => void;
-  onReviewRequest: (threadId: string) => void;
   // Receives every server escalation state so the thread can pick up the admin's decision.
   onServerStateLoaded: (threadId: string, state: EscalationStateResponse) => void;
   // Server inbox only: reloads the thread's detail after a failed request.
@@ -1122,7 +1130,6 @@ function RiskAnalysisPanel({
   onEvidencePackageCreate,
   onReviewComplete,
   onOriginalOpen,
-  onReviewRequest,
   onServerStateLoaded,
   onReloadServerDetail,
   thread,
@@ -1139,6 +1146,7 @@ function RiskAnalysisPanel({
     analysis?.teacherReviewReason ?? '',
   );
   const [isReviewSubmitting, setIsReviewSubmitting] = useState(false);
+  const reviewSubmitInFlight = useRef(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const isLinked = canSendEscalationRequest(thread.id);
   // Server state for the share and the emergency review (pending approval, safety lock).
@@ -1150,9 +1158,11 @@ function RiskAnalysisPanel({
     [isLinked, thread],
   );
   const escalation = useEscalationRequest(loadEscalationState);
-  const currentRequestId = escalation.data?.emergencyReviewRequestId;
-  const currentStatus = escalation.data?.riskReviewStatus;
-  const currentLock = escalation.data?.safetyLock;
+  // An empty first summary must not trigger a second request (undefined → null/false)
+  // and briefly re-disable a form that has just finished loading.
+  const currentRequestId = escalation.data?.emergencyReviewRequestId ?? null;
+  const currentStatus = escalation.data?.riskReviewStatus ?? null;
+  const currentLock = escalation.data?.safetyLock ?? false;
   const loadCurrentReview = useCallback(
     (signal: AbortSignal) => isLinked && thread.analysis
       ? getCurrentEmergencyReview(thread.id, { signal }) : Promise.resolve(null),
@@ -1171,13 +1181,13 @@ function RiskAnalysisPanel({
   const isEmergencyReviewRequest = getThreadRiskLevel(thread) === 'emergency' && reviewScore < 7;
   const reviewNotice = !isLinked
     ? '서버에 등록된 민원이 아니어서 위험도 검토를 저장할 수 없습니다.'
+    : !canRequestEmergencyReview(serverReviewStatus)
+      ? '검토자가 확인하고 있어요.'
     : currentReview.isLoading || escalation.isLoading
       ? '현재 재검토 상태를 확인하고 있습니다.'
     : currentReview.error && isEmergencyReviewRequest
       ?'현재 재검토 상태를 확인하지 못했습니다. 최근 요청 상세에서 다시 불러와 주세요.'
-    : !canRequestEmergencyReview(serverReviewStatus)
-      ? '긴급 위험도 하향 요청이 관리자 승인 대기 중입니다. 관리자가 승인하거나 거부한 뒤 다시 검토할 수 있습니다.'
-        : null;
+      : null;
 
   useEffect(() => {
     setReviewScore(initialReviewScore);
@@ -1229,9 +1239,7 @@ function RiskAnalysisPanel({
   const hasAiObjection = Boolean(analysis.aiObjections?.length);
   // The server's safety lock keeps the emergency policy even after the level was lowered.
   const replyLocked = isReplyLocked(thread) || serverSafetyLock;
-  const reviewRequested = Boolean(analysis.riskReviewRequestedAt);
   const isAwaitingAdminApproval = serverReviewStatus === 'PENDING_ADMIN_APPROVAL';
-  const needsOwnReview = needsTeacherReviewBeforeRequest(thread);
   const canShowEvidencePackage =
     effectiveRiskLevel === 'high' || effectiveRiskLevel === 'emergency';
   const handleGuideAction = () => {
@@ -1258,7 +1266,7 @@ function RiskAnalysisPanel({
     const reason = reviewReason.trim();
 
     if (
-      isReviewSubmitting ||
+      reviewSubmitInFlight.current ||
       reviewNotice ||
       !analysis.canReviewRisk ||
       (reviewScore !== initialReviewScore && !reason)
@@ -1266,6 +1274,7 @@ function RiskAnalysisPanel({
       return;
     }
 
+    reviewSubmitInFlight.current = true;
     setIsReviewSubmitting(true);
     setReviewError(null);
     try {
@@ -1276,6 +1285,7 @@ function RiskAnalysisPanel({
     } catch (error) {
       setReviewError(getApiErrorMessage(error, '위험도 검토를 저장하지 못했습니다. 다시 시도해 주세요.'));
     } finally {
+      reviewSubmitInFlight.current = false;
       setIsReviewSubmitting(false);
     }
   };
@@ -1394,6 +1404,7 @@ function RiskAnalysisPanel({
         <RiskReviewPanel
           canReview={analysis.canReviewRisk}
           errorMessage={reviewError}
+          isReviewPending={isAwaitingAdminApproval}
           isSubmitting={isReviewSubmitting}
           notice={reviewNotice}
           onReasonChange={setReviewReason}
@@ -1442,25 +1453,14 @@ function RiskAnalysisPanel({
                   </svg>
                 </span>
                 <strong>{replyLocked ? '현재 답변 작성이 제한되어 있습니다.' : '위험도 재검토가 필요합니다.'}</strong>
+                {replyLocked ? <InformationTooltip label="답변 제한 안내" content="긴급 단계 또는 안전 잠금이 유지되는 동안 답변 생성과 전송이 제한됩니다. 긴급 위험도 하향이 승인되면 잠금도 함께 해제되며, 이후에도 현재 위험도와 답변 차례 등 이용 조건을 확인합니다." /> : null}
               </div>
-              <p>{replyLocked ? getReplyLockNotice(thread).lockDescription : '원문과 판단 근거를 확인한 후 담당자에게 재검토를 요청할 수 있습니다.'}</p>
-              {isAwaitingAdminApproval ? (
-                <p role="status">관리자 승인 대기 중입니다. 승인되어도 안전 잠금이 해제되기 전까지 답변 작성이 제한됩니다.</p>
-              ) : reviewRequested ? (
-                <p role="status">재검토 요청이 접수되었습니다. 담당자의 확인을 기다려 주세요.</p>
-              ) : null}
-              {!reviewRequested && !isAwaitingAdminApproval && needsOwnReview ? <p>위험도 검토를 먼저 완료해야 재검토를 요청할 수 있습니다.</p> : null}
+              <p>{isAwaitingAdminApproval
+                ? '검토자가 확인하는 동안 답변 생성과 전송이 제한돼요.'
+                : replyLocked ? getReplyLockNotice(thread).lockDescription
+                  : analysis.canReviewRisk ? '위험도와 판단 근거를 확인하고 검토를 완료해 주세요.'
+                    : '담당 교사에게 위험도 검토를 요청해 주세요.'}</p>
             </div>
-          </div>
-          <div className="board-risk-lock-actions">
-            <button
-              className="board-outline-button board-risk-recheck-button"
-              disabled={reviewRequested || needsOwnReview || isAwaitingAdminApproval}
-              onClick={() => onReviewRequest(thread.id)}
-              type="button"
-            >
-              {isAwaitingAdminApproval ? '관리자 승인 대기' : reviewRequested ? '재검토 요청 완료' : '재검토 요청'}
-            </button>
           </div>
         </section>
       ) : null}
@@ -1619,7 +1619,6 @@ type DetailProps = {
   onReturnToReplyComposer: (threadId: string) => void;
   // Rejects with the API error so the panel can show it.
   onReviewComplete: (threadId: string, review: RiskReviewSubmission) => Promise<void>;
-  onReviewRequest: (threadId: string) => void;
   onAdminShared: RiskAnalysisPanelProps['onAdminShared'];
   onAiObjection: RiskAnalysisPanelProps['onAiObjection'];
   onServerStateLoaded: RiskAnalysisPanelProps['onServerStateLoaded'];
@@ -1638,7 +1637,6 @@ function ThreadDetail({
   onOriginalViewed,
   onReturnToReplyComposer,
   onReviewComplete,
-  onReviewRequest,
   onServerStateLoaded,
   onReloadServerDetail,
   thread,
@@ -1992,7 +1990,6 @@ function ThreadDetail({
           onEvidencePackageCreate={onEvidencePackageCreate}
           onReviewComplete={onReviewComplete}
           onOriginalOpen={openOriginalViewer}
-          onReviewRequest={onReviewRequest}
           onServerStateLoaded={onServerStateLoaded}
           onReloadServerDetail={onReloadServerDetail}
           thread={thread}
@@ -3065,37 +3062,6 @@ export function TeacherMessages({
     });
   };
 
-  const handleReviewRequest = (threadId: string) => {
-    updateThread(threadId, (thread) => {
-      if (!thread.analysis || thread.analysis.riskReviewRequestedAt || needsTeacherReviewBeforeRequest(thread) ||
-        (!isReplyLocked(thread) && !thread.riskReviewRequired)) {
-        return thread;
-      }
-
-      return {
-        ...thread,
-        analysis: {
-          ...thread.analysis,
-          riskReviewRequestedAt: new Date().toISOString(),
-          activityLogs: [
-            ...thread.analysis.activityLogs,
-            {
-              id: `${thread.id}-review-request-${
-                thread.analysis.activityLogs.length + 1
-              }`,
-              time: formatNow(),
-              actor: user?.name ?? '선생님',
-              action: '위험도 재검토 요청',
-              detail: isReplyLocked(thread)
-                ? '담당자에게 위험도 재검토를 요청했습니다. 지정 검토자의 확인 전까지 안전 잠금은 유지됩니다.'
-                : '담당자에게 위험도 재검토를 요청했습니다.',
-            },
-          ],
-        },
-      };
-    });
-  };
-
   const handleOriginalViewed = async (threadId: string, { evidence, replyId }: OriginalMessageRequest = {}) => {
     // The server records the view itself (ORIGINAL_VIEWED) and its history replaces the local log.
     const serverThread = threads.find((thread) => thread.id === threadId && thread.serverComplaintId);
@@ -3431,7 +3397,6 @@ export function TeacherMessages({
             onOriginalViewed={handleOriginalViewed}
             onReturnToReplyComposer={handleReturnToReplyComposer}
             onReviewComplete={handleReviewComplete}
-            onReviewRequest={handleReviewRequest}
             onServerStateLoaded={handleServerStateLoaded}
             onReloadServerDetail={isServerInbox ? retryServerDetail : undefined}
             onAdminShared={handleAdminShared}

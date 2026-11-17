@@ -115,14 +115,14 @@ export function canDecideEmergencyReview(requestId: number | null, riskReviewSta
   return requestId !== null && riskReviewStatus === 'PENDING_ADMIN_APPROVAL';
 }
 
-// Approval keeps the lock; lifting it is a separate step once the request is decided.
-// The server would also accept it while pending, but the UI asks for the decision first.
+// Current approvals release the lock. Keep a manual fallback only for an approved response
+// that explicitly still reports a lock (e.g. an older server record).
 export function canReleaseSafetyLock(
   requestId: number | null,
   riskReviewStatus: RiskReviewStatus | null,
   safetyLock: boolean,
 ) {
-  return requestId !== null && safetyLock && riskReviewStatus !== 'PENDING_ADMIN_APPROVAL';
+  return requestId !== null && safetyLock && riskReviewStatus === 'APPLIED';
 }
 
 // Only a pending request blocks another request. A rejected request may retain its safety lock.

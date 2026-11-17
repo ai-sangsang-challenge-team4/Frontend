@@ -107,6 +107,6 @@ export function ReviewInformation({ review }: { review: EmergencyReviewResponse 
     <p><strong>요청 시각</strong> {formatEscalationTime(review.requestedAt)}</p>
     {review.decidedAt ? <p><strong>결정 시각</strong> {formatEscalationTime(review.decidedAt)}</p> : null}
     <p><strong>안전 잠금</strong> {review.safetyLock ? '유지 중' : '해제됨'}</p>
-    {review.safetyLock ? <p>승인해도 안전 잠금은 자동 해제되지 않습니다.</p> : null}
+    {review.safetyLock ? <p>긴급 위험도 하향이 승인되면 안전 잠금도 함께 해제됩니다. 거부되면 잠금이 유지됩니다.</p> : null}
   </div>;
 }
