@@ -100,7 +100,11 @@ test('완료된 문의에 추가 질문을 연결하고 교사가 재확인 및 
   const infoCard = page.getByRole('region', { name: '문의 정보', exact: true });
   await expect(infoCard.getByText('상담 완료', { exact: true })).toBeVisible();
   await expect(infoCard.getByText('재확인 필요', { exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: '확인했어요.', exact: true })).toBeDisabled();
+  const acknowledgeButton = page.getByRole('button', { name: '확인했어요.', exact: true });
+  const acknowledgeHint = page.locator('.parent-acknowledge-hint');
+  await expect(acknowledgeButton).toBeDisabled();
+  await expect(acknowledgeHint).toBeVisible();
+  await expect(acknowledgeButton).toHaveAccessibleDescription('선생님 답변이 도착하면 확인할 수 있어요.');
   await page.getByRole('button', { name: '추가 문의하기', exact: true }).click();
   await expect(page.getByLabel('문의 대상', { exact: true })).toHaveValue('김OO 선생님');
   await expect(page.getByLabel('문의 제목', { exact: true })).toHaveAttribute('readonly', '');
@@ -164,11 +168,17 @@ test('완료된 문의에 추가 질문을 연결하고 교사가 재확인 및 
   await parentRow.click();
   await expect(page.getByRole('region', { name: '전체 대화 내역', exact: true })).toContainText('학교 출결 규정에 따라 안내드리겠습니다.');
   await expect(infoCard.getByText('재확인 필요', { exact: true })).toHaveCount(0);
-  await page.getByRole('button', { name: '확인했어요.', exact: true }).click();
-  await expect(page.getByRole('button', { name: '확인 완료', exact: true })).toBeDisabled();
+  await expect(acknowledgeButton).toBeEnabled();
+  await expect(acknowledgeHint).toHaveCount(0);
+  await acknowledgeButton.click();
+  const acknowledgedButton = page.getByRole('button', { name: '확인 완료', exact: true });
+  await expect(acknowledgedButton).toBeDisabled();
+  await expect(acknowledgeHint).toBeVisible();
+  await expect(acknowledgedButton).toHaveAccessibleDescription('이 답변은 확인을 마쳤어요.');
   await expect(infoCard.getByText('상담 완료', { exact: true })).toBeVisible();
   await page.reload();
-  await expect(page.getByRole('button', { name: '확인 완료', exact: true })).toBeDisabled();
+  await expect(acknowledgedButton).toBeDisabled();
+  await expect(acknowledgedButton).toHaveAccessibleDescription('이 답변은 확인을 마쳤어요.');
   await page.goto('/parent/messages');
   await expect(recheck).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -457,6 +467,32 @@ test('학부모 말풍선은 글자 수에 맞춰 너비가 달라진다', async
   expect(short.width).toBeLessThan(120);
   expect(long.width).toBeGreaterThan(short.width * 2);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('대화는 문장부호 뒤에서 감싸되 직접 입력한 줄바꿈과 원문을 그대로 표시한다', async ({ page }) => {
+  await login(page);
+  await seed(page);
+  const text = '안녕하세요.준비물은 도시락,물입니다.\n금액은 1,000원이고 기준은 3.14입니다.\nhttps://example.com/a,b?q=1.2 <script>alert(1)</script>';
+  await page.evaluate(({ key, body }) => {
+    const messages = JSON.parse(localStorage.getItem(key)!);
+    const active = messages.find((message: { messageId: string }) => message.messageId === 'active');
+    active.finalBody = body;
+    active.originalBody = body;
+    localStorage.setItem(key, JSON.stringify(messages));
+  }, { key: sentKey, body: text });
+  await page.goto('/parent/messages/active');
+  const body = page.locator('.parent-chat-bubble p');
+  await expect(body.locator('wbr')).toHaveCount(2);
+  expect(await page.locator('.parent-conversation-card-topic > span').textContent()).toBe(text);
+  expect(await body.textContent()).toBe(text);
+  await expect(body.locator('script')).toHaveCount(0);
+  await expect(body).toHaveCSS('white-space', 'pre-wrap');
+  await page.setViewportSize({ width: 320, height: 812 });
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  const dateFits = await page.locator('.parent-conversation-card-meta time').evaluate((element) => (
+    element.getBoundingClientRect().right <= element.closest('.parent-conversation-card-meta-group')!.getBoundingClientRect().right + 1
+  ));
+  expect(dateFits).toBe(true);
 });
 
 test('문의 내역, 상세, 추가 문의, 새 문의의 헤더 위치가 같다', async ({ page }) => {

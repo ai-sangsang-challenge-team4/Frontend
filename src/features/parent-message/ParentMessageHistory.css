@@ -44,14 +44,14 @@
 .parent-draft-dialog .ui-modal-footer .ui-button { width: 100%; min-height: 58px; padding: 12px; border: 0; border-radius: 0 0 var(--radius-panel) var(--radius-panel); background: transparent; color: var(--color-text-brand); font-size: 16px; font-weight: 400; }
 .parent-draft-dialog .ui-modal-footer .ui-button:not(:disabled):hover { background: var(--color-primary-subtle); }
 .parent-conversation-main { margin-top: 100px; }
-.parent-conversation-card { display: grid; grid-template-columns: 204px minmax(0, 1fr) max-content; align-items: center; column-gap: 16px; margin-bottom: 24px; padding: 22px 24px; border-radius: var(--radius-sm); background: var(--color-bg-surface); box-shadow: var(--shadow-sm); }
+.parent-conversation-card { display: grid; grid-template-columns: 204px minmax(0, 1fr) max-content; align-items: center; column-gap: 12px; margin-bottom: 24px; padding: 22px 24px; border-radius: var(--radius-sm); background: var(--color-bg-surface); box-shadow: var(--shadow-sm); }
 .parent-conversation-card-profile { display: grid; min-width: 0; grid-template-columns: 64px minmax(0, 1fr); align-items: center; gap: 12px; }
 .parent-conversation-card-avatar { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; }
 .parent-conversation-card-profile > span, .parent-conversation-card-topic { display: grid; min-width: 0; gap: 5px; }
 .parent-conversation-card-profile strong, .parent-conversation-card-topic strong { overflow: hidden; color: var(--color-text-primary); font-size: 20px; font-weight: 500; line-height: 24px; text-overflow: ellipsis; white-space: nowrap; }
 .parent-conversation-card-profile small, .parent-conversation-card-topic span { overflow: hidden; color: var(--color-text-secondary); font-size: 16px; font-weight: 500; line-height: 24px; text-overflow: ellipsis; white-space: nowrap; }
-.parent-conversation-card-topic span { display: -webkit-box; white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.parent-conversation-card-meta-group { display: grid; min-width: 0; grid-template-columns: auto 154px; align-items: center; justify-content: end; column-gap: 24px; }
+.parent-conversation-card-topic span { display: -webkit-box; white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 2; text-wrap: pretty; }
+.parent-conversation-card-meta-group { display: grid; min-width: 0; grid-template-columns: auto 154px; align-items: center; justify-content: end; column-gap: 20px; }
 .parent-conversation-card-meta { display: grid; min-width: 0; justify-items: center; gap: 6px; }
 .parent-conversation-card-meta > span:first-child, .parent-conversation-card-meta time { font-size: 16px; font-weight: 500; white-space: nowrap; }
 .parent-conversation-notice { display: flex; gap: 20px; align-items: center; padding: 32px; border-radius: var(--radius-panel); background: var(--color-bg-canvas); }
@@ -59,7 +59,7 @@
 .parent-conversation-notice p { color: var(--color-text-secondary); font-size: 20px; line-height: 32px; word-break: keep-all; }
 .parent-conversation { margin-top: 58px; border-radius: 20px 20px 0 0; background: var(--color-primary-subtle); overflow: hidden; box-shadow: 0 4px 8px rgb(0 0 0 / 4%); }
 .parent-conversation-messages { display: grid; gap: 40px; min-height: 757px; align-content: start; list-style: none; padding: 73px 51px 80px 60px; }
-.parent-conversation-date { display: flex; align-items: center; justify-content: center; width: fit-content; gap: 10px; min-height: 45px; margin: 0 auto 54px; background: var(--color-bg-canvas); border-radius: 24px; padding: 10px 26px; color: var(--color-text-secondary); font-size: 20px; line-height: 24px; }
+.parent-conversation-date { display: flex; align-items: center; justify-content: center; width: fit-content; gap: 10px; min-height: 45px; margin: 0 auto 54px; background: var(--color-bg-canvas); border-radius: 24px; padding: 10px 26px; color: var(--color-text-secondary); font-size: var(--font-size-body); line-height: var(--line-height-body); }
 .parent-chat-message { display: grid; gap: 19px; }
 .parent-chat-author { display: flex; align-items: center; gap: 9px; font-size: 20px; font-weight: 500; }
 .parent-chat-avatar { width: 27px; height: 27px; border-radius: 50%; object-fit: cover; }
@@ -69,14 +69,15 @@
 .parent-chat-message.is-teacher .parent-chat-row { margin-left: 36px; }
 .parent-chat-row time { flex-shrink: 0; color: var(--color-text-secondary); font-size: 12px; line-height: 16px; }
 .parent-chat-bubble { min-width: 0; flex: 0 1 auto; max-width: 634px; padding: 12px 16px; border-radius: 16px 16px 16px 0; background: white; color: var(--color-text-secondary); }
-.parent-chat-bubble p { white-space: pre-wrap; overflow-wrap: anywhere; word-break: keep-all; font-size: 20px; line-height: 24px; }
+.parent-chat-bubble p { white-space: pre-wrap; overflow-wrap: anywhere; word-break: keep-all; text-wrap: pretty; font-size: var(--font-size-body); line-height: 1.6; }
 .parent-chat-message.is-parent .parent-chat-bubble { max-width: 752px; background: var(--color-primary); color: white; border-radius: 16px 16px 0 16px; }
 .parent-conversation-actions { display: grid; gap: 24px; min-height: 153px; background: white; box-shadow: var(--shadow-sm); padding: 31px 24px 28px; }
-.parent-conversation-primary-actions { display: flex; align-items: center; justify-content: flex-end; gap: 24px; }
+.parent-conversation-primary-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 12px; }
+.parent-conversation-action-buttons { display: flex; max-width: 100%; align-items: center; justify-content: flex-end; gap: 12px; }
 .parent-conversation-primary-actions .ui-button { min-width: 185px; min-height: 47px; padding: 8px 12px; font-size: 16px; }
 .parent-conversation-actions > p { display: flex; flex-wrap: wrap; align-items: center; gap: 26px; color: var(--color-text-secondary); font-size: 16px; }
 .parent-conversation-actions a { color: var(--color-primary); }
-.parent-conversation-actions > .parent-acknowledge-hint { display: block; margin-top: -12px; text-align: right; font-size: 14px; }
+.parent-acknowledge-hint { max-width: 300px; margin: 0; color: var(--color-text-muted-readable); font-size: var(--font-size-helper); line-height: 20px; word-break: keep-all; overflow-wrap: anywhere; }
 .parent-inquiry-star:focus-visible, .parent-inquiry-link:focus-visible, .parent-draft-row:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 3px; }
 @media (max-width: 1360px) {
   .parent-inquiry-link { grid-template-columns: 205px minmax(0, 1fr) 170px; gap: 24px; }
@@ -93,13 +94,13 @@
   .parent-inquiry-meta { display: grid; justify-items: end; gap: 10px; }
   .parent-inquiry-meta time { font-size: 13px; }
   .parent-conversation-notice p { font-size: 18px; }
-  .parent-conversation-date { font-size: 16px; }
   .parent-conversation-messages { padding: 48px 32px 64px; }
 }
 @media (max-width: 980px) {
-  .parent-conversation-card { grid-template-columns: 1fr; row-gap: 16px; }
+  .parent-conversation-card { grid-template-columns: 1fr; row-gap: 12px; }
   .parent-conversation-card-meta-group { grid-template-columns: minmax(0, 1fr); justify-content: stretch; row-gap: 12px; }
   .parent-conversation-card-meta { grid-template-columns: 88px minmax(0, 1fr); justify-items: start; align-items: center; gap: 12px; }
+  .parent-conversation-card-meta time { max-width: 100%; white-space: normal; word-break: keep-all; }
   .parent-history-main, .parent-conversation-main { margin-top: 40px; }
   .parent-conversation-messages { min-height: 580px; }
 }
@@ -129,17 +130,17 @@
   .parent-conversation-notice { padding: 20px; gap: 12px; align-items: flex-start; }
   .parent-conversation-notice p { font-size: 15px; line-height: 26px; }
   .parent-conversation-messages { padding: 28px 16px 36px; gap: 28px; min-height: 420px; }
-  .parent-conversation-date { font-size: 14px; padding: 8px 16px; min-height: 36px; margin-bottom: 32px; }
+  .parent-conversation-date { padding: 8px 16px; min-height: 36px; margin-bottom: 32px; }
   .parent-chat-author { font-size: 16px; }
   .parent-chat-message { gap: 12px; }
   .parent-chat-row { gap: 8px; }
   .parent-chat-message.is-teacher .parent-chat-row { margin-left: 0; }
   .parent-chat-row time { font-size: 12px; }
   .parent-chat-bubble { padding: 12px 14px; }
-  .parent-chat-bubble p { font-size: 15px; line-height: 24px; }
   .parent-conversation-actions { padding: 24px 16px; gap: 20px; }
   .parent-conversation-primary-actions { gap: 12px; }
-  .parent-conversation-primary-actions > .ui-button { min-width: 0; padding: 8px 12px; font-size: 14px; gap: 6px; }
+  .parent-conversation-primary-actions .ui-button { min-width: 0; padding: 8px 12px; font-size: 14px; gap: 6px; }
+  .parent-acknowledge-hint { flex-basis: 100%; max-width: none; }
   .parent-conversation-actions > p { font-size: 14px; gap: 12px; }
 }
 .parent-conversation-main .parent-history-sync-error { margin: 0 0 16px; }

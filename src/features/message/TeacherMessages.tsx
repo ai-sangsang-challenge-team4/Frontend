@@ -17,6 +17,7 @@ import {
   Dropdown,
   EmptyState,
   InformationTooltip,
+  MessageText,
   Modal,
   Badge,
   Toast,
@@ -1903,7 +1904,7 @@ function ThreadDetail({
                     ) : null}
                     <div className="board-reply-bubble">
                       <span>{reply.label}</span>
-                      <p>{reply.content}</p>
+                      <p><MessageText>{reply.content}</MessageText></p>
                     </div>
                     {reply.authorRole === 'parent' ? <time dateTime={reply.sentAt}>{time}</time> : null}
                   </div>

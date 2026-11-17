@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { ChevronDown, LockKeyhole, Save, Send } from 'lucide-react';
+import { ChevronDown, LockKeyhole, Save, Send, Sparkles } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import analysisIllustration from '../../shared/assets/parent/message-analysis.svg';
 import { getApiErrorMessage, isApiError, isRiskAnalysisSafetyError } from '../../shared/api';
@@ -74,7 +74,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
   // nor while its creation is still running after the parent left the analysis.
   const serverLocked = isServer && (isServerFollowUp || Boolean(draft.server) || isCreatingServerDraft);
   const studentId = draft.server?.studentId ?? draft.studentId;
-  const { children, recipients } = useServerRecipients(isServer && !isServerFollowUp && !draft.server, studentId);
+  const { children, recipients } = useServerRecipients(isServer && !isServerFollowUp, studentId, !draft.server);
   const retryRecipients = recipients.retry;
   const teacherOptions = isServerFollowUp && initial.thread ? [{ value: initial.thread.teacherId, label: initial.thread.teacherName }]
     : !isServer ? mockConnectedTeachers
@@ -82,7 +82,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
       : (recipients.data ?? []).map((teacher) => ({ value: String(teacher.teacherId), label: teacher.label }));
   const childOptions = (children.data ?? []).map((child) => ({ value: String(child.studentId), label: child.studentName }));
   if (draft.server?.studentId && !childOptions.some((option) => option.value === String(draft.server?.studentId))) {
-    childOptions.unshift({ value: String(draft.server.studentId), label: '선택한 자녀' });
+    childOptions.unshift({ value: String(draft.server.studentId), label: children.isLoading ? '자녀 정보를 불러오는 중…' : '자녀 정보 확인 필요' });
   }
 
   // Recover a saved server follow-up when there is no browser draft (e.g. after changing devices).
@@ -379,14 +379,14 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
 
   const analysisNotice = threadId
     ? '추가 문의는 기존 문의의 대상과 제목을 그대로 사용합니다. 이어서 전달할 내용을 작성해 주세요.'
-    : 'AI 분석은 문의를 전송하지 않습니다.';
+    : 'AI 분석 후 내용을 확인하고 전송할 수 있어요.';
   const analysisDetail = threadId ? undefined
     : isServer ? '분석 시작 후 자녀·문의 대상·제목은 변경할 수 없으며, 문의 내용은 계속 수정할 수 있습니다.'
       : '분석 결과를 확인한 뒤 문의를 전송할 수 있습니다.';
   const analysisDescriptionId = 'parent-message-analysis-description';
-  const childHelper = serverLocked ? undefined
-    : children.isLoading ? '자녀 정보를 불러오고 있어요.'
+  const childHelper = children.isLoading ? '자녀 정보를 불러오고 있어요.'
       : children.error ? <>{getApiErrorMessage(children.error, '자녀 정보를 불러오지 못했어요.')} <button className="parent-write-retry" onClick={children.retry} type="button">다시 시도</button></>
+        : serverLocked ? undefined
         : childOptions.length === 0 ? '확인된 자녀 정보가 없습니다. 학교에 학생 연결을 요청해 주세요.' : undefined;
   const teacherHelper = !isServer ? (teacherOptions.length === 0 ? '연결된 선생님이 없습니다. 학교에 교사 연결을 요청해 주세요.' : undefined)
     : !studentId ? undefined
@@ -457,23 +457,23 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
                 id="parent-message-body" label="문의 내용" maxLength={MESSAGE_MAX_LENGTH} name="body"
                 onChange={(event) => updateField('body', event.target.value)}
                 placeholder={threadId ? '추가로 문의할 내용을 작성해 주세요.' : '선생님께 전달할 문의 내용을 작성해 주세요.'} required rows={6} value={draft.body} />
-              {maskingFailed || draft.body.trim() || draft.title.trim() ? (
-                <PrivacyMaskingNotice
+              <div className="parent-write-guidance">
+                {maskingFailed || draft.body.trim() || draft.title.trim() ? <PrivacyMaskingNotice
                   compact
                   onRetry={() => handleAnalyze()}
                   result={maskingFailed ? { status: 'failed', text: null, count: null }
                     : { status: 'ready', ...maskContactInfo(`제목: ${draft.title}\n\n내용: ${draft.body}`) }}
-                />
-              ) : null}
-              <div className="parent-write-footer">
+                /> : null}
                 <div className="parent-write-analysis-note">
-                  {threadId ? <LockKeyhole aria-hidden="true" size={18} /> : null}
+                  {threadId ? <LockKeyhole aria-hidden="true" size={18} /> : <Sparkles aria-hidden="true" size={18} />}
                   <p id={analysisDescriptionId}>
                     <span>{analysisNotice}</span>
                     {analysisDetail ? <span className="sr-only"> {analysisDetail}</span> : null}
                   </p>
                   {analysisDetail ? <InformationTooltip label="AI 분석 안내" content={analysisDetail} /> : null}
                 </div>
+              </div>
+              <div className="parent-write-footer">
                 <div className="parent-write-actions">
                   <Button className="parent-write-save" leftIcon={<Save size={18} />} onClick={handleSaveDraft} size="md" variant="outline">임시저장</Button>
                   <Button aria-describedby={analysisDescriptionId} className="parent-write-analyze" disabled={teacherOptions.length === 0 || maskingFailed}

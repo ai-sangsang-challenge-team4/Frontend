@@ -1,4 +1,5 @@
 import { ProfileAvatar } from './ProfileAvatar';
+import { MessageText } from '../../../shared/components/ui';
 import type { BoardThread } from '../types';
 import { formatConversationTime } from '../messageDates';
 
@@ -52,7 +53,7 @@ export function BufferedSummaryCard({
               <BufferedSummaryIcon />
               <span>{unavailable ? '완충 요약을 확인할 수 없습니다' : '위험 메시지 완충 요약'}</span>
             </strong>
-            <p>{summaryText}</p>
+            <p><MessageText>{summaryText}</MessageText></p>
           </div>
           <div className="board-moderation-actions">
             <button

@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import completeIllustration from '../../shared/assets/parent/message-analysis.svg';
 import { ProfileAvatar } from '../message/components/ProfileAvatar';
 import { mockConnectedTeachers, updateSentMessage } from './messageDraft';
-import { Button, EmptyState, StatusChip, Toast } from '../../shared/components/ui';
+import { Button, EmptyState, MessageText, StatusChip, Toast } from '../../shared/components/ui';
 import { compareMessageTimes, consultationChips, formatMessageDate, getConversation } from './conversation';
 import { ParentMessageHeader } from './ParentMessageHeader';
 import { useParentMessages } from './useParentMessages';
@@ -29,6 +29,8 @@ export function ParentMessageReceipt({ userId, messageId }: { userId: number; me
   const latestTeacherReply = conversation.filter((entry) => entry.authorRole === 'teacher').at(-1);
   const isAcknowledged = Boolean(message?.parentAcknowledgedAt && latestTeacherReply &&
     compareMessageTimes(message.parentAcknowledgedAt, latestTeacherReply.sentAt) >= 0);
+  const acknowledgeHint = !latestTeacherReply ? '선생님 답변이 도착하면 확인할 수 있어요.'
+    : isAcknowledged ? '이 답변은 확인을 마쳤어요.' : null;
   const [notice, setNotice] = useState<string | null>(null);
   const dismissNotice = useCallback(() => setNotice(null), []);
 
@@ -60,7 +62,7 @@ export function ParentMessageReceipt({ userId, messageId }: { userId: number; me
           </div>
           <div className="parent-conversation-card-topic">
             <strong>{message.title}</strong>
-            <span>{latest.body}</span>
+            <span><MessageText>{latest.body}</MessageText></span>
           </div>
           <div className="parent-conversation-card-meta-group">
             <div className="parent-conversation-card-meta">
@@ -89,7 +91,7 @@ export function ParentMessageReceipt({ userId, messageId }: { userId: number; me
                 <article aria-label={isParent ? '학부모 메시지' : '교사 답변'} className={`parent-chat-message ${isParent ? 'is-parent' : 'is-teacher'}`}>
                   {!isParent ? <div className="parent-chat-author"><ProfileAvatar className="parent-chat-avatar" /><strong>{message.teacherName}</strong></div> : null}
                   <div className="parent-chat-row">
-                    <section aria-label={isParent ? '전송한 문의 내용' : '선생님 답변 내용'} className="parent-chat-bubble"><p>{entry.body}</p></section>
+                    <section aria-label={isParent ? '전송한 문의 내용' : '선생님 답변 내용'} className="parent-chat-bubble"><p><MessageText>{entry.body}</MessageText></p></section>
                     <time dateTime={entry.sentAt}>{new Date(entry.sentAt).toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit' })}</time>
                   </div>
                 </article>
@@ -98,13 +100,15 @@ export function ParentMessageReceipt({ userId, messageId }: { userId: number; me
           </ol>
           <div className="parent-conversation-actions">
             <div className="parent-conversation-primary-actions">
-              <Button aria-describedby={latestTeacherReply ? undefined : 'parent-acknowledge-hint'}
-                disabled={!latestTeacherReply || isAcknowledged} onClick={handleAcknowledge} variant="outline">
-                {isAcknowledged ? '확인 완료' : '확인했어요.'}
-              </Button>
-              <Button leftIcon={<Pencil size={20} />} onClick={() => navigate(`/parent/messages/${encodeURIComponent(messageId)}/follow-up`)}>추가 문의하기</Button>
+              {acknowledgeHint ? <p className="parent-acknowledge-hint" id="parent-acknowledge-hint">{acknowledgeHint}</p> : null}
+              <div className="parent-conversation-action-buttons">
+                <Button aria-describedby={acknowledgeHint ? 'parent-acknowledge-hint' : undefined}
+                  disabled={!latestTeacherReply || isAcknowledged} onClick={handleAcknowledge} variant="outline">
+                  {isAcknowledged ? '확인 완료' : '확인했어요.'}
+                </Button>
+                <Button leftIcon={<Pencil size={20} />} onClick={() => navigate(`/parent/messages/${encodeURIComponent(messageId)}/follow-up`)}>추가 문의하기</Button>
+              </div>
             </div>
-            {latestTeacherReply ? null : <p className="parent-acknowledge-hint" id="parent-acknowledge-hint">선생님 답변이 도착하면 확인할 수 있습니다.</p>}
             <p>다른 내용으로 문의를 원하시나요? <Link to="/parent/messages/new?fresh=1">새 문의 작성</Link></p>
           </div>
         </section>

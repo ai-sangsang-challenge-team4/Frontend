@@ -121,7 +121,7 @@ export function Tooltip({ children, className, content, disabled = false, placem
 
 /** Optional explanations only. Safety, errors and permissions remain inline. */
 export function InformationTooltip({ label, content }: { label: string; content: ReactNode }) {
-  return <Tooltip content={content}><button aria-label={label} className="ui-information-trigger" type="button">
-    <Info aria-hidden="true" size={18} />
+  return <Tooltip className="ui-information-tooltip" content={content}><button aria-label={label} className="ui-information-trigger" type="button">
+    <Info aria-hidden="true" size={16} />
   </button></Tooltip>;
 }
