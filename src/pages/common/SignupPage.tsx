@@ -8,6 +8,7 @@ import {
   type SignupRole,
 } from '../../features/auth';
 import { authApiMode, isEmailVerificationSupported } from '../../features/auth/api/authApi';
+import { SIGNUP_EMPLOYEE_NO_MAX_LENGTH, SIGNUP_NAME_MAX_LENGTH, SIGNUP_PASSWORD_MAX_LENGTH, SIGNUP_PASSWORD_MIN_LENGTH } from '../../features/auth/api/authTypes';
 import { PasswordField } from '../../features/auth/components';
 import { ChildInformationFields } from '../../features/auth/components/ChildInformationFields';
 import { SchoolSearchField, type SelectedSchool } from '../../features/auth/components/SchoolSearchField';
@@ -19,6 +20,7 @@ import {
 import { useEmailVerification } from '../../features/auth/hooks/useEmailVerification';
 import { validateTeacherSignupInfo } from '../../features/auth/teacherSignup';
 import { Button, TextField } from '../../shared/components/ui';
+import { PolicyDocumentLinks } from '../../features/policy/PolicyDocumentLinks';
 
 type SignupFormErrors = Partial<
   Record<
@@ -78,6 +80,8 @@ export function SignupPage() {
     // Every role sends its own name; a teacher's must match the staff roster.
     if (!name.trim()) {
       nextErrors.name = '이름을 입력해 주세요.';
+    } else if (name.trim().length > SIGNUP_NAME_MAX_LENGTH) {
+      nextErrors.name = `이름은 ${SIGNUP_NAME_MAX_LENGTH}자 이내로 입력해 주세요.`;
     }
     if (role === 'TEACHER') {
       Object.assign(nextErrors, validateTeacherSignupInfo({ schoolId: teacherSchool.id, employeeNo }));
@@ -87,8 +91,8 @@ export function SignupPage() {
       nextErrors.role = '계정 유형을 선택해 주세요.';
     }
 
-    if (password.length < 8 || password.length > 20) {
-      nextErrors.password = '비밀번호는 8자 이상 20자 이하로 입력해 주세요.';
+    if (password.length < SIGNUP_PASSWORD_MIN_LENGTH || password.length > SIGNUP_PASSWORD_MAX_LENGTH) {
+      nextErrors.password = `비밀번호는 ${SIGNUP_PASSWORD_MIN_LENGTH}자 이상 ${SIGNUP_PASSWORD_MAX_LENGTH}자 이하로 입력해 주세요.`;
     }
 
     if (password !== passwordConfirmation) {
@@ -254,7 +258,7 @@ export function SignupPage() {
                     error={formErrors.employeeNo}
                     fieldSize="lg"
                     label="교번"
-                    maxLength={100}
+                    maxLength={SIGNUP_EMPLOYEE_NO_MAX_LENGTH}
                     name="employeeNo"
                     onChange={(event) => {
                       setEmployeeNo(event.target.value);
@@ -276,6 +280,7 @@ export function SignupPage() {
               helperText={role === 'PARENT' ? '자녀가 아닌 학부모 본인의 이름을 입력해 주세요.' : '교직원 명부에 등록된 이름을 입력해 주세요.'}
               label={<RequiredLabel>이름</RequiredLabel>}
               name="name"
+              maxLength={SIGNUP_NAME_MAX_LENGTH}
               onChange={(event) => {
                 setName(event.target.value);
                 setFormErrors((errors) => ({ ...errors, name: '', submit: '' }));
@@ -417,9 +422,9 @@ export function SignupPage() {
               autoComplete="new-password"
               error={formErrors.password}
               fieldSize="lg"
-              helperText="8자 이상 20자 이하로 입력해 주세요."
+              helperText={`${SIGNUP_PASSWORD_MIN_LENGTH}자 이상 ${SIGNUP_PASSWORD_MAX_LENGTH}자 이하로 입력해 주세요.`}
               label={<RequiredLabel>비밀번호</RequiredLabel>}
-              maxLength={20}
+              maxLength={SIGNUP_PASSWORD_MAX_LENGTH}
               name="password"
               onChange={(event) => {
                 setPassword(event.target.value);
@@ -438,7 +443,7 @@ export function SignupPage() {
               error={formErrors.passwordConfirmation}
               fieldSize="lg"
               label={<RequiredLabel>비밀번호 확인</RequiredLabel>}
-              maxLength={20}
+              maxLength={SIGNUP_PASSWORD_MAX_LENGTH}
               name="passwordConfirmation"
               onChange={(event) => {
                 setPasswordConfirmation(event.target.value);
@@ -474,6 +479,7 @@ export function SignupPage() {
                 계정 정보와 메시지·처리 기록을 서비스 제공 목적으로 수집·이용합니다.
                 동의하지 않으면 가입할 수 없습니다.
               </p>
+              <PolicyDocumentLinks documents={['service', 'privacy']} />
               {formErrors.policy ? (
                 <p className="auth-field-error" id="signup-policy-error" role="alert">
                   {formErrors.policy}
@@ -491,9 +497,10 @@ export function SignupPage() {
                 <span>[선택] 서비스 개선을 위한 메시지 활용에 동의합니다.</span>
               </label>
               <p className="auth-consent-description" id="signup-optional-description">
-                AI 분석이 더 정확해지도록 작성한 메시지를 테스트 자료로 보관해 활용합니다.
-                동의하지 않아도 모든 기능을 똑같이 이용할 수 있습니다.
+                별도로 제공한 테스트 메시지를 서비스 개선 목적으로 저장·활용합니다.
+                동의하지 않아도 메시지 송수신과 기본 AI 분석 기능을 이용할 수 있습니다.
               </p>
+              <PolicyDocumentLinks documents={['testMessages']} />
             </fieldset>
           </div>
 

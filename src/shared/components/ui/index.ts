@@ -4,6 +4,7 @@ export * from './Button';
 export * from './Dropdown';
 export * from './EmptyState';
 export * from './Modal';
+export * from './MessageText';
 export * from './Popover';
 export * from './Select';
 export * from './Tabs';

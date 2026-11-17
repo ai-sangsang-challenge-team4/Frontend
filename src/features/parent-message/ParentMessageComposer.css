@@ -144,45 +144,57 @@
   row-gap: 8px;
 }
 
+.parent-write-guidance {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0 var(--space-6);
+  margin: calc(var(--space-4) - var(--space-6)) 0 0 calc(var(--parent-label-width) + var(--space-6));
+}
+
 .parent-write-analysis-note {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-2);
   color: var(--color-text-muted-readable);
   font-size: var(--font-size-helper);
-  line-height: var(--line-height-body);
+  line-height: 20px;
   word-break: keep-all;
   overflow-wrap: anywhere;
 }
 
 .parent-write-analysis-note > svg {
   flex: 0 0 auto;
-  margin-top: 2px;
+  color: var(--color-bg-icon);
 }
 
 .parent-write-footer {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-6);
+  display: flex;
+  justify-content: flex-end;
+  margin-top: calc(var(--space-4) - var(--space-6));
   margin-left: calc(var(--parent-label-width) + var(--space-6));
 }
 
-.parent-write-main .parent-write-form > .privacy-masking-notice {
+.parent-write-guidance > .privacy-masking-notice {
   gap: var(--space-2);
-  margin: calc(var(--space-4) - var(--space-6)) 0 0 calc(var(--parent-label-width) + var(--space-6));
+  min-width: 0;
+  margin: 0;
   padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
   font-size: var(--font-size-helper);
-  line-height: var(--line-height-body);
+  line-height: 20px;
 }
 
-.parent-write-form > .privacy-masking-notice .privacy-masking-heading {
+.parent-write-guidance .privacy-masking-heading {
   flex-wrap: nowrap;
   gap: var(--space-2);
+}
+
+.parent-write-guidance .privacy-masking-heading strong {
+  font-weight: var(--font-weight-medium);
 }
 
 .parent-write-form .privacy-masking-description {
@@ -190,7 +202,7 @@
   min-width: 0;
   flex: 0 1 auto;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-2);
   word-break: keep-all;
 }
 
@@ -200,26 +212,28 @@
   flex: 0 0 auto;
 }
 
-.parent-write-form > .privacy-masking-notice .privacy-masking-heading > svg {
+.parent-write-guidance .privacy-masking-heading > svg {
   width: 18px;
   height: 18px;
 }
 
-.parent-write-form > .privacy-masking-notice > p {
+.parent-write-guidance > .privacy-masking-notice > p {
   color: var(--color-text-muted-readable);
 }
 
-.parent-write-form > .privacy-masking-notice.has-personal-info {
+.parent-write-guidance > .privacy-masking-notice.has-personal-info {
+  flex-basis: 100%;
   padding-left: var(--space-3);
   border-left: 2px solid var(--color-yellow-2);
 }
 
-.parent-write-form > .privacy-masking-notice.is-failed {
+.parent-write-guidance > .privacy-masking-notice.is-failed {
+  flex-basis: 100%;
   padding-left: var(--space-3);
   border-left: 2px solid var(--color-text-danger-readable);
 }
 
-.parent-write-form > .privacy-masking-notice.is-failed .privacy-masking-heading {
+.parent-write-guidance > .privacy-masking-notice.is-failed .privacy-masking-heading {
   color: var(--color-text-danger-readable);
 }
 
@@ -238,9 +252,9 @@
 .parent-write-field .ui-field-label {
   align-self: center;
   padding-top: 0;
-  font-size: 24px;
-  font-weight: 500;
-  line-height: 34px;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-body);
 }
 
 .parent-write-body .ui-field-label {
@@ -292,9 +306,9 @@
 
 .parent-write-field .ui-field-control {
   color: var(--color-text-secondary);
-  font-size: 20px;
-  font-weight: 500;
-  line-height: 32px;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-body);
 }
 
 .parent-write-field .ui-field-control::placeholder {
@@ -434,13 +448,11 @@
   .parent-write-breadcrumb { font-size: 14px; line-height: 20px; }
   .parent-write-header:has(+ .parent-write-main) { gap: var(--space-4); }
   .parent-write-field.ui-field { grid-template-columns: minmax(0, 1fr); gap: 12px; }
-  .parent-write-field .ui-field-label { padding: 0; font-size: 20px; line-height: 28px; }
+  .parent-write-field .ui-field-label { padding: 0; }
   .parent-write-field .ui-field-message { grid-column: 1; }
-  .parent-write-field .ui-field-control { font-size: 16px; line-height: 26px; }
   .parent-write-field .ui-textarea-control { height: 200px; min-height: 160px; }
-  .parent-write-main .parent-write-form > .privacy-masking-notice,
+  .parent-write-guidance,
   .parent-write-footer { margin-left: 0; }
-  .parent-write-footer { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
   .parent-write-actions { margin-top: 12px; }
   .parent-analysis { padding-top: 24px; }
   .parent-analysis-title { margin-top: 32px; }
@@ -449,20 +461,11 @@
 }
 
 @media (max-width: 620px) {
-  .parent-write-header:has(+ .parent-write-main) {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: var(--space-3);
-  }
-  .parent-write-header:has(+ .parent-write-main) .parent-write-breadcrumb {
-    width: 100%;
-    flex: 0 1 auto;
-  }
   .parent-write-heading { gap: 8px; }
   .parent-write-heading h1 { font-size: 22px; line-height: 28px; }
   .parent-write-breadcrumb {
     min-width: 0;
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     gap: 6px;
     overflow: hidden;
     font-size: 12px;

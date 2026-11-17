@@ -102,7 +102,7 @@ test('학부모 홈과 잘못된 경로는 새 문의로 연결되고 새 문의
   await expect(page).toHaveURL(/\/parent\/messages\/new$/);
 });
 
-test('작성 헤더는 모바일에서 제목과 breadcrumb를 나누고 데스크톱 한 줄 배치를 유지한다', async ({ page }, testInfo) => {
+test('작성 헤더는 모바일과 데스크톱에서 제목 오른쪽에 breadcrumb를 나란히 배치한다', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 320, height: 720 });
   await openComposer(page);
   const header = page.locator('.parent-write-header');
@@ -118,16 +118,10 @@ test('작성 헤더는 모바일에서 제목과 breadcrumb를 나누고 데스�
       headingBox: element.querySelector('.parent-write-heading')!.getBoundingClientRect().toJSON(),
       breadcrumbBox: element.querySelector('.parent-write-breadcrumb')!.getBoundingClientRect().toJSON(),
     }));
-    if (width <= 620) {
-      const gap = breadcrumbBox.y - (headingBox.y + headingBox.height);
-      expect(gap).toBeGreaterThanOrEqual(12);
-      expect(gap).toBeLessThanOrEqual(16);
-      expect(breadcrumbBox.x).toBeCloseTo(headingBox.x, 0);
-    } else {
-      expect(breadcrumbBox.x).toBeGreaterThanOrEqual(headingBox.x + headingBox.width + 12);
-      expect(breadcrumbBox.y).toBeLessThan(headingBox.y + headingBox.height);
-      expect(breadcrumbBox.y + breadcrumbBox.height).toBeGreaterThan(headingBox.y);
-    }
+    expect(breadcrumbBox.x).toBeGreaterThanOrEqual(headingBox.x + headingBox.width + 12);
+    expect(breadcrumbBox.y).toBeLessThan(headingBox.y + headingBox.height);
+    expect(breadcrumbBox.y + breadcrumbBox.height).toBeGreaterThan(headingBox.y);
+    expect(breadcrumbBox.x + breadcrumbBox.width).toBeCloseTo(headerBox.x + headerBox.width, 0);
     expect(breadcrumbBox.x + breadcrumbBox.width).toBeLessThanOrEqual(headerBox.x + headerBox.width + 1);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   }

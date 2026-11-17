@@ -213,7 +213,7 @@ export const riskStageGuides: Record<
     ],
     lockTitle: '‘긴급’ 단계에서는 답변 작성이 제한됩니다.',
     lockDescription:
-      '지정 검토자가 잠금을 해제하기 전까지 답변 생성과 전송이 차단됩니다.',
+      '긴급 단계에서는 답변 생성과 전송이 제한돼요.',
   },
 };
 
@@ -239,17 +239,7 @@ export function getAnalysisStatus(thread: BoardThread) {
   return 'ready';
 }
 
-// On a locked reply (emergency or safety lock), a teacher who can review the risk saves their own
-// review first, then asks a reviewer to look again. Without a lock, saving the review already
-// clears riskReviewRequired, so the request stays available as before.
-export function needsTeacherReviewBeforeRequest(thread: BoardThread) {
-  return Boolean(
-    isReplyLocked(thread) && thread.analysis?.canReviewRisk && !thread.analysis.teacherReviewedRiskLevel,
-  );
-}
-
-// safetyLock is set by the analysis and only a designated reviewer can lift it,
-// so it blocks replies even after a teacher lowers the risk level.
+// The server's safetyLock blocks replies until its confirmed response reports a release.
 export function isReplyLocked(thread: BoardThread) {
   const analysisStatus = getAnalysisStatus(thread);
   return getThreadRiskLevel(thread) === 'emergency' || Boolean(thread.analysis?.safetyLock) ||
@@ -266,7 +256,7 @@ export function getReplyLockNotice(thread: BoardThread) {
   }
   return {
     lockTitle: '안전 확인을 위해 답변 작성이 제한됩니다.',
-    lockDescription: '위험도 수정이나 재검토 요청으로 안전 잠금이 해제되지 않습니다. 지정 검토자가 잠금을 해제하기 전까지 답변 생성과 전송이 차단됩니다.',
+    lockDescription: '안전 잠금이 유지되는 동안 답변 생성과 전송이 제한돼요.',
   };
 }
 

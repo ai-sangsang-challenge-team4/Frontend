@@ -12,6 +12,8 @@ export type RiskTagCode =
 
 export type RiskFactorStatus = 'PRESENT' | 'ABSENT' | 'BOUNDARY' | 'UNKNOWN';
 
+export type RevisionStatus = 'PENDING' | 'COMPLETED' | 'UNAVAILABLE' | 'NOT_REQUESTED';
+
 export type AiAnalysisStatus =
   | 'COMPLETED'
   | 'REUSED'

@@ -13,7 +13,7 @@ import {
 } from '../../escalation/escalationRules';
 import type { EscalationStateResponse } from '../../escalation/escalationTypes';
 import { createEscalationSnapshot } from '../escalationSnapshot';
-import { hasOriginalMessage, riskLabel } from '../messageRules';
+import { getThreadRiskLevel, hasOriginalMessage, riskLabel } from '../messageRules';
 import type { BoardThread } from '../types';
 import { BoardConfirmDialog } from './BoardConfirmDialog';
 import { ExternalLinkIcon } from './MessageIcons';
@@ -28,11 +28,12 @@ export type EscalationStateRequest = {
 
 type AdminShareSectionProps = {
   escalation: EscalationStateRequest;
+  onEvidencePackageCreate: (threadId: string) => boolean;
   onShared: (threadId: string, escalation: { reason: string }) => void;
   thread: BoardThread;
 };
 
-export function AdminShareSection({ escalation, onShared, thread }: AdminShareSectionProps) {
+export function AdminShareSection({ escalation, onEvidencePackageCreate, onShared, thread }: AdminShareSectionProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   // Over HTTP a mock thread has no numeric complaintId, so nothing is requested.
   const isLinked = canSendEscalationRequest(thread.id);
@@ -84,6 +85,7 @@ export function AdminShareSection({ escalation, onShared, thread }: AdminShareSe
       )}
 
       <AdminShareDialog
+        onEvidencePackageCreate={onEvidencePackageCreate}
         onClose={() => setIsDialogOpen(false)}
         onShared={(result) => {
           setIsDialogOpen(false);
@@ -126,14 +128,16 @@ function SharedSummary({ state }: { state: EscalationStateResponse }) {
 
 type AdminShareDialogProps = {
   onClose: () => void;
+  onEvidencePackageCreate: AdminShareSectionProps['onEvidencePackageCreate'];
   onShared: (result: { reason: string }) => void;
   open: boolean;
   thread: BoardThread;
 };
 
-function AdminShareDialog({ onClose, onShared, open, thread }: AdminShareDialogProps) {
+function AdminShareDialog({ onClose, onEvidencePackageCreate, onShared, open, thread }: AdminShareDialogProps) {
   const reasonId = useId();
   const descriptionId = useId();
+  const evidenceDescriptionId = useId();
   const [reason, setReason] = useState('');
   const [shareOriginal, setShareOriginal] = useState(false);
   const [attachEvidence, setAttachEvidence] = useState(false);
@@ -141,6 +145,15 @@ function AdminShareDialog({ onClose, onShared, open, thread }: AdminShareDialogP
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const trimmedReason = reason.trim();
   const hasOriginal = hasOriginalMessage(thread);
+  const canCreateEvidence = Boolean(thread.analysis?.packageAvailable &&
+    ['high', 'emergency'].includes(getThreadRiskLevel(thread)));
+
+  const createAndAttachEvidence = () => {
+    if (isSubmitting || !canCreateEvidence) return;
+    setErrorMessage(null);
+    if (onEvidencePackageCreate(thread.id)) setAttachEvidence(true);
+    else setErrorMessage('증빙 패키지를 준비하지 못했습니다. 다시 시도하거나 증빙 없이 공유해 주세요.');
+  };
 
   const close = () => {
     setReason('');
@@ -152,6 +165,10 @@ function AdminShareDialog({ onClose, onShared, open, thread }: AdminShareDialogP
 
   const handleSubmit = async () => {
     if (!trimmedReason || isSubmitting) return;
+    if (attachEvidence && !thread.evidencePackageGenerated) {
+      setErrorMessage('증빙 패키지를 생성하거나 첨부 선택을 해제해 주세요.');
+      return;
+    }
     setIsSubmitting(true);
     setErrorMessage(null);
     const scopes: EscalationScope[] = [
@@ -205,6 +222,7 @@ function AdminShareDialog({ onClose, onShared, open, thread }: AdminShareDialogP
         <div className="board-risk-review-textarea-shell board-ai-objection-reason">
           <textarea
             aria-required="true"
+            disabled={isSubmitting}
             id={reasonId}
             maxLength={SHARE_REASON_MAX_LENGTH}
             onChange={(event) => setReason(event.target.value)}
@@ -222,21 +240,33 @@ function AdminShareDialog({ onClose, onShared, open, thread }: AdminShareDialogP
           <label>
             <input
               checked={shareOriginal}
-              disabled={!hasOriginal}
+              disabled={!hasOriginal || isSubmitting}
               onChange={(event) => setShareOriginal(event.target.checked)}
               type="checkbox"
             />
             <span>원문 메시지</span>
           </label>
-          <label>
-            <input
-              checked={attachEvidence}
-              disabled={!thread.evidencePackageGenerated}
-              onChange={(event) => setAttachEvidence(event.target.checked)}
-              type="checkbox"
-            />
-            <span>{thread.evidencePackageGenerated ? '증빙 패키지' : '증빙 패키지 (생성 후 첨부 가능)'}</span>
-          </label>
+          <div className="board-admin-share-evidence">
+            {thread.evidencePackageGenerated ? <label>
+              <input
+                aria-describedby={evidenceDescriptionId}
+                checked={attachEvidence}
+                disabled={isSubmitting}
+                onChange={(event) => setAttachEvidence(event.target.checked)}
+                type="checkbox"
+              />
+              <span>증빙 패키지</span>
+            </label> : <button
+              aria-describedby={evidenceDescriptionId}
+              className="board-outline-button"
+              disabled={!canCreateEvidence || isSubmitting}
+              onClick={createAndAttachEvidence}
+              type="button"
+            >증빙 패키지 생성 후 첨부</button>}
+            <p id={evidenceDescriptionId}>완충 요약, 원문, 위험 분석과 처리 기록을 묶습니다. 증빙 없이도 공유할 수 있습니다.</p>
+            {!thread.evidencePackageGenerated && !canCreateEvidence ? <p>현재 이 메시지의 증빙 패키지를 생성할 수 없습니다.</p> : null}
+            {attachEvidence ? <p role="status">증빙 패키지를 공유할 자료로 선택했습니다.</p> : null}
+          </div>
         </fieldset>
         {errorMessage ? <p className="board-admin-share-error" role="alert">{errorMessage}</p> : null}
       </div>

@@ -444,11 +444,11 @@ export const mockEscalationApi: EscalationApi = {
     const previousScale = toMockScale(previous.score);
     const direction: RiskReviewDirection =
       riskScore < previousScale ? 'LOWERED' : riskScore > previousScale ? 'RAISED' : 'UNCHANGED';
-    if (direction === 'LOWERED' && !reason) {
+    if (direction !== 'UNCHANGED' && !reason) {
       throw new ApiError({
         status: 400,
         code: 'RISK_REVIEW_REASON_REQUIRED',
-        message: '위험도를 하향 조정할 때는 검토 사유가 필요합니다.',
+        message: '위험도를 변경할 때는 검토 사유가 필요합니다.',
       });
     }
 
@@ -653,7 +653,7 @@ export const mockEscalationApi: EscalationApi = {
     return toEmergencyReview(requireAssignedReview(readReviews(), requestId, admin.userId));
   },
 
-  // EmergencyReviewService.update: a decision only on a pending request; the lock changes on its own.
+  // EmergencyReviewService.update: approval applies the lower score and releases the lock together.
   async updateEmergencyReview(requestId, request, signal) {
     await wait(signal);
     const admin = requireUser('ADMIN');
@@ -670,12 +670,20 @@ export const mockEscalationApi: EscalationApi = {
       throw new ApiError({ status: 409, code: 'ESCALATION_STATE_INVALID', message: '이미 결정된 Emergency 재검토 요청입니다.' });
     }
 
+    if (request.safetyLock === false && review.status !== 'APPLIED' && request.status !== 'APPLIED') {
+      throw new ApiError({ status: 409, code: 'ESCALATION_STATE_INVALID', message: 'Emergency 재검토 승인 전에는 안전 잠금을 해제할 수 없습니다.' });
+    }
+    if (request.safetyLock === true && review.requestedRiskLevel !== 'EMERGENCY') {
+      throw new ApiError({ status: 409, code: 'ESCALATION_STATE_INVALID', message: 'Emergency가 아닌 위험도에는 안전 잠금을 적용할 수 없습니다.' });
+    }
     const now = new Date().toISOString();
-    const lockChanged = request.safetyLock !== undefined && request.safetyLock !== review.safetyLock;
+    const safetyLock = request.status === 'APPLIED' ? false : request.safetyLock ?? review.safetyLock;
+    const lockChanged = safetyLock !== review.safetyLock;
     const next: StoredEmergencyReview = {
       ...review,
       ...(request.status ? { decidedAt: now, status: request.status } : {}),
-      ...(request.safetyLock !== undefined ? { safetyLock: request.safetyLock, safetyLockUpdatedAt: now } : {}),
+      safetyLock,
+      ...(lockChanged ? { safetyLockUpdatedAt: now } : {}),
     };
     writeReviews(reviews.map((entry) => entry.requestId === requestId ? next : entry));
 

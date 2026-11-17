@@ -1,4 +1,4 @@
-import { formatMessageDate, getConversation } from '../parent-message/conversation';
+import { compareMessageTimes, formatMessageDate, getConversation } from '../parent-message/conversation';
 import { mockConnectedTeachers, readSentMessages, updateSentMessage } from '../parent-message/messageDraft';
 import type { ConversationMessage } from '../parent-message/parentMessageTypes';
 import type { BoardThread, ConversationSummary } from './types';
@@ -70,6 +70,8 @@ export function readTeacherParentThreads(teacherUserId: number): BoardThread[] {
           replies: conversation.map((entry) => ({
             id: entry.id, authorRole: entry.authorRole, authorName: entry.authorRole === 'teacher' ? message.teacherName : parentName,
             content: entry.body, deliveryStatus: entry.deliveryStatus, label: entry.authorRole === 'teacher' ? '선생님 답변' : '학부모 문의', time: formatConversationTime(entry.sentAt), sentAt: entry.sentAt,
+            ...(entry.authorRole === 'teacher' ? { readByParent: Boolean(message.parentAcknowledgedAt &&
+              compareMessageTimes(message.parentAcknowledgedAt, entry.sentAt) >= 0) } : {}),
           })),
         });
       }

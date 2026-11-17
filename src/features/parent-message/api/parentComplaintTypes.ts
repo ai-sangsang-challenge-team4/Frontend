@@ -1,13 +1,13 @@
 import type { ComplaintStatus, MessageStatus, RiskFactorStatus, RiskLevel, WaitingFor } from '../../../shared/types';
 import type { DetectedFactorCode } from '../../escalation/escalationTypes';
 import type { ComplaintListQuery, ComplaintPageResponse } from '../../message/api/teacherInboxTypes';
-import type { AiAnalysisStatus, RiskAnalysisMetadata, SafetyFlags } from '../../../shared/types/risk';
+import type { AiAnalysisStatus, RevisionStatus, RiskAnalysisMetadata, SafetyFlags } from '../../../shared/types/risk';
 
 // Shapes in this file follow the backend parent complaint and risk analysis DTOs
 // (complaint/parent/dto/complaint, risk/dto/response). Do not add fields the backend does not define.
 // The parent flow: POST /complaints (DRAFT) → POST /risk-analysis → GET /findings → PATCH if edited → POST /send.
 
-// POST /complaints. title @NotBlank @Size(max = 100), content @NotBlank (no server length limit).
+// POST /complaints. title @NotBlank @Size(max = 100), content @NotBlank @Size(max = 5000).
 // The parent must be linked to the student, and the teacher must be assigned to the student's latest class
 // (else 400 INVALID_COMPLAINT_RECIPIENT).
 export type ComplaintCreateRequest = {
@@ -70,6 +70,7 @@ export type ParentComplaintDetailResponse = {
 // One analysis per message: the same content returns the existing analysis, and different content after an
 // analysis answers 409 FINAL_ANALYSIS_ON_SUBMIT (the server analyzes it again on /send instead).
 export type RiskSummaryResponse = RiskAnalysisMetadata & {
+  revisionStatus?: RevisionStatus;
   analysisId: number;
   complaintId: number;
   riskScore: number;
@@ -108,6 +109,7 @@ export type RiskFinding = {
 // GET /risk-analyses/{analysisId}/findings. finalRevision is null when no revision was generated
 // (an analysis made on /send).
 export type RiskRevisionResponse = {
+  revisionStatus?: RevisionStatus;
   findings: RiskFinding[];
   finalRevision: { reason: string | null; content: string } | null;
 };

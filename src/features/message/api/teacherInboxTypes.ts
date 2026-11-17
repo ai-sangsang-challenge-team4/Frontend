@@ -1,6 +1,7 @@
 import type {
   ComplaintStatus,
   MessageSenderRole,
+  MessageStatus,
   RiskLevel,
   TeacherAllowedAction,
   UserRole,
@@ -85,6 +86,10 @@ export type TeacherConversationMessage = {
   content: string;
   sentAt: string;
   summarized: boolean;
+  // Older deployments omit these fields. An unavailable summary is not an original message.
+  status?: MessageStatus;
+  readAt?: string | null;
+  summaryStatus?: 'GENERATED' | 'UNAVAILABLE' | null;
 };
 
 // GET /teacher/complaints/{complaintId}/messages

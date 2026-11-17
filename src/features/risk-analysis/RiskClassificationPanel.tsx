@@ -6,6 +6,17 @@ const statusVariant: Record<RiskFactorStatus, BadgeVariant> = {
   PRESENT: 'danger', ABSENT: 'neutral', BOUNDARY: 'warning', UNKNOWN: 'neutral',
 };
 
+export function RiskClassificationSummary({ results }: { results?: RiskClassification[] }) {
+  const classifications = getRiskClassifications(results);
+  const statuses: RiskFactorStatus[] = ['PRESENT', 'BOUNDARY', 'UNKNOWN', 'ABSENT'];
+  return <div aria-label="위험 요소 분류 요약" className="board-risk-classification-summary" role="group">
+    {statuses.map((status) => {
+      const count = classifications.filter((result) => result.status === status).length;
+      return count ? <Badge key={status} size="sm" variant={statusVariant[status]}>{classificationStatusLabel[status]} {count}개</Badge> : null;
+    })}
+  </div>;
+}
+
 export function RiskClassificationPanel({
   canInspectOriginal, onOriginalOpen, results,
 }: {
@@ -15,8 +26,6 @@ export function RiskClassificationPanel({
 }) {
   return (
     <section aria-label="8개 위험 요소 분류" className="board-risk-classifications">
-      <h3>8개 위험 요소 분류</h3>
-      <p>각 항목을 펼쳐 판단 이유와 근거 구간을 확인할 수 있습니다. 미확인은 분석 결과가 제공되지 않은 상태입니다.</p>
       <Accordion
         allowMultiple
         className="board-classification-accordion"
@@ -30,6 +39,7 @@ export function RiskClassificationPanel({
           ),
           content: (
             <div className="board-risk-factor-detail">
+              <strong>판단 이유</strong>
               <p>{result.status === 'UNKNOWN'
                 ? '이 항목의 분류 결과를 확인하지 못했습니다.'
                 : result.rationale || (result.status === 'ABSENT' ? '이 위험 요소는 탐지되지 않았습니다.' : '판단 이유가 제공되지 않았습니다.')}</p>

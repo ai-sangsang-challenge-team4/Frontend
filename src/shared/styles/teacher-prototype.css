@@ -764,7 +764,7 @@ ol {
   position: fixed;
   z-index: 1200;
   width: max-content;
-  max-width: min(220px, calc(100vw - 32px));
+  max-width: min(280px, calc(100vw - 32px));
   max-height: calc(100dvh - 32px);
   overflow: auto;
   padding: var(--space-2) var(--space-3);
@@ -774,8 +774,14 @@ ol {
   box-shadow: var(--shadow-sm);
   font-size: var(--font-size-helper);
   font-weight: var(--font-weight-regular);
-  line-height: var(--line-height-body);
+  line-height: 20px;
   overflow-wrap: anywhere;
+  word-break: keep-all;
+}
+
+.ui-information-tooltip {
+  flex: 0 0 auto;
+  margin-inline-start: calc(-1 * var(--space-2));
 }
 
 .ui-information-trigger {

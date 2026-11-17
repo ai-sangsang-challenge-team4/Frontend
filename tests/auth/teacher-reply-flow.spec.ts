@@ -84,6 +84,7 @@ test('High에서 맞는 예시가 없으면 AI 생성 없이 직접 작성한다
   await page.goto('/teacher/messages/thread-002');
   await page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name: '위험 요소', exact: true }).click();
   await page.getByRole('button', { name: '6점 높은 위험', exact: true }).click();
+  await page.getByPlaceholder('상향 수정 사유를 입력해주세요.').fill('추가 위험 표현을 확인했습니다.');
   await page.getByRole('button', { name: '상향 반영', exact: true }).click();
   // The review is saved through the API, so wait until 6 becomes the saved reference.
   await expect(page.getByRole('button', { name: '검토 완료', exact: true })).toBeVisible();
@@ -216,12 +217,15 @@ test('Emergency 잠금은 위험도 검토 후에도 유지되고 답변 생성�
   await expect(page.getByRole('button', { name: '절차 안내 보기', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '절차 안내 보기', exact: true }).click();
   await expect(page).toHaveURL(/\/teacher\/guide\?post=guide-emergency-official-procedure$/);
+  await page.getByRole('button', { name: '이전 화면으로 돌아가기', exact: true }).click();
+  await expect(page).toHaveURL(/\/teacher\/messages\/thread-001\/response$/);
+  await expect(page.getByRole('heading', { name: '이 메시지는 개별 답변을 보낼 수 없습니다', exact: true })).toBeVisible();
 
   await page.goto('/teacher/messages/thread-001');
   await page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name: '위험 요소', exact: true }).click();
   await page.getByRole('button', { name: '검토 완료', exact: true }).click();
   await page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name: '대화', exact: true }).click();
-  await expect(page.getByText('지정 검토자가 잠금을 해제하기 전까지 답변 생성과 전송이 차단됩니다.')).toBeVisible();
+  await expect(page.getByText('긴급 단계에서는 답변 생성과 전송이 제한돼요.')).toBeVisible();
   await expect(page.getByRole('button', { name: /답변 (작성하러 가기|이어서 작성하기)/ })).toHaveCount(0);
 });
 

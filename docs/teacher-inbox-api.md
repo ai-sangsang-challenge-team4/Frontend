@@ -10,7 +10,7 @@
 | --- | --- | --- | --- |
 | 목록 | GET | `/teacher/complaints?page=&keyword=&status=&riskLevel=&sort=` | 페이지 크기 10 고정, "메시지 더 보기"로 다음 페이지 |
 | 상세 | GET | `/teacher/complaints/{id}` | |
-| 대화 | GET | `/teacher/complaints/{id}/messages` | LOW 초과 학부모 메시지는 메시지마다 완충 요약(`summarized: true`) 카드로 표시 |
+| 대화 | GET | `/teacher/complaints/{id}/messages` | LOW 초과 학부모 메시지는 메시지마다 완충 요약 카드로 표시. `summaryStatus=UNAVAILABLE`은 요약 실패 안내로 표시 |
 | 위험 요소 | GET | `/teacher/complaints/{id}/risk` | 404(분석 없음)는 "분석 실패"로 표시 |
 | 처리 기록 | GET | `/teacher/complaints/{id}/history` | 최신순 응답을 오래된 순으로 표시 |
 | 원문 열람 | POST | `/teacher/complaints/{id}/messages/{messageId}/original-views` | 메시지 하나의 원문 반환 + 서버가 `ORIGINAL_VIEWED` 기록. 받은 뒤 원문 화면을 엶. 요약 카드마다 그 메시지의 원문을 열고, 위험 요소·답변 작성 화면의 원문 보기는 최신 학부모 메시지(최신 분석 대상)를 엶. `messageId`는 대화의 `message:{id}`에서 숫자만 사용 |
@@ -43,7 +43,9 @@
 - 증빙 패키지 가능 여부: `allowedActions`에 `CREATE_EVIDENCE_PACKAGE`가 있을 때.
 - 위험도 검토 가능: `status=OPEN`이고 `waitingFor=TEACHER`일 때(백엔드 규칙과 동일).
 - 날짜: 서버 `LocalDateTime`은 타임존이 없고 서버 시각이 KST라 `+09:00`을 붙여 해석합니다(`shared/api/serverDateTime.ts`).
-- 목록 미리보기·대화 요약은 서버 `aiSummary`를 씁니다. 백엔드 요약기는 아직 Mock이라 `[MOCK]` 문구가 보입니다.
+- 목록 미리보기는 서버 `aiSummary`, 대화 요약은 메시지별 `content`를 씁니다. `summaryStatus=UNAVAILABLE`이면 실패 안내 카드를 표시하고 응답 본문을 원문 말풍선으로 표시하지 않습니다. 원문 열람은 기존 권한·열람 API를 그대로 사용합니다. Backend는 Python AI의 완충 요약을 호출하며, AI 장애 시 요약 실패 상태를 반환합니다.
+- 교사 답변의 `status=READ` 또는 `readAt`이 있으면 학부모가 읽은 상태로 표시합니다. 필드가 없는 이전 응답도 지원합니다.
+- 처리 기록의 AI 분석 제한·규칙 폴백·AI 초안 정책 차단·답변 정책 차단 이벤트도 한국어 작업명으로 표시합니다.
 
 ## 서버 모드에서 로컬 전용인 것
 
@@ -58,7 +60,7 @@ AI 초안·임시저장·답변 전송은 [teacher-reply-api.md](teacher-reply-a
 
 - `allowedActions`는 백엔드가 위험 등급(잠금 중이면 EMERGENCY)으로 계산합니다. 화면 정책(낮음·주의 AI 초안, 위험 공식 템플릿, 긴급 답변 차단)과 대체로 같지만 `USE_RESPONSE_TEMPLATE`는 LOW·MEDIUM에도 포함됩니다. 지금은 증빙 패키지 가능 여부에만 사용합니다.
 - 목록 응답에 최신 메시지 내용이 없어 미리보기에 `aiSummary`를 씁니다.
-- `GET /users/me` 500 버그는 2026-10-30 배포 서버에서 고쳐진 것을 확인했습니다(200, `students` 포함). 5xx일 때 저장된 사용자를 유지하는 임시 우회([auth-mock-testing.md](auth-mock-testing.md))는 남아 있어 정리할 수 있습니다.
+- `GET /users/me`의 과거 500 임시 우회는 2026-11-17 제거했습니다. 조회 실패는 세션을 보존한 재시도 화면으로 처리합니다([auth-mock-testing.md](auth-mock-testing.md)).
 - `POST /close`가 불가능한 상태면 409 `RESPONSE_NOT_EDITABLE`과 구체적인 이유(예: "이미 완료된 민원은 다시 완료 처리할 수 없습니다.")를 줍니다. `RESPONSE_NOT_EDITABLE`은 서버 문구를 우선 표시합니다.
 
 ## 테스트

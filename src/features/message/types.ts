@@ -76,7 +76,6 @@ export type ThreadAnalysis = RiskAnalysisMetadata & {
   originalMessageAvailable: boolean;
   packageAvailable: boolean;
   riskFactors: RiskFactor[];
-  riskReviewRequestedAt?: string;
   safetyLock: boolean;
   // Last known server state of the teacher's own emergency review request. The admin decides on the
   // server, so the thread syncs from GET /escalation once the status or lock changes.
@@ -99,6 +98,7 @@ export type BoardReply = {
   deliveryStatus?: 'SENT_TO_PARENT';
   // Server inbox: a parent message above LOW arrives as its buffered summary instead of the original.
   summarized?: boolean;
+  summaryUnavailable?: boolean;
   readByParent?: boolean;
   time: string;
   sentAt?: string;

@@ -229,6 +229,20 @@
   gap: 20px;
 }
 
+.board-lock-message > div {
+  min-width: 0;
+}
+
+.board-lock-message-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.board-lock-message-heading .ui-information-tooltip {
+  margin-inline-start: 0;
+}
+
 .board-lock-icon {
   display: block;
   width: 20px;

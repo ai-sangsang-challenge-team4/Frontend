@@ -27,4 +27,6 @@ npm run dev
 
 문의 흐름과 HTTP 계약은 [학부모 작성·분석·제출](docs/parent-message-api.md), [학부모 문의 내역](docs/parent-message-history.md), [교사 메시지함](docs/teacher-inbox-api.md), [교사 분석 화면](docs/teacher-message-analysis.md), [교사 답변](docs/teacher-reply-api.md), [답변 예시 편집](docs/teacher-reply-templates.md), [관리자 공유·재검토](docs/admin-escalation.md)에 정리했습니다. #77의 AI 잠정 분석·내부 오류·Severity·안전 신호 및 100점 시스템 점수와 교사 7단계 구분은 학부모 작성·분석·제출 문서에서 확인할 수 있습니다.
 
+#79의 배포 Swagger·Backend·AI 비교 결과와 입력 제한·비동기 수정안·요약 실패 처리는 [API 계약 점검](docs/api-contract-audit.md)을 참고하세요.
+
 서버 연결 환경 변수와 rewrite 설정은 [배포 가이드](docs/deployment.md), 가입 입력값과 서버 매핑은 [회원가입 정보 가이드](docs/parent-signup-child-info.md)를 참고하세요.

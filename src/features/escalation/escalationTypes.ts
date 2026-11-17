@@ -14,7 +14,7 @@ import type {
 } from '../../shared/types';
 
 // Shapes in this file follow the backend DTOs (escalation/dto, risk/dto, complaint/teacher/dto).
-// Where /v3/api-docs and the code disagree, the code wins. Do not add fields the backend does not define.
+// The deployed OpenAPI is the public contract; backend DTOs clarify state transitions and nullability.
 // Dates are LocalDateTime strings without a time zone (e.g. 2026-10-28T12:18:23.227).
 
 // Thread IDs are strings in the mock inbox; the server only knows numeric complaintId.
@@ -49,7 +49,7 @@ export type ShareEscalationRequest = {
 export type TeacherRiskReviewRequest = {
   // The teacher's choice, 1~7; the server stores it ×10.
   riskScore: number;
-  // Required when lowering.
+  // Required for either an upward or downward change.
   reason: string | null;
 };
 
@@ -152,6 +152,7 @@ export type ConversationMessage = {
   sentAt: string;
   readAt?: string | null;
   summarized: boolean;
+  summaryStatus?: 'GENERATED' | 'UNAVAILABLE' | null;
 };
 
 // GET /admin/escalations/{escalationId}/messages

@@ -4,6 +4,7 @@ import { Badge, Button } from '../../shared/components/ui';
 import { formatEscalationTime } from '../escalation/escalationRules';
 import { agreeToCurrentPolicy, getAuthErrorMessage, getCurrentPolicyConsent } from './api/authApi';
 import type { PolicyConsentResponse } from './api/authTypes';
+import { PolicyDocumentLinks } from '../policy/PolicyDocumentLinks';
 
 export function PolicyConsentPanel() {
   const [consent, setConsent] = useState<PolicyConsentResponse | null>(null);
@@ -86,14 +87,16 @@ export function PolicyConsentPanel() {
                 <span className="mypage-consent-description" id="mypage-required-consent-description">계정 정보와 메시지·처리 기록을 서비스 제공 목적으로 수집·이용합니다.</span>
               </span>
             </label>
+            <PolicyDocumentLinks documents={['service', 'privacy']} />
             <label className="mypage-consent-row">
               <input aria-describedby="mypage-optional-consent-description" aria-labelledby="mypage-optional-consent-title"
                 checked={optional} disabled={saving} onChange={(event) => { setOptional(event.target.checked); setSaved(false); }} type="checkbox" />
               <span className="mypage-consent-copy">
                 <span className="mypage-consent-title" id="mypage-optional-consent-title"><Badge size="sm">선택</Badge><span>서비스 개선을 위한 메시지 활용 동의</span></span>
-                <span className="mypage-consent-description" id="mypage-optional-consent-description">AI 분석이 더 정확해지도록 작성한 메시지를 테스트 자료로 보관해 활용합니다. 선택 동의는 거부해도 서비스를 이용할 수 있습니다.</span>
+                <span className="mypage-consent-description" id="mypage-optional-consent-description">별도로 제공한 테스트 메시지를 서비스 개선 목적으로 저장·활용합니다. 선택 동의는 거부해도 서비스를 이용할 수 있습니다.</span>
               </span>
             </label>
+            <PolicyDocumentLinks documents={['testMessages']} />
           </fieldset>
           <div className="mypage-card-footer">
             <p id="mypage-consent-save-hint">{required ? '변경한 내용은 저장 후 적용됩니다.' : '필수 항목에 동의하면 저장할 수 있어요.'}</p>

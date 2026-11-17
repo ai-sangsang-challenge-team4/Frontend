@@ -1,5 +1,6 @@
 import { Badge } from '../../shared/components/ui';
 import type { RiskAnalysisMetadata, SafetyFlags } from '../../shared/types/risk';
+import { isProvisionalAnalysis } from './index';
 import './RiskAnalysisNotice.css';
 
 const statusLabels = {
@@ -10,11 +11,6 @@ const statusLabels = {
   RULE_ONLY_INVALID_RESPONSE: 'AI 응답 검증 실패',
   SKIPPED_LIMIT: '분석 횟수 제한',
 };
-
-function isProvisionalAnalysis(metadata: RiskAnalysisMetadata) {
-  return metadata.analysisMode === 'RULE_ONLY' || metadata.aiAnalysisStatus === 'REUSED_RULE_ONLY' ||
-    metadata.aiAnalysisStatus === 'RULE_ONLY_AI_UNAVAILABLE' || metadata.aiAnalysisStatus === 'RULE_ONLY_INVALID_RESPONSE';
-}
 
 export function RiskAnalysisNotice({ metadata }: { metadata: RiskAnalysisMetadata }) {
   const { aiAnalysisStatus, manualReviewRequired, analysisMessage } = metadata;

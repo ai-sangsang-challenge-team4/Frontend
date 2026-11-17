@@ -12,6 +12,8 @@ import {
 } from '../escalation/api';
 import { apiRiskTone, formatEscalationTime, getDetectedFactorEvidence, getDetectedFactorState, historyEventLabel } from '../escalation/escalationRules';
 import { RiskAnalysisNotice } from '../risk-analysis/RiskAnalysisNotice';
+import { AiRiskLabel } from '../risk-analysis/AiRiskLabel';
+import { AiJudgmentNotice } from '../safety/AiJudgmentNotice';
 import type {
   AdminEscalationSummaryResponse,
   ConversationMessage,
@@ -256,6 +258,7 @@ function toRiskFactorItem(factor: DetectedFactor, index: number) {
     ),
     content: (
       <div className="board-risk-factor-detail">
+        <strong>판단 이유</strong>
         <p>{factor.reason || (state === 'UNKNOWN'
           ? '이 항목의 분류 결과를 확인하지 못했습니다.'
           : state === 'ABSENT' ? '이 위험 요소는 탐지되지 않았습니다.' : '판단 이유가 제공되지 않았습니다.')}</p>
@@ -297,7 +300,7 @@ function RiskAnalysisPanel({ escalationId }: { escalationId: number }) {
             <RiskAnalysisNotice metadata={data} />
             <dl className="board-admin-share-summary">
               <div>
-                <dt>시스템 분석</dt>
+                <dt>{data.riskAnalysisId != null && data.riskLevel ? <AiRiskLabel metadata={data} score={data.riskScore} /> : '위험도 분석 상태'}</dt>
                 <dd>{data.riskScore == null ? riskText(data.riskLevel, data.riskScore) : `${riskText(data.riskLevel, null)} · 위험 점수 ${data.riskScore}/100`}</dd>
               </div>
               {/* The review fields are null until a teacher reviews. */}
@@ -308,7 +311,7 @@ function RiskAnalysisPanel({ escalationId }: { escalationId: number }) {
                 </div>
               ) : null}
               <div>
-                <dt>현재 적용</dt>
+                <dt>현재 적용 위험도</dt>
                 <dd>{riskText(data.currentRiskLevel, null)}</dd>
               </div>
               {data.latestReview ? (
@@ -327,6 +330,7 @@ function RiskAnalysisPanel({ escalationId }: { escalationId: number }) {
                 </div>
               ) : null}
             </dl>
+            {data.riskAnalysisId != null && data.riskLevel ? <AiJudgmentNotice /> : null}
           </section>
 
           <section className="board-risk-evidence-panel">

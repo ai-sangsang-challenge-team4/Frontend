@@ -123,6 +123,7 @@ type RiskFactorDetailProps = {
 export function RiskFactorDetail({ factor, canInspectOriginal = false, onOriginalOpen }: RiskFactorDetailProps) {
   return (
     <div className="board-risk-factor-detail">
+      <strong>판단 이유</strong>
       <p>{factor.rationale}</p>
       {canInspectOriginal ? (
         factor.evidence.trim() ? (

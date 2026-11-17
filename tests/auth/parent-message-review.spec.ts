@@ -142,7 +142,7 @@ for (const source of ['AI', 'ORIGINAL'] as const) {
   });
 }
 
-test('직접 수정한 원문을 유지하고 빈 입력과 1500자 초과 입력을 차단한다', async ({ page }) => {
+test('직접 수정한 원문을 유지하고 빈 입력과 5000자 초과 입력을 차단한다', async ({ page }) => {
   await openReview(page);
   await page.getByLabel('AI 초안 내용', { exact: true }).fill(' \n ');
   await page.getByRole('button', { name: '전송하기', exact: true }).click();
@@ -152,12 +152,12 @@ test('직접 수정한 원문을 유지하고 빈 입력과 1500자 초과 입�
 
   await page.evaluate((key) => {
     const draft = JSON.parse(localStorage.getItem(key)!);
-    draft.review.aiText = '가'.repeat(1501);
+    draft.review.aiText = '가'.repeat(5001);
     localStorage.setItem(key, JSON.stringify(draft));
   }, draftKey);
   await page.reload();
   await page.getByRole('button', { name: '미리보기', exact: true }).click();
-  await expect(page.getByText('문의 내용은 1500자 이내로 작성해 주세요.', { exact: true })).toBeVisible();
+  await expect(page.getByText('문의 내용은 5000자 이내로 작성해 주세요.', { exact: true })).toBeVisible();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
   await page.getByRole('tab', { name: '원문', exact: true }).click();

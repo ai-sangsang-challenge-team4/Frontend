@@ -10,6 +10,7 @@ import workflowMessageImage from '../../shared/assets/landing/workflow-message.p
 import workflowReplyImage from '../../shared/assets/landing/workflow-reply.png';
 import { getDefaultRolePath, useAuth } from '../../features/auth';
 import { LandingRoleGrid } from './LandingRoleGrid';
+import { PolicyDocumentLinks } from '../../features/policy/PolicyDocumentLinks';
 
 type FeatureItem = {
   title: string;
@@ -259,11 +260,9 @@ export function LandingPage() {
 
         <footer className="landing-footer">
           <div className="landing-container landing-footer__legal">
-            <p className="landing-footer__links">
-              <span>이용약관</span>
-              <span aria-hidden="true">|</span>
-              <span>개인정보처리방침</span>
-            </p>
+            <div className="landing-footer__links">
+              <PolicyDocumentLinks documents={['service', 'privacy', 'testMessages']} />
+            </div>
             <p className="landing-footer__copyright">
               Copyright &copy; Teacher Hub.All Right Reserved
             </p>

@@ -1,3 +1,4 @@
+import { SIGNUP_EMPLOYEE_NO_MAX_LENGTH } from './api/authTypes';
 // Teacher signup form state. schoolId comes from GET /auth/schools; the server matches the school,
 // staff number (employeeNo), and name against the staff roster.
 export type TeacherSignupInfo = {
@@ -13,6 +14,8 @@ export function validateTeacherSignupInfo(info: TeacherSignupInfo) {
   }
   if (!info.employeeNo?.trim()) {
     errors.employeeNo = '교번을 입력해 주세요.';
+  } else if (info.employeeNo.trim().length > SIGNUP_EMPLOYEE_NO_MAX_LENGTH) {
+    errors.employeeNo = `교번은 ${SIGNUP_EMPLOYEE_NO_MAX_LENGTH}자 이내로 입력해 주세요.`;
   }
   return errors;
 }

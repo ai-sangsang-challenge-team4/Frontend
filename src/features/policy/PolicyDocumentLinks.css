@@ -1,0 +1,38 @@
+.policy-document-links { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-2); min-width: 0; }
+.policy-document-separator { flex: 0 0 auto; color: var(--color-text-secondary); font-size: var(--font-size-helper); }
+.policy-document-link.ui-button { min-height: 44px; min-width: 0; padding: var(--space-2) 0; color: var(--color-text-secondary); font-size: var(--font-size-helper); font-weight: var(--font-weight-medium); line-height: 20px; text-align: left; white-space: normal; word-break: keep-all; overflow-wrap: anywhere; }
+.policy-document-link.ui-button:hover { background: transparent; color: var(--color-text-brand); }
+.policy-document-link:focus-visible { outline: 2px solid var(--color-border-focus); outline-offset: 3px; color: var(--color-text-brand); }
+.auth-consent .policy-document-links { margin-top: -12px; margin-left: 28px; }
+.mypage-consent-list .policy-document-links { margin: calc(-1 * var(--space-3)) 0 var(--space-3) 32px; }
+.mypage-consent-card .mypage-consent-row { border-bottom: 0; }
+.mypage-consent-list > .policy-document-links:not(:last-child) { padding-bottom: var(--space-3); border-bottom: var(--divider-default); }
+.ui-modal-overlay:has(> .policy-document-modal) { padding: var(--space-4); }
+.policy-document-modal.ui-modal { display: flex; flex-direction: column; max-height: min(840px, calc(100dvh - 32px)); overflow: hidden; }
+.policy-document-modal .ui-modal-header, .policy-document-modal .ui-modal-footer { flex: 0 0 auto; }
+.policy-document-modal .ui-modal-header h2 { word-break: keep-all; overflow-wrap: anywhere; }
+.policy-document-modal .ui-modal-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.policy-document-content { display: grid; gap: var(--space-6); color: var(--color-text-secondary); font-size: var(--font-size-body); line-height: 1.7; word-break: keep-all; overflow-wrap: anywhere; }
+.policy-document-content:focus-visible { outline: 2px solid var(--color-border-focus); outline-offset: -2px; border-radius: var(--radius-xs); }
+.policy-document-content > p, .policy-document-content section > p { margin: 0; }
+.policy-document-content section { display: grid; min-width: 0; gap: var(--space-3); }
+.policy-document-content h3 { margin: 0; color: var(--color-text-primary); font-size: 18px; font-weight: var(--font-weight-medium); line-height: 1.5; }
+.policy-document-content ul, .policy-document-content ol { display: grid; gap: var(--space-2); margin: 0; padding-left: var(--space-6); }
+.policy-document-content ul { list-style: disc; }
+.policy-document-content ol { list-style: decimal; }
+.policy-document-meta { display: grid; gap: var(--space-2); padding: var(--space-4); border-radius: var(--radius-sm); background: var(--color-bg-canvas); font-size: var(--font-size-helper); line-height: 22px; }
+.policy-document-meta > div { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: var(--space-3); }
+.policy-document-meta dt { color: var(--color-text-muted-readable); }
+.policy-document-meta dd { min-width: 0; margin: 0; }
+.policy-document-table { min-width: 0; overflow-x: auto; }
+.policy-document-table table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: var(--font-size-helper); line-height: 1.6; }
+.policy-document-table th, .policy-document-table td { padding: var(--space-3); border: var(--divider-default); text-align: left; vertical-align: top; }
+.policy-document-table th { background: var(--color-bg-canvas); color: var(--color-text-primary); font-weight: var(--font-weight-medium); }
+.policy-document-content .policy-document-acceptance { padding: var(--space-4); border-radius: var(--radius-sm); background: var(--color-primary-subtle); color: var(--color-text-brand); font-weight: var(--font-weight-medium); }
+@media (max-width: 620px) {
+  .policy-document-modal .ui-modal-header { padding: var(--space-4); }
+  .policy-document-modal .ui-modal-body { padding: var(--space-4); }
+  .policy-document-modal .ui-modal-footer { padding: var(--space-3) var(--space-4); }
+  .policy-document-content { gap: var(--space-5); }
+  .policy-document-table th, .policy-document-table td { padding: var(--space-2); }
+}

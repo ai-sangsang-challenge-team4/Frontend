@@ -1,5 +1,12 @@
 import type { UserRole } from '../../../shared/types';
 
+// SignupRequest validation constraints in the deployed OpenAPI.
+export const SIGNUP_PASSWORD_MIN_LENGTH = 8;
+export const SIGNUP_PASSWORD_MAX_LENGTH = 100;
+export const SIGNUP_NAME_MAX_LENGTH = 100;
+export const SIGNUP_STUDENT_NAME_MAX_LENGTH = 50;
+export const SIGNUP_EMPLOYEE_NO_MAX_LENGTH = 100;
+
 // Shapes in this file follow the backend auth DTOs (auth/dto, user/dto).
 // Do not add fields the backend does not define.
 

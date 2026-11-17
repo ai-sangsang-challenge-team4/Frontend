@@ -30,11 +30,11 @@
 | `VITE_AUTH_API=http` | `GET /auth/schools?keyword=`, `/auth/schools/{schoolId}/classes?grade=`, `/auth/classes/{schoolClassId}/students` (공개 API) | `POST /auth/signup` |
 | mock(기본) | `mockSignupOptionsApi.ts` 예시 데이터(상상초·중·고, 학년별 1~3반, 반별 1~30번). 화면에 예시 데이터임을 표시 | localStorage `teacher-hub.auth-accounts` |
 
-학교·학급·학생 ID와 학생 이름이 서로 맞는지는 서버가 판단합니다(`SIGNUP_REFERENCE_NOT_FOUND` 404, `SIGNUP_VALIDATION_FAILED` 400). 이 오류들은 서버 메시지를 그대로 보여 줍니다. 프론트 검증은 "선택했는지"와 공백 이름만 확인합니다.
+학교·학급·학생 ID와 학생 이름이 서로 맞는지는 서버가 판단합니다(`SIGNUP_REFERENCE_NOT_FOUND` 404, `SIGNUP_VALIDATION_FAILED` 400). 이 오류들은 서버 메시지를 그대로 보여 줍니다. 프론트는 필수 선택·공백 이름과 Swagger의 입력 길이 제한을 확인합니다.
 
 dev 프로필 백엔드에는 상상초등학교(2026학년도 3학년 2반, 학생 번호 `DEV-20260001`, 이름 `Demo Student`)와 가입 가능한 교사 명부(`DEV-2026-002`, 이름 `가입용 교사`)가 있습니다.
 
-비밀번호는 서버가 8~100자를 받지만 화면은 기존 정책대로 8~20자로 제한합니다.
+화면과 mock 검증도 Swagger에 맞춰 비밀번호 8~100자, 본인 이름 100자, 자녀 이름 50자, 교번 100자 제한을 적용합니다.
 
 ## 검증
 

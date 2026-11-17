@@ -2,9 +2,9 @@ import type { WaitingFor } from '../../shared/types';
 import type { ReplyTemplateDraft } from '../message/replyTemplates';
 import type { ReplyDraftState, ReplyDraftTab } from '../message/types';
 import type { RiskSummaryResponse } from './api/parentComplaintTypes';
-import type { RiskAnalysisMetadata } from '../../shared/types/risk';
+import type { RevisionStatus, RiskAnalysisMetadata } from '../../shared/types/risk';
 
-export const MESSAGE_MAX_LENGTH = 1500;
+export const MESSAGE_MAX_LENGTH = 5000;
 
 export type MessageSource = 'AI' | 'ORIGINAL';
 export type MessageSelectionType = MessageSource | 'CUSTOM';
@@ -34,6 +34,7 @@ export type ParentMessageAnalysis = {
   analyzeOnSubmit?: boolean;
   riskSummary?: Pick<RiskSummaryResponse, 'riskScore' | 'riskLevel'> & RiskAnalysisMetadata;
   revisionReason?: string | null;
+  revisionStatus?: RevisionStatus;
   maskedContent?: string;
   maskingContentVersion?: number;
 };

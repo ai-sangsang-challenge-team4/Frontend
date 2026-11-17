@@ -121,6 +121,91 @@ async function analyze(page: Page) {
   await expect(page).toHaveURL(/\/review$/);
 }
 
+test('분석 후 작성 화면과 새로고침에서도 선택한 자녀 이름을 표시한다', async ({ page }) => {
+  const calls = await setup(page);
+  const child = page.getByLabel('자녀', { exact: true });
+  await expect(child.locator('option:checked')).toHaveText('Demo Student');
+  await analyze(page);
+  await page.getByRole('button', { name: '문의 작성으로 돌아가기', exact: true }).click();
+  await expect(child).toBeDisabled();
+  await expect(child.locator('option:checked')).toHaveText('Demo Student');
+  await page.reload();
+  await expect(child.locator('option:checked')).toHaveText('Demo Student');
+  await expect(child).toBeDisabled();
+  expect(calls.filter((call) => call === 'POST /complaints')).toHaveLength(1);
+});
+
+test('이름 없이 저장된 초안도 조회 실패를 재시도해 학생 ID에 맞는 이름으로 복원한다', async ({ page }) => {
+  await setup(page);
+  let failChildren = true;
+  await page.route((url) => url.pathname === '/api/users/me', (route) => failChildren
+    ? route.fulfill({ status: 503, json: { code: 'INTERNAL_SERVER_ERROR' } })
+    : route.fulfill({ json: { userId: 101, email: 'parent@example.com', name: '학부모', role: 'PARENT', students: [
+      { studentId: 10, name: '김하나', studentNo: '1' }, { studentId: 11, name: '김두리', studentNo: '2' },
+    ] } }));
+  await page.evaluate(() => localStorage.setItem('teacher-hub.parent-message-draft.101', JSON.stringify({
+    messageId: 'legacy-child-draft', teacherId: '20', title: '기존 초안', body: '작성한 문의입니다.', status: 'DRAFT',
+    server: { complaintId: 42, studentId: 11, teacherId: 20, teacherName: 'Demo Teacher',
+      title: '기존 초안', content: '작성한 문의입니다.', analysisId: null },
+  })));
+  await page.reload();
+  const child = page.getByLabel('자녀', { exact: true });
+  await expect(child).toBeDisabled();
+  const retry = page.locator('#parent-message-studentId-helper').getByRole('button', { name: '다시 시도', exact: true });
+  await expect(retry).toBeVisible();
+  failChildren = false;
+  await retry.click();
+  await expect(child.locator('option:checked')).toHaveText('김두리');
+  await expect(child).toHaveValue('11');
+  await expect(child).toBeDisabled();
+  await expect(page.getByLabel('문의 대상', { exact: true })).toBeDisabled();
+  await expect(page.getByLabel('문의 제목', { exact: true })).toHaveAttribute('readonly', '');
+});
+
+test('비동기 수정안이 도착해도 원문에서 작성한 내용과 선택한 탭을 유지한다', async ({ page }) => {
+  await setup(page);
+  let revisionReady = false;
+  await page.route((url) => url.pathname === '/api/risk-analyses/7/findings', (route) => route.fulfill({ json: {
+    revisionStatus: revisionReady ? 'COMPLETED' : 'PENDING', findings: [],
+    finalRevision: revisionReady ? { content: '늦게 준비된 AI 수정안입니다.', reason: '표현을 다듬었습니다.' } : null,
+  } }));
+  await analyze(page);
+  await expect(page.getByText('AI 수정안을 준비하고 있습니다.', { exact: false })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'AI 초안', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: '직접 수정', exact: true }).click();
+  const original = page.getByLabel('직접 수정한 문의 내용', { exact: true });
+  await original.fill('원문을 확인하며 직접 작성한 문장입니다.');
+  revisionReady = true;
+  await expect(page.getByRole('tab', { name: 'AI 초안', exact: true })).toBeEnabled({ timeout: 10_000 });
+  await expect(page.getByRole('tab', { name: '원문', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(original).toHaveValue('원문을 확인하며 직접 작성한 문장입니다.');
+  await page.getByRole('tab', { name: 'AI 초안', exact: true }).click();
+  await expect(page.getByLabel('AI 초안 내용', { exact: true })).toHaveValue('늦게 준비된 AI 수정안입니다.');
+});
+
+for (const firstLookupFails of [false, true]) {
+  test(`수정안 ${firstLookupFails ? '최초' : '대기 중'} 조회 실패는 같은 분석을 재조회하고 분석 요청을 추가로 보내지 않는다`, async ({ page }) => {
+    const calls = await setup(page, { summary: { revisionStatus: 'PENDING' } });
+    let findingsCalls = 0;
+    let revisionReady = false;
+    await page.route((url) => url.pathname === '/api/risk-analyses/7/findings', (route) => {
+      findingsCalls += 1;
+      if ((firstLookupFails || findingsCalls > 1) && !revisionReady) return route.fulfill({ status: 503, json: { code: 'INTERNAL_SERVER_ERROR' } });
+      return route.fulfill({ json: {
+        revisionStatus: revisionReady ? 'COMPLETED' : 'PENDING', findings: [],
+        finalRevision: revisionReady ? { content: '재조회한 AI 수정안입니다.', reason: '확인됨' } : null,
+      } });
+    });
+    await analyze(page);
+    const retry = page.getByRole('button', { name: '수정안 다시 확인', exact: true });
+    await expect(retry).toBeVisible();
+    revisionReady = true;
+    await retry.click();
+    await expect(page.getByRole('tab', { name: 'AI 초안', exact: true })).toBeEnabled();
+    expect(calls.filter((call) => call === 'POST /complaints/42/risk-analysis')).toHaveLength(1);
+  });
+}
+
 test('서버 초안 생성 중 다시 연 작성 화면에서도 선생님 목록 오류를 재시도한다', async ({ page }) => {
   const calls = await setup(page);
   let releaseCreation!: () => void;
@@ -192,15 +277,15 @@ async function checkInformationTooltip(page: Page, label: string, content: strin
   await expect(tooltip).toHaveCount(0);
 }
 
-test('분석 버튼 곁의 안내는 분석 전후에 유지되고 입력 잠금 조건을 보존한다', async ({ page }, testInfo) => {
+test('입력창 아래의 안내는 분석 전후에 유지되고 입력 잠금 조건을 보존한다', async ({ page }, testInfo) => {
   const calls = await setup(page);
   const notice = page.locator('#parent-message-analysis-description');
-  const noticeText = 'AI 분석은 문의를 전송하지 않습니다. 분석 시작 후 자녀·문의 대상·제목은 변경할 수 없으며, 문의 내용은 계속 수정할 수 있습니다.';
+  const noticeText = 'AI 분석 후 내용을 확인하고 전송할 수 있어요. 분석 시작 후 자녀·문의 대상·제목은 변경할 수 없으며, 문의 내용은 계속 수정할 수 있습니다.';
   const analyzeButton = page.getByRole('button', { name: 'AI 분석 시작', exact: true });
   await expect(notice).toHaveText(noticeText);
   await expect(analyzeButton).toHaveAccessibleDescription(noticeText);
   await expect(page.getByText(noticeText, { exact: true })).toHaveCount(1);
-  await expect(notice.locator('span').first()).toHaveText('AI 분석은 문의를 전송하지 않습니다.');
+  await expect(notice.locator('span').first()).toHaveText('AI 분석 후 내용을 확인하고 전송할 수 있어요.');
   await expect(notice.locator('.sr-only')).toHaveCSS('clip-path', 'inset(50%)');
   await expect(page.getByRole('button', { name: 'AI 분석 안내', exact: true })).toHaveCount(1);
   await expect(page.locator('.parent-write-notice')).not.toContainText('AI 분석');
@@ -235,8 +320,8 @@ test('분석 버튼 곁의 안내는 분석 전후에 유지되고 입력 잠금
     await page.screenshot({ path: testInfo.outputPath(`parent-layout-${width}.png`), fullPage: true, animations: 'disabled' });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await expect.poll(() => page.locator('.parent-write-footer').evaluate((element) => (
-      element.getBoundingClientRect().top - document.querySelector('.privacy-masking-notice')!.getBoundingClientRect().bottom
-    ))).toBe(24);
+      element.getBoundingClientRect().top - document.querySelector('.parent-write-guidance')!.getBoundingClientRect().bottom
+    ))).toBe(16);
     const layout = await notice.evaluate((element) => ({
       note: element.parentElement!.getBoundingClientRect().toJSON(),
       button: document.querySelector('.parent-write-analyze')!.getBoundingClientRect().toJSON(),
@@ -246,14 +331,7 @@ test('분석 버튼 곁의 안내는 분석 전후에 유지되고 입력 잠금
       expect(button.height).toBeGreaterThanOrEqual(44);
       expect(button.height).toBeLessThanOrEqual(48);
     }
-    if (width <= 820) {
-      expect(layout.button.top - layout.note.bottom).toBeGreaterThanOrEqual(12);
-      expect(layout.button.top - layout.note.bottom).toBeLessThanOrEqual(16);
-    } else {
-      expect(layout.note.right).toBeLessThanOrEqual(layout.save.left);
-      expect(layout.note.top).toBeLessThan(layout.button.bottom);
-      expect(layout.note.bottom).toBeGreaterThan(layout.button.top);
-    }
+    expect(layout.note.bottom).toBeLessThanOrEqual(layout.button.top - 16);
     expect(layout.button.left - layout.save.right).toBeGreaterThanOrEqual(8);
     expect(layout.button.left - layout.save.right).toBeLessThanOrEqual(12);
     expect(layout.save.top).toBeCloseTo(layout.button.top, 0);
