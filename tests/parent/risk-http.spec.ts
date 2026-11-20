@@ -23,20 +23,22 @@ async function setup(page: Page, options: {
   conflict?: boolean; localOnly?: boolean; failFollowUpSendOnce?: boolean; changedBeforeSend?: boolean;
   summary?: Partial<RiskSummaryResponse>; detector?: RiskDetectorResponse; submission?: SubmissionAnalysisResponse;
   analysisErrorCode?: string; sendErrorCode?: string; noRevision?: boolean;
-  lifecycle?: { status: 'ANSWERED' | 'CLOSED'; closeConflict?: boolean };
+  lifecycle?: { status: 'OPEN' | 'ANSWERED' | 'CLOSED'; waitingFor?: 'PARENT' | 'TEACHER'; closeConflict?: boolean };
+  uncachedFollowUp?: boolean; cachedAnswered?: boolean;
 } = {}) {
   const calls: string[] = [];
   let content = maskedContent;
   let savedFollowUp = false;
   let sendAttempts = 0;
-  let complaintStatus: ParentConversationResponse['status'] = options.lifecycle?.status ?? 'OPEN';
+  let complaintStatus: ParentConversationResponse['status'] = options.lifecycle?.status ?? (options.followUp ? 'ANSWERED' : 'OPEN');
   let followUpSentAt: string | null = null;
   // The server's contentVersion: it grows only when the content changes.
   let version = 1;
   const failDetector = options.detectorFailure;
   const versionConflict = { code: 'CONTENT_VERSION_CONFLICT', message: '추가 문의 초안이 다른 기기에서 변경되었습니다.' };
   const followUp = () => ({ messageId: 101, complaintId: 42, content, contentVersion: version, status: 'DRAFT', waitingFor: 'PARENT', createdAt: '2026-10-30T10:00:00', updatedAt: '2026-10-30T10:00:00', sentAt: null });
-  const waitingFor = () => complaintStatus === 'CLOSED' ? 'NONE' : complaintStatus === 'ANSWERED' ? 'PARENT' : 'TEACHER';
+  const waitingFor = () => complaintStatus === 'CLOSED' ? 'NONE' : complaintStatus === 'ANSWERED' ? 'PARENT'
+    : (!followUpSentAt && options.lifecycle?.waitingFor === 'PARENT') ? 'PARENT' : 'TEACHER';
   await page.route((url) => url.pathname.startsWith('/api/'), async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname.replace('/api', '');
@@ -53,6 +55,11 @@ async function setup(page: Page, options: {
       }; break;
       case 'GET /users/me': json = { userId: 101, email: 'parent@example.com', name: 'Demo Parent', role: 'PARENT', students: [{ studentId: 10, name: 'Demo Student', studentNo: '1' }] }; break;
       case 'GET /complaints/recipients': json = [{ teacherId: 20, teacherName: 'Demo Teacher', homeroomTeacher: true }]; break;
+      case 'GET /complaints/42': json = {
+        complaintId: 42, title: thread.title, teacherName: thread.teacherName, content: thread.finalBody,
+        studentId: 10, studentName: 'Demo Student', parentName: 'Demo Parent', riskLevel: null,
+        status: complaintStatus, waitingFor: waitingFor(), createdAt: thread.sentAt, updatedAt: followUpSentAt ?? thread.sentAt,
+      }; break;
       case 'POST /complaints':
         expect(request.postDataJSON().content).not.toContain('010-1234-5678');
         content = request.postDataJSON().content;
@@ -126,19 +133,21 @@ async function setup(page: Page, options: {
     }
     await route.fulfill({ status, json });
   });
-  if (options.followUp || options.lifecycle) await page.addInitScript(({ initial, conflict }) => {
+  if ((options.followUp || options.lifecycle) && !options.uncachedFollowUp) await page.addInitScript(({ initial, conflict }) => {
     localStorage.setItem('teacher-hub.parent-sent-messages.101', JSON.stringify([initial]));
     if (conflict) localStorage.setItem('teacher-hub.parent-message-draft.101', JSON.stringify({
       messageId: 'follow-up-local', teacherId: '20', title: initial.title, body: '내가 작성한 내용', status: 'DRAFT', threadId: initial.messageId,
       server: { complaintId: 42, serverMessageId: 101, teacherId: 20, teacherName: 'Demo Teacher', title: initial.title, content: '이전에 저장한 내용', analysisId: null },
     }));
-  }, { initial: { ...thread, serverComplaintId: options.localOnly ? undefined : thread.serverComplaintId }, conflict: options.conflict });
+  }, { initial: { ...thread, serverComplaintId: options.localOnly ? undefined : thread.serverComplaintId,
+    ...(options.cachedAnswered ? { serverComplaintStatus: 'ANSWERED', serverWaitingFor: 'PARENT' } : {}) }, conflict: options.conflict });
   await page.goto('/login?role=PARENT');
   await page.locator('input[name="email"]').fill('parent@example.com');
   await page.locator('input[name="password"]').fill('password123');
   await page.getByRole('button', { name: '로그인', exact: true }).click();
   await expect(page).toHaveURL(/\/parent\/messages\/new$/);
-  if (options.lifecycle) await page.goto('/parent/messages/thread-local');
+  if (options.uncachedFollowUp) await page.goto('/parent/messages/server-42/follow-up');
+  else if (options.lifecycle) await page.goto('/parent/messages/thread-local');
   else if (options.followUp) await page.goto('/parent/messages/thread-local/follow-up');
   else {
     await expect(page.getByLabel('문의 대상', { exact: true })).toBeEnabled();
@@ -524,6 +533,58 @@ test('추가 문의는 서버 메시지 초안부터 분석·전송까지 연결
   expect(calls).toEqual(expect.arrayContaining(['PUT /complaints/42/message-draft', 'POST /complaints/42/messages/101/risk-analysis', 'POST /complaints/42/messages/101/send', 'GET /risk-analyses/8/findings']));
   expect(calls).not.toContain('POST /complaints');
   expect(calls).not.toContain('POST /complaints/42/mask');
+});
+
+test('교사 답변 대기 중에는 추가 문의 버튼과 작성 URL을 막는다', async ({ page }) => {
+  const calls = await setup(page, { lifecycle: { status: 'OPEN', waitingFor: 'TEACHER' }, cachedAnswered: true });
+  const waiting = page.getByText('선생님의 답변을 기다리고 있어요.', { exact: false });
+  await expect(waiting).toBeVisible();
+  await expect(page.getByRole('button', { name: '추가 문의하기', exact: true })).toHaveCount(0);
+
+  // Reloading a direct link reseeds the older ANSWERED/PARENT browser copy.
+  await page.goto('/parent/messages/thread-local/follow-up');
+  await expect(page).toHaveURL(/\/parent\/messages\/thread-local$/);
+  await expect(waiting).toBeVisible();
+  await expect(page.getByLabel('문의 내용', { exact: true })).toHaveCount(0);
+  expect(calls).toContain('GET /complaints/42');
+  expect(calls.some((call) => call.endsWith('/message-draft'))).toBe(false);
+});
+
+test('기존 OPEN/PARENT 응답에서는 추가 문의 버튼으로 작성 화면을 열 수 있다', async ({ page }) => {
+  const calls = await setup(page, { lifecycle: { status: 'OPEN', waitingFor: 'PARENT' } });
+  await page.getByRole('button', { name: '추가 문의하기', exact: true }).click();
+  await expect(page.getByLabel('문의 내용', { exact: true })).toBeEditable();
+  await expect.poll(() => calls).toContain('GET /complaints/42/message-draft');
+  const statusLookup = calls.indexOf('GET /complaints/42');
+  expect(statusLookup).toBeGreaterThanOrEqual(0);
+  expect(statusLookup).toBeLessThan(calls.indexOf('GET /complaints/42/message-draft'));
+});
+
+test('다른 기기에서도 종료된 문의의 추가 작성 URL로 바로 접근할 수 있다', async ({ page }) => {
+  const calls = await setup(page, { lifecycle: { status: 'CLOSED' }, uncachedFollowUp: true });
+  await expect(page).toHaveURL(/\/parent\/messages\/server-42\/follow-up$/);
+  await expect(page.getByLabel('문의 제목', { exact: true })).toHaveValue(thread.title);
+  await expect(page.getByLabel('문의 내용', { exact: true })).toBeEditable();
+  await expect.poll(() => calls).toContain('GET /complaints/42/message-draft');
+  expect(calls).not.toContain('GET /complaints/42/messages');
+});
+
+test('문의 상태 조회에 실패하면 작성 화면을 열기 전에 다시 조회할 수 있다', async ({ page }) => {
+  const calls = await setup(page, { lifecycle: { status: 'ANSWERED' } });
+  let detailAvailable = false;
+  await page.route((url) => url.pathname === '/api/complaints/42', (route) =>
+    detailAvailable ? route.fallback()
+      : route.fulfill({ status: 503, json: { code: 'INTERNAL_SERVER_ERROR' } }));
+
+  await page.getByRole('button', { name: '추가 문의하기', exact: true }).click();
+  const retry = page.getByRole('alert').getByRole('button', { name: '다시 시도하기', exact: true });
+  await expect(retry).toBeVisible();
+  await expect(page.getByLabel('문의 내용', { exact: true })).toHaveCount(0);
+  expect(calls.some((call) => call.endsWith('/message-draft'))).toBe(false);
+
+  detailAvailable = true;
+  await retry.click();
+  await expect(page.getByLabel('문의 내용', { exact: true })).toBeEditable();
 });
 
 for (const closeConflict of [false, true]) {
