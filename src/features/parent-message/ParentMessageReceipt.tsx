@@ -63,13 +63,18 @@ export function ParentMessageReceipt({ userId, messageId }: { userId: number; me
     try {
       const state = complaintId !== undefined ? await parentComplaintApi.closeComplaint(complaintId) : null;
       try {
+        let shouldReload = false;
         updateSentMessage(userId, messageId, (current) => {
-          // Another tab may already have sent a follow-up while the close was in flight.
           const lastMessage = getConversation(current).at(-1);
-          if (lastMessage?.id !== latest?.id || (state && current.serverComplaintStatus === 'OPEN')) return current;
+          if (lastMessage?.id !== latest?.id || (state && (current.serverComplaintStatus === 'OPEN' || current.updatedAt !== message.updatedAt))) {
+            // The local change could be a real follow-up or an older read. Check the server after the close.
+            shouldReload = state !== null;
+            return current;
+          }
           const confirmed = { ...current, parentAcknowledgedAt: new Date().toISOString(), needsTeacherReview: false };
           return state ? applyServerComplaintState(confirmed, state) : { ...confirmed, consultationStatus: 'complete' };
         });
+        if (shouldReload) sync.retry();
         setNotice('문의가 완료되었습니다.');
       } catch {
         if (state) sync.retry();

@@ -78,7 +78,7 @@ export function findSentSubmissionById(userId: number, submissionId: string) {
     getConversation(thread).some((entry) => entry.authorRole === 'parent' && entry.id === submissionId)) ?? null;
 }
 
-export function appendFollowUp(userId: number, draft: MessageDraft, submission: SentParentMessage) {
+export function appendFollowUp(userId: number, draft: MessageDraft, submission: SentParentMessage, previousThread?: SentParentMessage) {
   return updateSentMessage(userId, draft.threadId!, (thread) => {
     const conversation = getConversation(thread);
     const duplicate = conversation.find((entry) => entry.id === draft.messageId ||
@@ -92,7 +92,13 @@ export function appendFollowUp(userId: number, draft: MessageDraft, submission: 
         ? { ...thread, submissionAnalysis: submission.submissionAnalysis } : thread;
     }
     if (thread.teacherId !== draft.teacherId || thread.title !== draft.title) throw new Error('기존 문의 정보를 다시 확인해 주세요.');
-    const isComplete = thread.consultationStatus === 'complete';
+    // A list sync can see a new reply before the send response arrives, even when the turn is unchanged.
+    const isCurrentState = previousThread && thread.serverComplaintStatus === previousThread.serverComplaintStatus &&
+      thread.serverWaitingFor === previousThread.serverWaitingFor && thread.updatedAt === previousThread.updatedAt;
+    const serverState = isCurrentState && submission.serverComplaintStatus && submission.serverWaitingFor
+      ? { status: submission.serverComplaintStatus, waitingFor: submission.serverWaitingFor } : null;
+    const reopened = thread.consultationStatus === 'complete' &&
+      (submission.serverComplaintId === undefined || serverState?.status === 'OPEN');
     const updated: SentParentMessage = {
       ...thread,
       submissionAnalysis: submission.submissionAnalysis,
@@ -101,14 +107,12 @@ export function appendFollowUp(userId: number, draft: MessageDraft, submission: 
         id: submission.messageId, authorRole: 'parent', body: submission.finalBody, sentAt: submission.sentAt,
         ...(submission.serverMessageId !== undefined ? { serverMessageId: submission.serverMessageId } : {}),
       }],
-      updatedAt: submission.sentAt,
-      consultationStatus: isComplete ? 'inProgress' : thread.consultationStatus ?? 'before',
+      updatedAt: thread.updatedAt && compareMessageTimes(thread.updatedAt, submission.sentAt) > 0 ? thread.updatedAt : submission.sentAt,
+      consultationStatus: reopened ? 'inProgress' : thread.consultationStatus ?? 'before',
       // Only a follow-up on a completed consultation asks the teacher to recheck; an open flag stays until the teacher replies.
-      needsTeacherReview: isComplete || thread.needsTeacherReview,
+      needsTeacherReview: reopened || thread.needsTeacherReview,
       auditLog: [...thread.auditLog, ...submission.auditLog],
     };
-    return submission.serverComplaintStatus && submission.serverWaitingFor
-      ? applyServerComplaintState(updated, { status: submission.serverComplaintStatus, waitingFor: submission.serverWaitingFor })
-      : updated;
+    return serverState ? applyServerComplaintState(updated, serverState) : updated;
   });
 }

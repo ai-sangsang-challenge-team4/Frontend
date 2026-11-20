@@ -572,6 +572,50 @@ test('창에 포커스가 돌아와 대화를 조회하는 동안에도 한 번�
   }
 });
 
+for (const reopened of [false, true]) {
+  test(`늦은 종료 응답을 적용할 수 없으면 최신 조회에서 ${reopened ? '재개된 문의를 유지한다' : '종료 상태를 복원한다'}`, async ({ page }) => {
+    const initialRead = page.waitForResponse((response) => response.url().endsWith('/api/complaints/42/messages'));
+    await setup(page, { lifecycle: { status: 'ANSWERED' } });
+    const answered: ParentConversationResponse = await (await initialRead).json();
+    const openConversation: ParentConversationResponse = { ...answered, status: 'OPEN', waitingFor: 'TEACHER', messages: [...answered.messages] };
+    if (reopened) {
+      openConversation.messages.push({ messageId: 3, type: 'PARENT_INQUIRY', senderRole: 'PARENT', senderName: 'Demo Parent',
+        content: '다른 기기에서 보낸 추가 문의', status: 'SENT', sentAt: '2026-10-30T10:03:00', readAt: null });
+    }
+
+    let finishClose!: () => void;
+    const closeGate = new Promise<void>((resolve) => { finishClose = resolve; });
+    await page.route('**/api/complaints/42/close', async (route) => {
+      await closeGate;
+      await route.fallback();
+    });
+    let reads = 0;
+    await page.route('**/api/complaints/42/messages', async (route) => {
+      reads += 1;
+      if (reads === 1 || reopened) await route.fulfill({ json: openConversation });
+      else await route.fallback();
+    });
+
+    try {
+      await page.getByRole('button', { name: '문의 완료', exact: true }).click();
+      await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+      const waiting = page.getByText(/선생님의 답변을 기다리고 있어요/);
+      await expect(waiting).toBeVisible();
+      finishClose();
+      await expect.poll(() => reads, { timeout: 4000 }).toBeGreaterThanOrEqual(2);
+      if (reopened) {
+        await expect(waiting).toBeVisible();
+        await expect(page.getByText('상담 완료', { exact: true })).toHaveCount(0);
+      } else {
+        await expect(page.getByText('상담 완료', { exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: '추가 문의하기', exact: true })).toBeEnabled();
+      }
+    } finally {
+      finishClose();
+    }
+  });
+}
+
 for (const status of ['ANSWERED', 'CLOSED'] as const) {
   test(`${status} 문의에 추가 문의를 보내면 기존 민원이 교사 답변 대기로 재개된다`, async ({ page }) => {
     const calls = await setup(page, { followUp: true, lifecycle: { status } });

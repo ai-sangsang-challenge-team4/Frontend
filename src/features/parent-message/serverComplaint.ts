@@ -3,7 +3,7 @@ import type { DetectedFactorCode } from '../escalation/escalationTypes';
 import { requireMaskedText } from '../pii/masking';
 import { parentComplaintApi, type ComplaintRecipientResponse, type ParentFollowUpResponse, type RiskRevisionResponse, type RiskSummaryResponse } from './api/parentComplaintApi';
 import { appendFollowUp, applyServerComplaintState, findSentSubmission } from './conversation';
-import { storeSentMessage, type MessageDraft, type ServerComplaintDraft } from './messageDraft';
+import { findSentMessage, storeSentMessage, type MessageDraft, type ServerComplaintDraft } from './messageDraft';
 import { OFFICIAL_MEANING_WARNING } from './parentMessageApi';
 import { getRiskTagNames, type RiskTagNames } from '../risk-analysis/riskTagCatalog';
 import type { ComplaintResponse, SubmissionAnalysisResponse } from './api/parentComplaintTypes';
@@ -284,9 +284,10 @@ export async function submitServerDraft(
   const content = requireMaskedText(selected.text.trim());
   const originalBody = requireMaskedText(draft.body);
 
+  const previousThread = draft.threadId ? findSentMessage(userId, draft.threadId) ?? undefined : undefined;
   let sentAt = new Date().toISOString();
   let submission: SubmissionAnalysisResponse | undefined;
-  let complaintState: Pick<ComplaintResponse, 'status' | 'waitingFor'> = { status: 'OPEN', waitingFor: 'TEACHER' };
+  let complaintState: Pick<ComplaintResponse, 'status' | 'waitingFor'> | null = null;
   try {
     if (server.serverMessageId !== undefined) {
       const messageId = server.serverMessageId;
@@ -302,6 +303,8 @@ export async function submitServerDraft(
       }
       sentAt = toServerInstant(sent.sentAt) ?? sentAt;
       submission = sent;
+      // The follow-up response reports the message's status. Its complaint turn confirms the reopen.
+      if (sent.waitingFor === 'TEACHER') complaintState = { status: 'OPEN', waitingFor: sent.waitingFor };
     } else {
       if (content !== server.content) {
         await parentComplaintApi.updateDraft(server.complaintId, { content }, signal);
@@ -310,7 +313,8 @@ export async function submitServerDraft(
       }
       const sent = await parentComplaintApi.submit(server.complaintId, signal);
       submission = sent;
-      if (sent.status && sent.waitingFor) complaintState = { status: sent.status, waitingFor: sent.waitingFor };
+      complaintState = sent.status && sent.waitingFor ? { status: sent.status, waitingFor: sent.waitingFor }
+        : { status: 'OPEN', waitingFor: 'TEACHER' };
     }
   } catch (error) {
     if (signal.aborted || isAbortError(error) || isRiskAnalysisSafetyError(error)) throw error;
@@ -321,7 +325,7 @@ export async function submitServerDraft(
       const sent = conversation?.messages.find((message) => message.messageId === messageId && message.status !== 'DRAFT' && message.content === content);
       if (!conversation || !sent) throw error;
       sentAt = toServerInstant(sent.sentAt) ?? sentAt;
-      complaintState = conversation;
+      if (conversation.status && conversation.waitingFor) complaintState = conversation;
     } else {
       const state = await getSubmittedState(server.complaintId, error, signal);
       if (!state) throw error;
@@ -329,7 +333,7 @@ export async function submitServerDraft(
     }
   }
 
-  const message = applyServerComplaintState({
+  const submittedMessage: SentParentMessage = {
     ...(submission ? { submissionAnalysis: toSubmissionAnalysis(submission) } : {}),
     parentName,
     messageId: draft.messageId,
@@ -346,9 +350,10 @@ export async function submitServerDraft(
     sentAt,
     auditLog: [{ action: 'SENT', at: sentAt, selectionType: selected.selectionType }],
     consultationStatus: 'before',
-  }, complaintState);
+  };
+  const message = complaintState ? applyServerComplaintState(submittedMessage, complaintState) : submittedMessage;
   try {
-    return draft.threadId ? appendFollowUp(userId, draft, message) : storeSentMessage(userId, message);
+    return draft.threadId ? appendFollowUp(userId, draft, message, previousThread) : storeSentMessage(userId, message);
   } catch {
     if (draft.threadId) throw new Error('전송은 완료됐지만 문의 내역에 저장하지 못했습니다. 작성한 내용은 유지됩니다. 다시 시도해 주세요.');
     // The server already has the inquiry; only the local copy is missing.

@@ -4,7 +4,8 @@ import { getApiErrorMessage, toApiError } from '../../src/shared/api/apiError';
 import { httpParentComplaintApi } from '../../src/features/parent-message/api/httpParentComplaintApi';
 import type { RiskRevisionResponse } from '../../src/features/parent-message/api/parentComplaintTypes';
 import type { MessageDraft, ServerComplaintDraft } from '../../src/features/parent-message/messageDraft';
-import { createMessageReview, getSelectedMessage } from '../../src/features/parent-message/parentMessageTypes';
+import { createMessageReview, getSelectedMessage, type SentParentMessage } from '../../src/features/parent-message/parentMessageTypes';
+import { syncServerComplaints } from '../../src/features/parent-message/serverHistory';
 import { detectionConfidence, detectionEvidence, detectionState } from '../../src/features/parent-message/riskDetectorResults';
 import {
   analyzeServerDraft,
@@ -23,7 +24,7 @@ type FetchCall = { url: string; method: string; body: unknown };
 const originalFetch = globalThis.fetch;
 let calls: FetchCall[] = [];
 
-function mockFetch(handler: (call: FetchCall) => Response) {
+function mockFetch(handler: (call: FetchCall) => Response | Promise<Response>) {
   globalThis.fetch = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const call = { url: String(input), method: init.method ?? 'GET', body: init.body ? JSON.parse(String(init.body)) : undefined };
     calls.push(call);
@@ -35,7 +36,7 @@ function json(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
-function route(routes: Record<string, () => Response>) {
+function route(routes: Record<string, () => Response | Promise<Response>>) {
   return (call: FetchCall) => {
     const key = `${call.method} ${new URL(call.url).pathname}`;
     const respond = routes[key] ?? (key === 'GET /risk-tags' ? () => json(200, []) : undefined) ?? (key === 'POST /complaints/42/mask'
@@ -405,13 +406,44 @@ test('detector 결과의 새 상태·복수 근거·이전 boolean 응답을 구
   expect(detectionConfidence(null)).toBe('제공되지 않음');
 });
 
-function seedFollowUpThread() {
+function seedFollowUpThread(overrides: Partial<SentParentMessage> = {}) {
   const storage = installStorage();
   storage.set('teacher-hub.parent-sent-messages.101', JSON.stringify([{
     messageId: 'thread-local', serverComplaintId: 42, teacherId: '20', teacherName: 'Demo Teacher', title: server().title,
-    originalBody: '최초 문의', finalBody: '최초 문의', status: 'SENT', selectionType: 'ORIGINAL', selectionSource: 'ORIGINAL', sentAt: '2026-10-30T10:00:00Z', auditLog: [],
+    originalBody: '최초 문의', finalBody: '최초 문의', status: 'SENT', selectionType: 'ORIGINAL', selectionSource: 'ORIGINAL', sentAt: '2026-10-30T10:00:00Z', auditLog: [], ...overrides,
   }]));
   return storage;
+}
+
+for (const scenario of [
+  { label: '상태 정보가 없으면 이전 종료 상태를 유지한다', waitingFor: undefined, syncNewerStatus: false, expectedStatus: 'CLOSED', expectedTurn: 'NONE', expectedConsultation: 'complete' },
+  { label: '교사 차례를 확인하면 민원 재개를 반영한다', waitingFor: 'TEACHER', syncNewerStatus: false, expectedStatus: 'OPEN', expectedTurn: 'TEACHER', expectedConsultation: 'inProgress' },
+  { label: '전송 중 조회한 최신 답변 상태를 유지한다', waitingFor: 'TEACHER', syncNewerStatus: true, expectedStatus: 'ANSWERED', expectedTurn: 'PARENT', expectedConsultation: 'inProgress' },
+] as const) {
+  test(`추가 문의 응답은 ${scenario.label}`, async () => {
+    const original = scenario.syncNewerStatus
+      ? { serverComplaintStatus: 'ANSWERED', serverWaitingFor: 'PARENT', consultationStatus: 'inProgress' } as const
+      : { serverComplaintStatus: 'CLOSED', serverWaitingFor: 'NONE', consultationStatus: 'complete' } as const;
+    seedFollowUpThread({ ...original, updatedAt: '2026-10-30T10:01:00.000Z' });
+    const sentAt = '2026-10-30T10:03:00.000Z';
+    mockFetch(route({
+      'PUT /complaints/42/message-draft': () => json(200, { messageId: 101, content: '추가 문의', contentVersion: 1 }),
+      'POST /complaints/42/messages/101/send': async () => {
+        if (scenario.syncNewerStatus) await syncServerComplaints(101);
+        return json(200, { messageId: 101, content: '추가 문의', status: 'SENT', sentAt, waitingFor: scenario.waitingFor });
+      },
+      'GET /complaints': () => json(200, { content: [{ complaintId: 42, title: server().title,
+        status: 'ANSWERED', waitingFor: 'PARENT', latestReceivedAt: sentAt }], hasNext: false }),
+    }));
+    const current = draft({ threadId: 'thread-local', title: server().title, body: '추가 문의', server: server({ serverMessageId: 101, content: '추가 문의' }) });
+    const review = createMessageReview({ status: 'ready', revisedText: null, risks: [], meaningWarning: null });
+    const result = await submitServerDraft(101, current, review, new AbortController().signal);
+    expect(result).toMatchObject({
+      serverComplaintStatus: scenario.expectedStatus, serverWaitingFor: scenario.expectedTurn,
+      consultationStatus: scenario.expectedConsultation,
+    });
+    expect(result.conversation?.at(-1)).toMatchObject({ serverMessageId: 101 });
+  });
 }
 
 test('서로 다른 로컬 초안이 같은 서버 메시지를 보내도 대화에는 한 번만 표시한다', async () => {
