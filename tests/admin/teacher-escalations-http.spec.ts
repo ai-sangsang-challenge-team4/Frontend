@@ -84,7 +84,9 @@ test('서버 전체 건수와 페이지를 표시하고 상태 전환 시 첫 �
   await page.getByRole('tab', { name: '검토 중 1', exact: true }).click();
   await expect(rows(page).getByRole('link')).toHaveCount(1);
   await expect(rows(page)).toContainText('관리자 검토 중');
-  await expect(rows(page).getByRole('link')).toHaveAttribute('href', '/teacher/messages/22');
+  await expect(rows(page).getByRole('link')).toHaveAccessibleName(
+    /학교 공동 검토 요청 11\s+긴급\s+테스트학생11 학생.*관리자 검토 중.*10:00 공유/,
+  );
   expect(calls.some((url) => url.searchParams.get('page') === '0' && url.searchParams.get('status') === 'UNDER_REVIEW')).toBe(true);
   await page.keyboard.press('ArrowRight');
   await expect(page.getByRole('tab', { name: '처리 완료 1', exact: true })).toBeFocused();

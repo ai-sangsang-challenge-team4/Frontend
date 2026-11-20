@@ -111,7 +111,7 @@ npx playwright test --config=playwright.admin-http.config.ts
 - `admin-escalation`: mock 어댑터로 교사 공유 → 관리자 검토 시작·처리 완료, 긴급 하향 승인 대기(중복 요청 차단) → 결정 전 완료 불가 → 승인 시 위험도와 잠금 해제 반영, 미공유 하향의 승인 대기, HIGH 공유 버튼 비활성, 권한 차단을 확인합니다.
 - `escalation-http-api`: fetch를 대체해 HTTP 어댑터의 경로·본문·`current` 404 → `null`·409 메시지 노출을 확인합니다. 교사 공유 목록의 페이지·검색·상태·위험도 쿼리, 인증 헤더와 공유 건 조회의 접근 거부도 검증합니다. **실제 서버 호출은 아닙니다.**
 - `playwright.admin-http.config.ts`: HTTP 어댑터를 켜고 실제 관리자 화면에서 7개 API 호출, 검토 시작→완료, 새 응답 필드·이전 응답 호환성·로그 누락을 확인합니다. #77의 잠정 분석·직접 검토 안내와 시스템 95/100·교사 5/7단계·현재 적용 등급 구분도 확인합니다. 데스크톱·모바일과 UTC 브라우저에서 실행하며, 백엔드 응답은 명세 기반 fixture로 대체합니다. 실제 배포 AI 연결 테스트는 아닙니다.
-- `teacher-escalations-http.spec.ts`: 같은 HTTP 설정에서 교사 공유 내역의 서버 전체 건수·페이지 이동·상태 전환·위험도/학생명 검색·검색 결과 없음·실패 재시도·늦은 응답 차단을 검증합니다. 공유 내역이 줄어 현재 페이지가 사라지면 마지막 유효 페이지로 복귀하는지와 모바일 가로 넘침도 확인합니다.
+- `teacher-escalations-http.spec.ts`는 공유 API만 HTTP로 설정한 테스트 전용 구성에서 교사 공유 내역의 전체 건수·페이지 이동·상태 전환·위험도/학생명 검색·검색 결과 없음·실패 재시도·늦은 응답 차단을 검증합니다. 링크의 접근성 이름, 마지막 유효 페이지 복귀, 모바일 가로 넘침도 확인합니다.
 
 Mock 공유 내역 초기화:
 
@@ -121,4 +121,4 @@ localStorage.removeItem('teacher-hub.emergency-reviews.v2');
 location.reload();
 ```
 
-정책 동의·미공유 재검토·교사 반려 후 재요청의 HTTP 화면 검증: `npx playwright test --config=playwright.integration-http.config.ts` (명세 fixture 사용).
+`npx playwright test --config=playwright.integration-http.config.ts`는 명세 fixture로 정책 동의·미공유 재검토·교사 반려 후 재요청을 검증합니다. 메시지와 공유 API가 모두 HTTP인 이 구성에서 교사 공유 링크를 클릭해 민원 상세와 대화가 표시되는지도 확인합니다.

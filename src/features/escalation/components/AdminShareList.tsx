@@ -21,7 +21,6 @@ export function AdminShareList({ escalations }: AdminShareListProps) {
       {escalations.map((escalation) => (
         <article className="board-thread-row teacher-admin-share-row" key={escalation.escalationId}>
           <Link
-            aria-label={escalation.complaintTitle}
             className="board-thread-button teacher-admin-share-link"
             to={`/teacher/messages/${escalation.complaintId}`}
           >
