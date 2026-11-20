@@ -126,14 +126,14 @@ import {
   syncThreadWithEmergencyReview,
   systemRiskLevelFromApi,
 } from './escalationSnapshot';
-import { messageApiMode, teacherInboxApi } from './api/teacherInboxApi';
+import { messageApiMode } from './api/teacherInboxApi';
 import { initialTeacherThreads } from './mockThreads';
 import { persistTeacherParentThread, readTeacherParentThreads } from './teacherParentMessages';
 import { useActiveMessageCount } from './useActiveMessageCount';
-import { getDefaultOriginalReplyId, threadStatus } from './serverThreads';
+import { getDefaultOriginalReplyId } from './serverThreads';
 import { useServerTeacherInbox } from './useServerTeacherInbox';
 import { useServerReply, type ServerReplyAction } from './useServerReply';
-import { getServerCloseBlockReason, getServerReplyBlockReason } from './serverReplies';
+import { getServerReplyBlockReason } from './serverReplies';
 import { TEACHER_RESPONSE_MAX_LENGTH } from './api/teacherInboxTypes';
 
 const isServerInbox = messageApiMode === 'http';
@@ -486,7 +486,7 @@ function ThreadRow({
         <div className="board-thread-status">
           <StatusChip
             className="board-status-chip"
-            label={statusLabel[thread.status]}
+            label={thread.serverStatus?.status === 'ANSWERED' ? '답변 완료' : statusLabel[thread.status]}
             size="md"
             status={statusChipStatus[thread.status]}
           />
@@ -1569,7 +1569,6 @@ function isAcknowledgedByParent(thread: BoardThread) {
 }
 
 type DetailProps = {
-  onConsultationComplete: (threadId: string) => void;
   // Server inbox only: reloads the thread's detail after a failed request.
   onReloadServerDetail?: (threadId: string) => void;
   initialOriginalViewer?: OriginalMessageRequest;
@@ -1592,7 +1591,6 @@ type DetailProps = {
 function ThreadDetail({
   onAdminShared,
   onAiObjection,
-  onConsultationComplete,
   initialOriginalViewer,
   initialTab,
   onBack,
@@ -1926,16 +1924,8 @@ function ThreadDetail({
                   </>
                 )}
               </div>
-              <div className="board-answer-actions">
-                <button
-                  className="board-outline-button board-consultation-complete-button"
-                  disabled={thread.status === 'complete'}
-                  onClick={() => onConsultationComplete(thread.id)}
-                  type="button"
-                >
-                  {thread.status === 'complete' ? '상담 완료됨' : '상담 완료 처리'}
-                </button>
-                {serverReplyBlockReason ? null : (
+              {serverReplyBlockReason ? null : (
+                <div className="board-answer-actions">
                   <button
                     className="board-primary-button board-reply-compose-button"
                     onClick={() => onOpenReplyComposer(thread.id)}
@@ -1943,8 +1933,8 @@ function ThreadDetail({
                   >
                     {hasDraft ? '답변 이어서 작성하기' : '답변 작성하러 가기'}
                   </button>
-                )}
-              </div>
+                </div>
+              )}
             </>
           )}
           </div>
@@ -2097,7 +2087,7 @@ function ReplySendCompleteDialog({
         <p>
           {thread?.parentName ?? '학부모'}에게 답변을 전송했습니다.
           <br />
-          상담을 마치면 상세 화면에서 상담 완료 처리해 주세요.
+          학부모가 답변을 확인한 뒤 문의를 완료하거나 추가 문의를 보낼 수 있습니다.
         </p>
       </div>
     </Modal>
@@ -2461,7 +2451,8 @@ export function TeacherMessages({
     onMessage: setToastMessage,
   });
   // The sidebar badge follows the inbox's default "진행 중 상담" filter (the server's OPEN count over HTTP).
-  const serverActiveMessageCount = useActiveMessageCount(user?.userId ?? 0);
+  const [inboxRevision, setInboxRevision] = useState(0);
+  const serverActiveMessageCount = useActiveMessageCount(user?.userId ?? 0, inboxRevision);
   const activeMessageCount = isServerInbox
     ? serverActiveMessageCount
     : threads.filter((thread) => thread.status !== 'complete').length;
@@ -2567,35 +2558,6 @@ export function TeacherMessages({
     });
     return () => controller.abort();
   }, [loadServerDetail, selectedThreadId]);
-
-  // A server thread closes through POST /close; the reloaded detail then shows it as complete.
-  const closingServerThreadIds = useRef(new Set<string>());
-  const completeServerConsultation = async (thread: BoardThread) => {
-    const complaintId = thread.serverComplaintId;
-    if (!complaintId || closingServerThreadIds.current.has(thread.id)) return;
-    const blockReason = getServerCloseBlockReason(thread);
-    if (blockReason) {
-      setToastMessage(blockReason);
-      return;
-    }
-    closingServerThreadIds.current.add(thread.id);
-    try {
-      await teacherInboxApi.closeComplaint(complaintId);
-      // Shown as complete even if the following reload fails, so the close button cannot be pressed again.
-      updateThread(thread.id, (current) => ({
-        ...current,
-        serverStatus: { status: 'CLOSED', waitingFor: 'NONE' },
-        status: threadStatus('CLOSED', 'NONE', true),
-      }));
-      void serverInbox.reloadList();
-      setToastMessage('상담을 완료 처리했습니다.');
-    } catch (error) {
-      setToastMessage(getApiErrorMessage(error, '상담을 완료 처리하지 못했습니다. 다시 시도해 주세요.'));
-    } finally {
-      closingServerThreadIds.current.delete(thread.id);
-      refreshServerThread(thread.id);
-    }
-  };
 
   const retryServerDetail = (threadId: string) => {
     loadServerDetail(threadId).catch((error: unknown) => {
@@ -3132,7 +3094,11 @@ export function TeacherMessages({
       void serverReply.submit(thread, user?.name ?? '선생님').then((sent) => {
         if (!sent) {
           sentReplyKeysRef.current.delete(submissionKey);
-        } else if (replyComposerThreadIdRef.current === threadId) {
+          return;
+        }
+        serverInbox.reloadList();
+        setInboxRevision((value) => value + 1);
+        if (replyComposerThreadIdRef.current === threadId) {
           showSentReply();
         } else {
           // The teacher left this composer while sending; stay where they are.
@@ -3336,14 +3302,6 @@ export function TeacherMessages({
         />
         <main className="board-detail-page">
           <ThreadDetail
-            onConsultationComplete={(threadId) => {
-              const target = threads.find((thread) => thread.id === threadId);
-              if (target?.serverComplaintId) {
-                void completeServerConsultation(target);
-                return;
-              }
-              updateThread(threadId, (thread) => ({ ...thread, status: 'complete', needsTeacherReview: false }));
-            }}
             initialOriginalViewer={
               initialOriginalViewerRequest?.threadId === selectedThread.id
                 ? initialOriginalViewerRequest.request

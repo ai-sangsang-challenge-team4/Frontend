@@ -183,6 +183,65 @@ test('교사 공유 내역의 링크를 누르면 메시지 목록에 없는 서
   await expect(page.getByRole('article').getByText('문의 요약', { exact: true })).toBeVisible();
 });
 
+test('교사 답변을 전송하면 ANSWERED로 표시하고 미처리 목록을 다시 조회한다', async ({ page }) => {
+  const replyContent = '학교 일정을 확인해 안내드리겠습니다.';
+  const initialMessage = { messageId: 1, senderRole: 'PARENT', senderName: '학부모', content: '일정 문의입니다.',
+    sentAt: '2026-10-30T09:00:00', summarized: false };
+  const reply = { messageId: 55, senderRole: 'TEACHER', senderName: '선생님', content: replyContent,
+    sentAt: '2026-10-30T10:00:00', summarized: false };
+  let answered = false;
+  let openRequestsAfterReply = 0;
+  const state = () => answered ? { status: 'ANSWERED', waitingFor: 'PARENT' } : { status: 'OPEN', waitingFor: 'TEACHER' };
+  await setup(page, 'TEACHER', async (route, key) => {
+    let json = teacherComplaintJson(key, review);
+    switch (key) {
+      case 'GET /teacher/complaints': {
+        const status = new URL(route.request().url()).searchParams.get('status');
+        if (answered && status === 'OPEN') openRequestsAfterReply += 1;
+        const content = !status || status === state().status ? [{ complaintId: 12, title: '일정 문의', studentName: '학생',
+          counterpartName: '학부모', ...state(), riskLevel: 'LOW', latestReceivedAt: initialMessage.sentAt }] : [];
+        json = { content, page: 0, size: 10, totalElements: content.length, totalPages: content.length, hasNext: false };
+        break;
+      }
+      case 'GET /teacher/complaints/12': json = { ...json as object, title: '일정 문의', ...state(), riskLevel: 'LOW' }; break;
+      case 'GET /teacher/complaints/12/messages': json = { complaintId: 12, allowedActions: [], messages: answered ? [initialMessage, reply] : [initialMessage] }; break;
+      case 'GET /teacher/complaints/12/risk': json = { ...json as object, riskScore: 10, riskLevel: 'LOW', currentRiskScore: 10, currentRiskLevel: 'LOW', safetyLock: false }; break;
+      case 'GET /teacher/complaints/12/response-draft':
+        await route.fulfill({ status: 404, json: { code: 'RESPONSE_DRAFT_NOT_FOUND' } });
+        return true;
+      case 'POST /teacher/complaints/12/response/ai-draft':
+        json = { complaintId: 12, content: '생성된 초안입니다.', modelName: 'test', generatedAt: reply.sentAt };
+        break;
+      case 'POST /teacher/complaints/12/responses':
+        expect(route.request().postDataJSON()).toEqual({ content: replyContent });
+        answered = true;
+        json = { responseId: 55, complaintId: 12, content: replyContent, complaintStatus: 'ANSWERED', waitingFor: 'PARENT', sentAt: reply.sentAt };
+        break;
+      default: break;
+    }
+    if (json === undefined) return false;
+    await route.fulfill({ json });
+    return true;
+  });
+  await page.goto('/teacher/messages/12/response');
+  await page.getByRole('tab', { name: '직접 작성', exact: true }).click();
+  await page.getByLabel('선생님 답변', { exact: true }).fill(replyContent);
+  await page.getByRole('button', { name: '검토 후 전송', exact: true }).click();
+  const confirm = page.getByRole('dialog', { name: '답변 전 확인', exact: true });
+  await confirm.getByRole('checkbox').check();
+  await confirm.getByRole('button', { name: '최종 전송', exact: true }).click();
+  await page.getByRole('dialog', { name: '답변 전송 완료', exact: true }).getByRole('button', { name: '확인', exact: true }).click();
+  await expect(page.getByText(replyContent, { exact: true })).toBeVisible();
+  await expect(page.getByText(/학부모의 답장을 기다리는 중/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /상담 완료 처리|상담 완료됨/ })).toHaveCount(0);
+  await expect.poll(() => openRequestsAfterReply).toBeGreaterThan(1);
+  await page.getByRole('button', { name: '목록으로 돌아가기', exact: true }).click();
+  await expect(page.locator('.board-thread-row').filter({ hasText: '일정 문의' })).toHaveCount(0);
+  await page.getByRole('button', { name: '상담 상태 필터', exact: true }).click();
+  await page.getByRole('option', { name: '전체 상담', exact: true }).click();
+  await expect(page.locator('.board-thread-row').filter({ hasText: '일정 문의' })).toContainText('답변 완료');
+});
+
 for (const canCreateEvidence of [true, false]) {
   test(`공유 창의 증빙 ${canCreateEvidence ? '선택 첨부' : '생성 불가'}와 공유 실패 재시도는 선택한 HTTP scope를 유지한다`, async ({ page }) => {
     let shared = false;

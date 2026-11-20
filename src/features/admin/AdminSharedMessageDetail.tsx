@@ -39,7 +39,7 @@ const detailTabLabel: Record<DetailTab, string> = {
 const detailTabs: DetailTab[] = ['shared', 'risk', 'history'];
 
 const messageStatusLabel: Record<MessageStatus, string> = { DRAFT: '작성 중', SENT: '전송됨', READ: '읽음' };
-const complaintStatusLabel: Record<ComplaintStatus, string> = { DRAFT: '작성 중', OPEN: '진행 중', CLOSED: '종료' };
+const complaintStatusLabel: Record<ComplaintStatus, string> = { DRAFT: '작성 중', OPEN: '진행 중', ANSWERED: '답변 완료', CLOSED: '종료' };
 const factorStateVariant: Record<RiskFactorStatus, BadgeVariant> = {
   PRESENT: 'danger', ABSENT: 'neutral', BOUNDARY: 'warning', UNKNOWN: 'neutral',
 };

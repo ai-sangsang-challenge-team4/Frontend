@@ -90,7 +90,7 @@ test('본인 문의만 표시하고 상담 상태, 검색, 중요 문의를 유�
   await expect(page.getByRole('heading', { name: '작성할 문의를 찾을 수 없습니다.', exact: true })).toBeVisible();
 });
 
-test('완료된 문의에 추가 질문을 연결하고 교사가 재확인 및 완료 처리한다', async ({ page }, testInfo) => {
+test('완료된 문의를 추가 질문으로 재개하고 교사 답변 뒤 학부모가 완료한다', async ({ page }, testInfo) => {
   await login(page);
   await seed(page);
   await page.goto('/parent/messages');
@@ -152,14 +152,11 @@ test('완료된 문의에 추가 질문을 연결하고 교사가 재확인 및 
   await page.getByRole('dialog', { name: '답변 전송 완료', exact: true }).getByRole('button', { name: '확인', exact: true }).click();
   expect(await storedStatus(page, 'done')).toBe('inProgress');
   await expect(row.getByText('재확인 필요', { exact: true })).toHaveCount(0);
-  await page.locator('.board-answer-actions').getByRole('button', { name: '상담 완료 처리', exact: true }).click();
-  await page.reload();
-  await expect(page.getByRole('button', { name: '상담 완료됨', exact: true })).toBeDisabled();
-  expect(await storedStatus(page, 'done')).toBe('complete');
+  await expect(page.getByRole('button', { name: '상담 완료 처리', exact: true })).toHaveCount(0);
   await expect(controls.getByText('학부모 확인', { exact: true })).toHaveCount(0);
   await login(page);
   await page.goto('/parent/messages');
-  await expect(parentRow.getByText('상담 완료', { exact: true })).toBeVisible();
+  await expect(parentRow.getByText('상담 중', { exact: true })).toBeVisible();
   const recheck = parentRow.locator('.parent-inquiry-title-row').getByText('재확인 필요', { exact: true });
   await expect(recheck).toBeVisible();
   const titleBox = (await parentRow.locator('.parent-inquiry-title-row strong').boundingBox())!;
@@ -175,7 +172,10 @@ test('완료된 문의에 추가 질문을 연결하고 교사가 재확인 및 
   await expect(acknowledgedButton).toBeDisabled();
   await expect(acknowledgeHint).toBeVisible();
   await expect(acknowledgedButton).toHaveAccessibleDescription('이 답변은 확인을 마쳤어요.');
+  await page.getByRole('button', { name: '문의 완료', exact: true }).click();
   await expect(infoCard.getByText('상담 완료', { exact: true })).toBeVisible();
+  expect(await storedStatus(page, 'done')).toBe('complete');
+  await expect(page.getByRole('button', { name: '문의 완료', exact: true })).toHaveCount(0);
   await page.reload();
   await expect(acknowledgedButton).toBeDisabled();
   await expect(acknowledgedButton).toHaveAccessibleDescription('이 답변은 확인을 마쳤어요.');
@@ -201,8 +201,7 @@ test('교사 화면에는 확인했어요와 상담 시작이 없고 카드에�
     await page.goto(`/teacher/messages/${id}`);
     const controls = page.locator('.board-consultation-controls');
     await expect(page.locator('.board-consultation-controls .ui-status-chip')).toHaveCount(0);
-    await expect(page.locator('.board-answer-actions').getByRole('button', { name: status === 'complete' ? '상담 완료됨' : '상담 완료 처리', exact: true }))
-      .toBeEnabled({ enabled: status !== 'complete' });
+    await expect(page.getByRole('button', { name: /상담 완료 처리|상담 완료됨/ })).toHaveCount(0);
     expect(await storedStatus(page, id)).toBe(status);
     await expect(page.getByRole('button', { name: /확인했어요/ })).toHaveCount(0);
     await expect(controls.getByText('학부모 확인', { exact: true })).toHaveCount(id === 'active' ? 1 : 0);

@@ -1,4 +1,4 @@
-import type { WaitingFor } from '../../shared/types';
+import type { ComplaintStatus, WaitingFor } from '../../shared/types';
 import type { ReplyTemplateDraft } from '../message/replyTemplates';
 import type { ReplyDraftState, ReplyDraftTab } from '../message/types';
 import type { RiskSummaryResponse } from './api/parentComplaintTypes';
@@ -84,8 +84,8 @@ export type SentParentMessage = {
   sentAt: string;
   auditLog: { action: 'SENT'; at: string; selectionType: MessageSelectionType }[];
   consultationStatus?: ConsultationStatus;
-  // The server's turn from GET /complaints (http mode). PARENT means the teacher replied, which the list
-  // reports before the conversation with the reply is loaded.
+  // The latest server state, which the list reports before the conversation is loaded.
+  serverComplaintStatus?: ComplaintStatus;
   serverWaitingFor?: WaitingFor;
   conversation?: ConversationMessage[];
   isImportant?: boolean;

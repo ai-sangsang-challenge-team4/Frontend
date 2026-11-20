@@ -19,7 +19,7 @@ export type ComplaintCreateRequest = {
 
 export const COMPLAINT_TITLE_MAX_LENGTH = 100;
 
-// POST /complaints (201) and GET /complaints/{id}/status.
+// POST /complaints (201), GET /complaints/{id}/status, and POST /complaints/{id}/close.
 export type ComplaintResponse = {
   complaintId: number;
   status: ComplaintStatus;

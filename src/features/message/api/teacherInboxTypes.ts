@@ -109,12 +109,6 @@ export type TeacherOriginalViewResponse = {
   viewedAt: string;
 };
 
-// POST /teacher/complaints/{complaintId}/close answers { message } instead of a DTO. Only an OPEN complaint
-// waiting for the parent closes (else 409 RESPONSE_NOT_EDITABLE with the reason); answering does not close it on its own.
-export type TeacherCloseResponse = {
-  message: string;
-};
-
 // GET /teacher/complaints/{complaintId}/response-templates. Latest active version of each High template.
 // An empty list when the complaint has no completed analysis; 409 RESPONSE_NOT_EDITABLE when the effective
 // level is not HIGH, the complaint is not waiting for the teacher, or the safety lock holds.
@@ -175,7 +169,7 @@ export type TeacherResponseDraftResponse = {
 };
 
 // POST /teacher/complaints/{complaintId}/responses. Sends the reply (the saved draft becomes it) and
-// hands the turn to the parent (waitingFor PARENT).
+// moves the complaint to ANSWERED and hands the turn to the parent.
 export type TeacherResponseSubmissionResponse = {
   responseId: number;
   complaintId: number;

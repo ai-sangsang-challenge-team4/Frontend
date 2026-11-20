@@ -138,6 +138,7 @@ export const API_ERROR_CODE_MESSAGES: Record<string, string> = {
   EMAIL_ALREADY_EXISTS: '이미 가입된 이메일이에요.',
   TEACHER_NOT_FOUND: '선생님 정보를 찾을 수 없어요.',
   INVALID_COMPLAINT_STATUS: '이미 처리되었거나 현재 상태에서는 처리할 수 없는 문의예요.',
+  COMPLAINT_NOT_CLOSABLE: '문의 상태가 변경되어 완료할 수 없어요. 최신 상태를 확인해 주세요.',
   ANALYSIS_IN_PROGRESS: 'AI가 문의 내용을 분석하고 있어요. 잠시 후 다시 확인해 주세요.',
   ANALYSIS_ACCESS_DENIED: '해당 분석 결과를 확인할 권한이 없어요.',
   RISK_ANALYSIS_FAILED: 'AI 분석을 완료하지 못했어요. 잠시 후 다시 시도해 주세요.',
@@ -164,7 +165,7 @@ const SERVER_MESSAGE_FIRST_CODES = new Set([
   'EMERGENCY_REVIEW_DUPLICATE',
   'EMERGENCY_REVIEW_ACCESS_DENIED',
   'ADMIN_NOT_FOUND',
-  // e.g. "이미 완료된 민원은 다시 완료 처리할 수 없습니다." on POST /teacher/complaints/{id}/close.
+  'COMPLAINT_NOT_CLOSABLE',
   'RESPONSE_NOT_EDITABLE',
 ]);
 

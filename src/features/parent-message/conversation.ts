@@ -1,4 +1,5 @@
 import { findSentMessage, readSentMessages, updateSentMessage, type MessageDraft } from './messageDraft';
+import type { ComplaintResponse } from './api/parentComplaintTypes';
 import { getSelectedMessage, maskContactInfo, type ConversationMessage, type MessageReview, type SentParentMessage } from './parentMessageTypes';
 
 export const consultationLabels = { before: '상담 전', inProgress: '상담 중', complete: '상담 완료' };
@@ -8,6 +9,19 @@ export function getConversation(message: SentParentMessage): ConversationMessage
   return message.conversation?.length ? message.conversation : [{
     id: message.messageId, authorRole: 'parent', body: message.finalBody, sentAt: message.sentAt,
   }];
+}
+
+export function applyServerComplaintState(message: SentParentMessage, state: Pick<ComplaintResponse, 'status' | 'waitingFor'>): SentParentMessage {
+  const { status, waitingFor } = state;
+  const inProgress = status === 'ANSWERED' || waitingFor === 'PARENT' ||
+    getConversation(message).some((entry) => entry.authorRole === 'teacher') ||
+    (message.consultationStatus !== undefined && message.consultationStatus !== 'before');
+  return {
+    ...message,
+    serverComplaintStatus: status,
+    serverWaitingFor: waitingFor,
+    consultationStatus: status === 'CLOSED' ? 'complete' : inProgress ? 'inProgress' : 'before',
+  };
 }
 
 export function formatMessageDate(at: string, includeTime = true) {
@@ -79,7 +93,7 @@ export function appendFollowUp(userId: number, draft: MessageDraft, submission: 
     }
     if (thread.teacherId !== draft.teacherId || thread.title !== draft.title) throw new Error('기존 문의 정보를 다시 확인해 주세요.');
     const isComplete = thread.consultationStatus === 'complete';
-    return {
+    const updated: SentParentMessage = {
       ...thread,
       submissionAnalysis: submission.submissionAnalysis,
       parentName: thread.parentName ?? submission.parentName,
@@ -93,5 +107,8 @@ export function appendFollowUp(userId: number, draft: MessageDraft, submission: 
       needsTeacherReview: isComplete || thread.needsTeacherReview,
       auditLog: [...thread.auditLog, ...submission.auditLog],
     };
+    return submission.serverComplaintStatus && submission.serverWaitingFor
+      ? applyServerComplaintState(updated, { status: submission.serverComplaintStatus, waitingFor: submission.serverWaitingFor })
+      : updated;
   });
 }

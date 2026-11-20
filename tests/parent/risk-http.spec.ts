@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import type { RiskDetectorResponse, RiskSummaryResponse, SubmissionAnalysisResponse } from '../../src/features/parent-message/api/parentComplaintTypes';
+import type { ParentConversationResponse, RiskDetectorResponse, RiskSummaryResponse, SubmissionAnalysisResponse } from '../../src/features/parent-message/api/parentComplaintTypes';
 
 const body = '상담 시간을 알려 주세요. 010-1234-5678';
 const maskedContent = '상담 시간을 알려 주세요. [전화번호]';
@@ -23,16 +23,20 @@ async function setup(page: Page, options: {
   conflict?: boolean; localOnly?: boolean; failFollowUpSendOnce?: boolean; changedBeforeSend?: boolean;
   summary?: Partial<RiskSummaryResponse>; detector?: RiskDetectorResponse; submission?: SubmissionAnalysisResponse;
   analysisErrorCode?: string; sendErrorCode?: string; noRevision?: boolean;
+  lifecycle?: { status: 'ANSWERED' | 'CLOSED'; closeConflict?: boolean };
 } = {}) {
   const calls: string[] = [];
   let content = maskedContent;
   let savedFollowUp = false;
   let sendAttempts = 0;
+  let complaintStatus: ParentConversationResponse['status'] = options.lifecycle?.status ?? 'OPEN';
+  let followUpSentAt: string | null = null;
   // The server's contentVersion: it grows only when the content changes.
   let version = 1;
   const failDetector = options.detectorFailure;
   const versionConflict = { code: 'CONTENT_VERSION_CONFLICT', message: '추가 문의 초안이 다른 기기에서 변경되었습니다.' };
   const followUp = () => ({ messageId: 101, complaintId: 42, content, contentVersion: version, status: 'DRAFT', waitingFor: 'PARENT', createdAt: '2026-10-30T10:00:00', updatedAt: '2026-10-30T10:00:00', sentAt: null });
+  const waitingFor = () => complaintStatus === 'CLOSED' ? 'NONE' : complaintStatus === 'ANSWERED' ? 'PARENT' : 'TEACHER';
   await page.route((url) => url.pathname.startsWith('/api/'), async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname.replace('/api', '');
@@ -42,7 +46,11 @@ async function setup(page: Page, options: {
     let status = 200;
     switch (key) {
       case 'GET /risk-tags': status = options.tagFailure ? 503 : 200; json = options.tagFailure ? { code: 'INTERNAL_SERVER_ERROR' } : [{ id: 1, code: 'THREAT', name: '서버에서 관리하는 협박 명칭', defaultScore: 30 }]; break;
-      case 'GET /complaints': json = { content: [{ studentId: 10, studentName: 'Demo Student' }], hasNext: false, totalPages: 1 }; break;
+      case 'GET /complaints': json = {
+        content: options.lifecycle ? [{ complaintId: 42, title: thread.title, counterpartName: thread.teacherName,
+          status: complaintStatus, waitingFor: waitingFor(), latestReceivedAt: followUpSentAt ?? thread.sentAt }] : [],
+        hasNext: false, totalPages: 1,
+      }; break;
       case 'GET /users/me': json = { userId: 101, email: 'parent@example.com', name: 'Demo Parent', role: 'PARENT', students: [{ studentId: 10, name: 'Demo Student', studentNo: '1' }] }; break;
       case 'GET /complaints/recipients': json = [{ teacherId: 20, teacherName: 'Demo Teacher', homeroomTeacher: true }]; break;
       case 'POST /complaints':
@@ -85,9 +93,32 @@ async function setup(page: Page, options: {
         if (request.postDataJSON().expectedContentVersion !== version) { status = 409; json = versionConflict; break; }
         sendAttempts += 1;
         status = options.sendErrorCode || (options.failFollowUpSendOnce && sendAttempts === 1) ? 500 : 200;
+        if (status === 200) {
+          complaintStatus = 'OPEN';
+          followUpSentAt = '2026-10-30T10:03:00';
+        }
         json = status === 500 ? { code: options.sendErrorCode ?? 'INTERNAL_SERVER_ERROR' }
-          : { ...followUp(), status: 'SENT', waitingFor: 'TEACHER', sentAt: '2026-10-30T10:03:00', ...options.submission }; break;
-      case 'GET /complaints/42/messages': json = { complaintId: 42, messages: [] }; break;
+          : { ...followUp(), status: 'SENT', waitingFor: 'TEACHER', sentAt: followUpSentAt, ...options.submission }; break;
+      case 'GET /complaints/42/messages': {
+        const messages: ParentConversationResponse['messages'] = options.lifecycle ? [
+          { messageId: 1, type: 'PARENT_INQUIRY', senderRole: 'PARENT', senderName: 'Demo Parent', content: thread.finalBody,
+            status: 'READ', sentAt: thread.sentAt, readAt: null },
+          { messageId: 2, type: 'TEACHER_REPLY', senderRole: 'TEACHER', senderName: thread.teacherName, content: '확인한 답변입니다.',
+            status: 'READ', sentAt: '2026-10-29T20:00:00Z', readAt: null },
+        ] : [];
+        if (options.lifecycle && followUpSentAt) messages.push({ messageId: 101, type: 'PARENT_INQUIRY', senderRole: 'PARENT',
+          senderName: 'Demo Parent', content, status: 'SENT', sentAt: followUpSentAt, readAt: null });
+        json = { complaintId: 42, status: complaintStatus, waitingFor: waitingFor(), messages };
+        break;
+      }
+      case 'POST /complaints/42/close':
+        expect(request.postData()).toBeNull();
+        expect(complaintStatus).toBe('ANSWERED');
+        complaintStatus = 'CLOSED';
+        status = options.lifecycle?.closeConflict ? 409 : 200;
+        json = status === 409 ? { code: 'COMPLAINT_NOT_CLOSABLE', message: '이미 종료된 민원입니다.' }
+          : { complaintId: 42, status: complaintStatus, waitingFor: waitingFor() };
+        break;
       case 'POST /complaints/42/send':
         status = options.sendErrorCode ? 500 : 200;
         json = options.sendErrorCode ? { code: options.sendErrorCode } : { message: '제출됨', ...options.submission }; break;
@@ -95,7 +126,7 @@ async function setup(page: Page, options: {
     }
     await route.fulfill({ status, json });
   });
-  if (options.followUp) await page.addInitScript(({ initial, conflict }) => {
+  if (options.followUp || options.lifecycle) await page.addInitScript(({ initial, conflict }) => {
     localStorage.setItem('teacher-hub.parent-sent-messages.101', JSON.stringify([initial]));
     if (conflict) localStorage.setItem('teacher-hub.parent-message-draft.101', JSON.stringify({
       messageId: 'follow-up-local', teacherId: '20', title: initial.title, body: '내가 작성한 내용', status: 'DRAFT', threadId: initial.messageId,
@@ -107,7 +138,8 @@ async function setup(page: Page, options: {
   await page.locator('input[name="password"]').fill('password123');
   await page.getByRole('button', { name: '로그인', exact: true }).click();
   await expect(page).toHaveURL(/\/parent\/messages\/new$/);
-  if (options.followUp) await page.goto('/parent/messages/thread-local/follow-up');
+  if (options.lifecycle) await page.goto('/parent/messages/thread-local');
+  else if (options.followUp) await page.goto('/parent/messages/thread-local/follow-up');
   else {
     await expect(page.getByLabel('문의 대상', { exact: true })).toBeEnabled();
     await page.getByLabel('문의 제목', { exact: true }).fill('HTTP 분석 확인');
@@ -493,6 +525,50 @@ test('추가 문의는 서버 메시지 초안부터 분석·전송까지 연결
   expect(calls).not.toContain('POST /complaints');
   expect(calls).not.toContain('POST /complaints/42/mask');
 });
+
+for (const closeConflict of [false, true]) {
+  test(`학부모 문의 완료 ${closeConflict ? '충돌 시 상태를 다시 조회한다' : '성공을 상세 화면에 반영한다'}`, async ({ page }) => {
+    const calls = await setup(page, { lifecycle: { status: 'ANSWERED', closeConflict } });
+    const close = page.getByRole('button', { name: '문의 완료', exact: true });
+    await expect(page.getByRole('button', { name: '추가 문의하기', exact: true })).toBeEnabled();
+    await close.click();
+    const details = page.getByRole('region', { name: '문의 정보', exact: true });
+    await expect(details.getByText('상담 완료', { exact: true })).toBeVisible();
+    await expect(close).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '추가 문의하기', exact: true })).toBeEnabled();
+    const closeIndex = calls.indexOf('POST /complaints/42/close');
+    expect(calls.filter((call) => call === 'POST /complaints/42/close')).toHaveLength(1);
+    if (closeConflict) {
+      expect(calls.slice(closeIndex + 1)).toContain('GET /complaints/42/messages');
+      await expect(page.getByText('이미 종료된 민원입니다.', { exact: true })).toBeVisible();
+    }
+  });
+}
+
+for (const status of ['ANSWERED', 'CLOSED'] as const) {
+  test(`${status} 문의에 추가 문의를 보내면 기존 민원이 교사 답변 대기로 재개된다`, async ({ page }) => {
+    const calls = await setup(page, { followUp: true, lifecycle: { status } });
+    if (status === 'CLOSED') {
+      await expect(page.getByText('상담 완료', { exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: '문의 완료', exact: true })).toHaveCount(0);
+    }
+    await page.getByRole('button', { name: '추가 문의하기', exact: true }).click();
+    await analyze(page);
+    await page.getByRole('tab', { name: '원문', exact: true }).click();
+    await page.getByRole('button', { name: '전송하기', exact: true }).click();
+    await page.getByRole('button', { name: '확인 후 전송', exact: true }).click();
+    await expect(page).toHaveURL(/\/parent\/messages\/thread-local$/);
+    await page.getByRole('status').getByRole('link', { name: '문의 내역', exact: true }).click();
+    await page.getByRole('link', { name: /기존 서버 문의/ }).click();
+    const conversation = page.getByRole('region', { name: '전체 대화 내역', exact: true });
+    await expect(conversation.getByText(maskedContent, { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: /문의 완료|추가 문의하기/ })).toHaveCount(0);
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('teacher-hub.parent-sent-messages.101')!));
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toMatchObject({ serverComplaintId: 42, serverComplaintStatus: 'OPEN', serverWaitingFor: 'TEACHER' });
+    expect(calls).not.toContain('POST /complaints');
+  });
+}
 
 test('서버 마스킹 실패 시 작성 내용을 유지하고 분석을 중단한다', async ({ page }) => {
   const calls = await setup(page, { maskFailure: true });

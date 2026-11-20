@@ -10,7 +10,7 @@ function countActiveThreads(teacherUserId: number) {
 
 // Sidebar badge count for pages outside the inbox: the same "진행 중 상담" set the inbox shows by default.
 // With the server inbox that is the number of OPEN complaints.
-export function useActiveMessageCount(teacherUserId: number) {
+export function useActiveMessageCount(teacherUserId: number, revision = 0) {
   const [count, setCount] = useState(() => messageApiMode === 'http' ? 0 : countActiveThreads(teacherUserId));
 
   useEffect(() => {
@@ -38,7 +38,7 @@ export function useActiveMessageCount(teacherUserId: number) {
       window.removeEventListener('parent-messages-changed', refresh);
       window.removeEventListener('focus', refresh);
     };
-  }, [teacherUserId]);
+  }, [teacherUserId, revision]);
 
   return count;
 }

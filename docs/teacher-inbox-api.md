@@ -14,10 +14,9 @@
 | 위험 요소 | GET | `/teacher/complaints/{id}/risk` | 404(분석 없음)는 "분석 실패"로 표시 |
 | 처리 기록 | GET | `/teacher/complaints/{id}/history` | 최신순 응답을 오래된 순으로 표시 |
 | 원문 열람 | POST | `/teacher/complaints/{id}/messages/{messageId}/original-views` | 메시지 하나의 원문 반환 + 서버가 `ORIGINAL_VIEWED` 기록. 받은 뒤 원문 화면을 엶. 요약 카드마다 그 메시지의 원문을 열고, 위험 요소·답변 작성 화면의 원문 보기는 최신 학부모 메시지(최신 분석 대상)를 엶. `messageId`는 대화의 `message:{id}`에서 숫자만 사용 |
-| 상담 완료 | POST | `/teacher/complaints/{id}/close` | `OPEN`·`waitingFor=PARENT`(답변 뒤 학부모 차례)만 요청. 교사 차례면 "답변을 보낸 뒤에 상담을 완료할 수 있습니다" 안내. 완료 뒤 상세를 다시 불러와 상담 완료로 표시 |
 | 사이드바 숫자 | GET | `/teacher/complaints?status=OPEN` | `totalElements` |
 
-메시지를 열면 상세·대화·위험·이력을 함께 불러옵니다. 위험도 검토·관리자 공유·원문 열람·상담 완료 뒤에는 서버 상태(위험도·안전 잠금·이력)를 다시 불러옵니다.
+메시지를 열면 상세·대화·위험·이력을 함께 불러옵니다. 위험도 검토·관리자 공유·원문 열람 뒤에는 서버 상태(위험도·안전 잠금·이력)를 다시 불러옵니다. 교사가 답변을 전송하면 `ANSWERED / PARENT`를 반영하고 미처리 목록과 사이드바 수를 다시 조회합니다. 민원 종료는 학부모가 처리합니다.
 
 - 같은 메시지의 상세 요청이 겹치면 마지막 요청의 응답만 반영합니다.
 - 상세 조회가 실패하면 위험 요소 탭에 "다시 불러오기"를 표시합니다. 처리 기록만 실패하면 마지막으로 불러온 기록을 유지하고 실패 안내와 "다시 시도"를 표시합니다.
@@ -35,7 +34,7 @@
 
 ## 응답 → 화면 모델(`BoardThread`)
 
-- 상담 상태: `CLOSED`·`waitingFor=NONE` → 상담 완료, `waitingFor=PARENT` 또는 교사 답변이 있으면 → 상담 중, 그 외 → 상담 전. 교사 답변 뒤 `waitingFor=TEACHER`(추가 문의)면 "재확인 필요".
+- 상담 상태: `CLOSED / NONE`은 상담 완료, `ANSWERED / PARENT`는 답변 완료로 표시합니다. 교사 답변 뒤 `OPEN / TEACHER`로 돌아온 추가 문의에는 "재확인 필요"를 표시합니다.
 - 위험 분류: 백엔드 `RiskTagCode` 8종과 화면 분류 8종이 1:1입니다(PROFANITY→감정적 표현, INSULT→인신공격, THREAT→위협, LEGAL→법적·행정적 조치, EXPOSURE→공개·유포 위협, REPEAT→반복성, UNFAIR_REQUEST→무리한 요구, PRIVACY→개인정보 위험). `detectedFactors`에 있으면 탐지, 없으면 미탐지입니다.
 - 위험 점수(#77, 2026-11-17): 시스템 점수 `riskScore`는 0~100점이며 그대로 표시합니다. 교사는 1~7점(`reviewScale`)을 고르고 서버가 10을 곱해 `reviewScore`(10~70)로 저장합니다. 현재 적용 위험도와 행동 정책은 `currentRiskLevel`을 우선합니다. 처리 기록의 점수는 서버 값을 그대로 표시하며 시스템 점수를 교사 7점 척도로 환산하지 않습니다.
 - 잠정 분석: `analysisMode=RULE_ONLY` 또는 `aiAnalysisStatus`가 `REUSED_RULE_ONLY`·`RULE_ONLY_AI_UNAVAILABLE`·`RULE_ONLY_INVALID_RESPONSE`이면 잠정 분석 배지와 직접 검토 안내를 표시하고, `manualReviewRequired=true`를 강조합니다. `analysisMessage`는 설명으로 표시하며 화면 분기 기준으로 사용하지 않습니다. 관리자 공유 상세의 위험 분석도 동일한 안내를 사용합니다. 새 메타데이터가 생략된 이전 응답도 지원합니다.

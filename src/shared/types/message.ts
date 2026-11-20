@@ -4,7 +4,7 @@
 export type MessageStatus = 'DRAFT' | 'SENT' | 'READ';
 
 // Complaint (conversation) state. Admin sharing lives in EscalationStatus, not here.
-export type ComplaintStatus = 'DRAFT' | 'OPEN' | 'CLOSED';
+export type ComplaintStatus = 'DRAFT' | 'OPEN' | 'ANSWERED' | 'CLOSED';
 
 // Whose turn it is to reply.
 export type WaitingFor = 'PARENT' | 'TEACHER' | 'NONE';

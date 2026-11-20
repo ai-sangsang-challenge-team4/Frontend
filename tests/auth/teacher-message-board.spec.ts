@@ -155,9 +155,9 @@ test('사이드바 메시지 개수는 진행 중 상담 수를 따라간다', a
   await expect(badge).toHaveText('4');
 
   await page.goto('/teacher/messages/thread-002');
-  await page.locator('.board-answer-actions').getByRole('button', { name: '상담 완료 처리', exact: true }).click();
+  await expect(page.getByRole('button', { name: '상담 완료 처리', exact: true })).toHaveCount(0);
   if (testInfo.project.name === 'mobile') await page.getByRole('button', { name: /메뉴/ }).first().click();
-  await expect(badge).toHaveText('3');
+  await expect(badge).toHaveText('4');
 
   // Mock inbox threads live in memory only, so another page starts again from the initial four.
   await page.goto('/teacher/guide');
