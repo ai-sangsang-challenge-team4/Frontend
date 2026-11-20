@@ -11,7 +11,7 @@
 | 관리자 공유 | `EscalationStatus` | `NOT_SHARED · SHARED · UNDER_REVIEW · COMPLETED` |
 | Emergency 재검토 | `RiskReviewStatus` | `PENDING_ADMIN_APPROVAL · APPLIED · REJECTED` |
 | 안전 잠금 | `safetyLock` | `true`면 위험도와 관계없이 교사 화면에 긴급 단계 정책 적용 |
-| 민원 | `ComplaintStatus` | `DRAFT · OPEN · CLOSED` |
+| 민원 | `ComplaintStatus` | `DRAFT · OPEN · ANSWERED · CLOSED` |
 | 메시지 | `MessageStatus` | `DRAFT · SENT · READ` |
 
 학부모 작성 화면의 `PARENT_REVIEW`는 서버 상태가 아닌 로컬 작성 단계(`MessageDraftStep`)입니다.

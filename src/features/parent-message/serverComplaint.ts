@@ -2,11 +2,11 @@ import { ApiError, isAbortError, isApiError, isRiskAnalysisSafetyError, toServer
 import type { DetectedFactorCode } from '../escalation/escalationTypes';
 import { requireMaskedText } from '../pii/masking';
 import { parentComplaintApi, type ComplaintRecipientResponse, type ParentFollowUpResponse, type RiskRevisionResponse, type RiskSummaryResponse } from './api/parentComplaintApi';
-import { appendFollowUp, findSentSubmission } from './conversation';
-import { storeSentMessage, type MessageDraft, type ServerComplaintDraft } from './messageDraft';
+import { appendFollowUp, applyServerComplaintState, findSentSubmission } from './conversation';
+import { findSentMessage, storeSentMessage, type MessageDraft, type ServerComplaintDraft } from './messageDraft';
 import { OFFICIAL_MEANING_WARNING } from './parentMessageApi';
 import { getRiskTagNames, type RiskTagNames } from '../risk-analysis/riskTagCatalog';
-import type { SubmissionAnalysisResponse } from './api/parentComplaintTypes';
+import type { ComplaintResponse, SubmissionAnalysisResponse } from './api/parentComplaintTypes';
 import {
   getSelectedMessage,
   validateFinalMessage,
@@ -254,10 +254,10 @@ export async function analyzeServerDraft(
 
 // A retry after a lost response finds the complaint already submitted; the status tells it apart from a
 // draft that cannot be submitted.
-async function wasSubmitted(complaintId: number, error: unknown, signal: AbortSignal) {
-  if (!isApiError(error) || error.code !== 'COMPLAINT_NOT_DRAFT') return false;
-  const { status } = await parentComplaintApi.getStatus(complaintId, signal);
-  return status !== 'DRAFT';
+async function getSubmittedState(complaintId: number, error: unknown, signal: AbortSignal) {
+  if (!isApiError(error) || error.code !== 'COMPLAINT_NOT_DRAFT') return null;
+  const state = await parentComplaintApi.getStatus(complaintId, signal);
+  return state.status !== 'DRAFT' ? state : null;
 }
 
 // Stores the chosen text on the server draft when it changed, submits it, and keeps a local copy for the
@@ -284,8 +284,10 @@ export async function submitServerDraft(
   const content = requireMaskedText(selected.text.trim());
   const originalBody = requireMaskedText(draft.body);
 
+  const previousThread = draft.threadId ? findSentMessage(userId, draft.threadId) ?? undefined : undefined;
   let sentAt = new Date().toISOString();
   let submission: SubmissionAnalysisResponse | undefined;
+  let complaintState: Pick<ComplaintResponse, 'status' | 'waitingFor'> | null = null;
   try {
     if (server.serverMessageId !== undefined) {
       const messageId = server.serverMessageId;
@@ -301,13 +303,18 @@ export async function submitServerDraft(
       }
       sentAt = toServerInstant(sent.sentAt) ?? sentAt;
       submission = sent;
+      // The follow-up response reports the message's status. Its complaint turn confirms the reopen.
+      if (sent.waitingFor === 'TEACHER') complaintState = { status: 'OPEN', waitingFor: sent.waitingFor };
     } else {
       if (content !== server.content) {
         await parentComplaintApi.updateDraft(server.complaintId, { content }, signal);
         server = { ...server, content };
         onServerDraftUpdate?.(server);
       }
-      submission = await parentComplaintApi.submit(server.complaintId, signal);
+      const sent = await parentComplaintApi.submit(server.complaintId, signal);
+      submission = sent;
+      complaintState = sent.status && sent.waitingFor ? { status: sent.status, waitingFor: sent.waitingFor }
+        : { status: 'OPEN', waitingFor: 'TEACHER' };
     }
   } catch (error) {
     if (signal.aborted || isAbortError(error) || isRiskAnalysisSafetyError(error)) throw error;
@@ -316,12 +323,17 @@ export async function submitServerDraft(
       // After a lost send response, only this exact message proves the request succeeded.
       const conversation = await parentComplaintApi.getConversation(server.complaintId, signal).catch(() => null);
       const sent = conversation?.messages.find((message) => message.messageId === messageId && message.status !== 'DRAFT' && message.content === content);
-      if (!sent) throw error;
+      if (!conversation || !sent) throw error;
       sentAt = toServerInstant(sent.sentAt) ?? sentAt;
-    } else if (!await wasSubmitted(server.complaintId, error, signal)) throw error;
+      if (conversation.status && conversation.waitingFor) complaintState = conversation;
+    } else {
+      const state = await getSubmittedState(server.complaintId, error, signal);
+      if (!state) throw error;
+      complaintState = state;
+    }
   }
 
-  const message: SentParentMessage = {
+  const submittedMessage: SentParentMessage = {
     ...(submission ? { submissionAnalysis: toSubmissionAnalysis(submission) } : {}),
     parentName,
     messageId: draft.messageId,
@@ -339,8 +351,9 @@ export async function submitServerDraft(
     auditLog: [{ action: 'SENT', at: sentAt, selectionType: selected.selectionType }],
     consultationStatus: 'before',
   };
+  const message = complaintState ? applyServerComplaintState(submittedMessage, complaintState) : submittedMessage;
   try {
-    return draft.threadId ? appendFollowUp(userId, draft, message) : storeSentMessage(userId, message);
+    return draft.threadId ? appendFollowUp(userId, draft, message, previousThread) : storeSentMessage(userId, message);
   } catch {
     if (draft.threadId) throw new Error('전송은 완료됐지만 문의 내역에 저장하지 못했습니다. 작성한 내용은 유지됩니다. 다시 시도해 주세요.');
     // The server already has the inquiry; only the local copy is missing.

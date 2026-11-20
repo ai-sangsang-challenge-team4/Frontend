@@ -23,6 +23,7 @@ import type {
 export type ParentComplaintApi = {
   listComplaints: (query?: ParentComplaintListQuery, signal?: AbortSignal) => Promise<ParentComplaintPageResponse>;
   getComplaint: (complaintId: number, signal?: AbortSignal) => Promise<ParentComplaintDetailResponse>;
+  closeComplaint: (complaintId: number) => Promise<ComplaintResponse>;
   // GET /users/me: the children come from its students.
   getMe: (signal?: AbortSignal) => Promise<UserInfoResponse>;
   listRecipients: (studentId: number, signal?: AbortSignal) => Promise<ComplaintRecipientResponse[]>;

@@ -18,7 +18,6 @@ import {
 } from '../../src/features/message/replyTemplates';
 import {
   applyServerSubmission,
-  getServerCloseBlockReason,
   getServerReplyBlockReason,
   toServerReplyTemplate,
   toTemplateAdoptionRequest,
@@ -190,12 +189,6 @@ test('긴 문의 제목 기본값은 80자로 자르되 이모지를 반으로 �
   expect(issueSummary).toBe('가'.repeat(79));
 });
 
-test('상담 완료는 학부모 차례인 OPEN 민원만 서버에 요청한다', () => {
-  expect(getServerCloseBlockReason(thread({ serverStatus: { status: 'OPEN', waitingFor: 'PARENT' } }))).toBeNull();
-  expect(getServerCloseBlockReason(thread())).toContain('답변을 보낸 뒤');
-  expect(getServerCloseBlockReason(thread({ serverStatus: { status: 'CLOSED', waitingFor: 'NONE' } }))).toContain('이미 완료');
-});
-
 test('답변할 수 없는 상태의 409와 초안 없음 404를 구분해 안내한다', async () => {
   mockFetch((call) => call.init.method === 'GET'
     ? json(404, { status: 404, code: 'RESPONSE_DRAFT_NOT_FOUND', message: '저장된 답변 초안을 찾을 수 없습니다.' })
@@ -213,7 +206,7 @@ test('답변할 수 없는 상태의 409와 초안 없음 404를 구분해 안�
 test('서버가 답변을 받는 상태(OPEN·교사 차례)가 아니면 작성·전송을 막는다', () => {
   expect(getServerReplyBlockReason(thread())).toBeNull();
   expect(getServerReplyBlockReason(thread({ serverStatus: undefined }))).toBeNull();
-  expect(getServerReplyBlockReason(thread({ serverStatus: { status: 'OPEN', waitingFor: 'PARENT' } })))
+  expect(getServerReplyBlockReason(thread({ serverStatus: { status: 'ANSWERED', waitingFor: 'PARENT' } })))
     .toContain('학부모의 답장을 기다리는 중');
   expect(getServerReplyBlockReason(thread({ serverStatus: { status: 'CLOSED', waitingFor: 'NONE' } })))
     .toContain('완료된 상담');
@@ -285,7 +278,7 @@ test('전송 응답으로 답변을 대화에 붙이고 학부모 차례로 바�
     responseId: 55,
     complaintId: 7,
     content: '확인 후 안내드리겠습니다.',
-    complaintStatus: 'OPEN',
+    complaintStatus: 'ANSWERED',
     waitingFor: 'PARENT',
     sentAt: '2026-10-29T10:20:00',
   };
@@ -295,7 +288,7 @@ test('전송 응답으로 답변을 대화에 붙이고 학부모 차례로 바�
     'Demo Teacher',
   );
 
-  expect(sent.serverStatus).toEqual({ status: 'OPEN', waitingFor: 'PARENT' });
+  expect(sent.serverStatus).toEqual({ status: 'ANSWERED', waitingFor: 'PARENT' });
   expect(sent.status).toBe('inProgress');
   expect(sent.draftText).toBe('');
   expect(sent.replyDrafts).toBeUndefined();

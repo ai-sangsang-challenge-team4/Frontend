@@ -44,6 +44,7 @@ const classificationCodeByTag: Record<DetectedFactorCode, RiskClassification['co
 const complaintStatusLabel: Record<ComplaintStatus, string> = {
   DRAFT: '작성 중',
   OPEN: '진행 중',
+  ANSWERED: '답변 완료',
   CLOSED: '종료',
 };
 
@@ -70,7 +71,7 @@ function className(grade: number | null, classNo: number | null) {
 // The inbox has 상담 전·상담 중·상담 완료; the server has complaint status plus whose turn it is.
 export function threadStatus(status: ComplaintStatus, waitingFor: WaitingFor, hasTeacherReply?: boolean): ThreadStatus {
   if (status === 'CLOSED' || waitingFor === 'NONE') return 'complete';
-  if (waitingFor === 'PARENT' || hasTeacherReply) return 'inProgress';
+  if (status === 'ANSWERED' || waitingFor === 'PARENT' || hasTeacherReply) return 'inProgress';
   return 'before';
 }
 

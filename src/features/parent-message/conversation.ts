@@ -1,4 +1,5 @@
 import { findSentMessage, readSentMessages, updateSentMessage, type MessageDraft } from './messageDraft';
+import type { ComplaintResponse } from './api/parentComplaintTypes';
 import { getSelectedMessage, maskContactInfo, type ConversationMessage, type MessageReview, type SentParentMessage } from './parentMessageTypes';
 
 export const consultationLabels = { before: '상담 전', inProgress: '상담 중', complete: '상담 완료' };
@@ -8,6 +9,19 @@ export function getConversation(message: SentParentMessage): ConversationMessage
   return message.conversation?.length ? message.conversation : [{
     id: message.messageId, authorRole: 'parent', body: message.finalBody, sentAt: message.sentAt,
   }];
+}
+
+export function applyServerComplaintState(message: SentParentMessage, state: Pick<ComplaintResponse, 'status' | 'waitingFor'>): SentParentMessage {
+  const { status, waitingFor } = state;
+  const inProgress = status === 'ANSWERED' || waitingFor === 'PARENT' ||
+    getConversation(message).some((entry) => entry.authorRole === 'teacher') ||
+    (message.consultationStatus !== undefined && message.consultationStatus !== 'before');
+  return {
+    ...message,
+    serverComplaintStatus: status,
+    serverWaitingFor: waitingFor,
+    consultationStatus: status === 'CLOSED' ? 'complete' : inProgress ? 'inProgress' : 'before',
+  };
 }
 
 export function formatMessageDate(at: string, includeTime = true) {
@@ -64,7 +78,7 @@ export function findSentSubmissionById(userId: number, submissionId: string) {
     getConversation(thread).some((entry) => entry.authorRole === 'parent' && entry.id === submissionId)) ?? null;
 }
 
-export function appendFollowUp(userId: number, draft: MessageDraft, submission: SentParentMessage) {
+export function appendFollowUp(userId: number, draft: MessageDraft, submission: SentParentMessage, previousThread?: SentParentMessage) {
   return updateSentMessage(userId, draft.threadId!, (thread) => {
     const conversation = getConversation(thread);
     const duplicate = conversation.find((entry) => entry.id === draft.messageId ||
@@ -78,8 +92,14 @@ export function appendFollowUp(userId: number, draft: MessageDraft, submission: 
         ? { ...thread, submissionAnalysis: submission.submissionAnalysis } : thread;
     }
     if (thread.teacherId !== draft.teacherId || thread.title !== draft.title) throw new Error('기존 문의 정보를 다시 확인해 주세요.');
-    const isComplete = thread.consultationStatus === 'complete';
-    return {
+    // A list sync can see a new reply before the send response arrives, even when the turn is unchanged.
+    const isCurrentState = previousThread && thread.serverComplaintStatus === previousThread.serverComplaintStatus &&
+      thread.serverWaitingFor === previousThread.serverWaitingFor && thread.updatedAt === previousThread.updatedAt;
+    const serverState = isCurrentState && submission.serverComplaintStatus && submission.serverWaitingFor
+      ? { status: submission.serverComplaintStatus, waitingFor: submission.serverWaitingFor } : null;
+    const reopened = thread.consultationStatus === 'complete' &&
+      (submission.serverComplaintId === undefined || serverState?.status === 'OPEN');
+    const updated: SentParentMessage = {
       ...thread,
       submissionAnalysis: submission.submissionAnalysis,
       parentName: thread.parentName ?? submission.parentName,
@@ -87,11 +107,12 @@ export function appendFollowUp(userId: number, draft: MessageDraft, submission: 
         id: submission.messageId, authorRole: 'parent', body: submission.finalBody, sentAt: submission.sentAt,
         ...(submission.serverMessageId !== undefined ? { serverMessageId: submission.serverMessageId } : {}),
       }],
-      updatedAt: submission.sentAt,
-      consultationStatus: isComplete ? 'inProgress' : thread.consultationStatus ?? 'before',
+      updatedAt: thread.updatedAt && compareMessageTimes(thread.updatedAt, submission.sentAt) > 0 ? thread.updatedAt : submission.sentAt,
+      consultationStatus: reopened ? 'inProgress' : thread.consultationStatus ?? 'before',
       // Only a follow-up on a completed consultation asks the teacher to recheck; an open flag stays until the teacher replies.
-      needsTeacherReview: isComplete || thread.needsTeacherReview,
+      needsTeacherReview: reopened || thread.needsTeacherReview,
       auditLog: [...thread.auditLog, ...submission.auditLog],
     };
+    return serverState ? applyServerComplaintState(updated, serverState) : updated;
   });
 }

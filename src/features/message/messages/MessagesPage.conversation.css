@@ -308,12 +308,3 @@
   min-width: 166px;
   padding: 4px 14px;
 }
-
-.board-consultation-complete-button {
-  min-width: 185px;
-}
-
-.board-consultation-complete-button:disabled {
-  color: var(--color-text-disabled);
-  cursor: not-allowed;
-}

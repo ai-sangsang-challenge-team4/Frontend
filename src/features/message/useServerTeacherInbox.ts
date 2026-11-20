@@ -188,7 +188,7 @@ export function useServerTeacherInbox({ enabled, filters, setThreads }: UseServe
   }, [loadDetail, setThreads]);
 
   // Reloads the first page, e.g. after a status change moves a thread out of the current filter.
-  const reloadList = useCallback(() => loadPage(0), [loadPage]);
+  const reloadList = useCallback(() => setAttempt((value) => value + 1), []);
 
   return { listIds, listState, loadDetail, loadMore, reloadList, retry, viewOriginal };
 }

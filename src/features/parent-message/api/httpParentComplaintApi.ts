@@ -33,6 +33,9 @@ export const httpParentComplaintApi: ParentComplaintApi = {
   getComplaint: (complaintId, signal) =>
     apiClient.get<ParentComplaintDetailResponse>(`/complaints/${complaintId}`, { signal }),
 
+  closeComplaint: (complaintId) =>
+    apiClient.post<ComplaintResponse>(`/complaints/${complaintId}/close`),
+
   getMe: (signal) =>
     apiClient.get<UserInfoResponse>('/users/me', { signal }),
 

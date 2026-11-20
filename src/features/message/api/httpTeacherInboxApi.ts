@@ -8,7 +8,6 @@ import type {
   TeacherComplaintDetailResponse,
   TeacherConversationResponse,
   TeacherAiDraftResponse,
-  TeacherCloseResponse,
   TeacherOriginalViewResponse,
   TeacherResponseDraftResponse,
   TeacherResponseSubmissionResponse,
@@ -51,9 +50,6 @@ export const httpTeacherInboxApi: TeacherInboxApi = {
       undefined,
       { signal },
     ),
-
-  closeComplaint: (complaintId) =>
-    apiClient.post<TeacherCloseResponse>(`/teacher/complaints/${complaintId}/close`),
 
   generateAiDraft: (complaintId) =>
     apiClient.post<TeacherAiDraftResponse>(`/teacher/complaints/${complaintId}/response/ai-draft`),

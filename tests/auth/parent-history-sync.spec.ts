@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { configureApiClient } from '../../src/shared/api/apiClient';
-import { appendFollowUp, getConversation, needsParentReview } from '../../src/features/parent-message/conversation';
-import { readMessageDrafts, readSentMessages, saveMessageDraft, storeSentMessage, type MessageDraft } from '../../src/features/parent-message/messageDraft';
+import { appendFollowUp, applyServerComplaintState, getConversation, needsParentReview } from '../../src/features/parent-message/conversation';
+import { readMessageDrafts, readSentMessages, saveMessageDraft, storeSentMessage, updateSentMessage, type MessageDraft } from '../../src/features/parent-message/messageDraft';
 import type { SentParentMessage } from '../../src/features/parent-message/parentMessageTypes';
 import { complaintIdFromThreadId, syncServerComplaints, syncServerConversation } from '../../src/features/parent-message/serverHistory';
 
@@ -252,6 +252,26 @@ test('지연된 대화 응답은 이미 동기화한 교사 답변과 상담 상
   await syncServerConversation(USER_ID, 42);
 
   expect(readSentMessages(USER_ID)[0]).toEqual(latest);
+});
+
+test('문의 완료 전에 시작한 대화 조회가 같은 메시지를 반환해도 완료 상태를 되돌리지 않는다', async () => {
+  const answered = localThread({ serverComplaintStatus: 'ANSWERED', serverWaitingFor: 'PARENT', consultationStatus: 'inProgress' });
+  storeSentMessage(USER_ID, answered);
+  let release!: (response: Response) => void;
+  const pendingResponse = new Promise<Response>((resolve) => { release = resolve; });
+  globalThis.fetch = (() => pendingResponse) as typeof fetch;
+  const syncing = syncServerConversation(USER_ID, 42);
+  updateSentMessage(USER_ID, answered.messageId, (current) => applyServerComplaintState(current, { status: 'CLOSED', waitingFor: 'NONE' }));
+  release(json({ complaintId: 42, status: 'ANSWERED', waitingFor: 'PARENT', messages: [
+    message(101, 'PARENT', answered.finalBody, '2026-10-30T09:00:00'),
+    { ...message(102, 'TEACHER', '답변입니다.', '2026-10-30T09:30:00', 'READ'), readAt: '2026-10-30T10:00:00' },
+  ] }));
+  await syncing;
+
+  expect(readSentMessages(USER_ID)[0]).toMatchObject({
+    serverComplaintStatus: 'CLOSED', serverWaitingFor: 'NONE', consultationStatus: 'complete',
+    parentAcknowledgedAt: '2026-10-30T01:00:00.000Z',
+  });
 });
 
 for (const identity of ['local', 'server'] as const) {

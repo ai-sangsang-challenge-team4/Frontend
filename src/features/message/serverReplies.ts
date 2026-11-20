@@ -26,15 +26,6 @@ export function getServerReplyBlockReason(thread: BoardThread) {
     : '학부모의 답장을 기다리는 중이라 지금은 답변을 보낼 수 없습니다.';
 }
 
-// POST /close accepts only a complaint the teacher has answered and that now waits for the parent.
-export function getServerCloseBlockReason(thread: BoardThread) {
-  const state = thread.serverStatus;
-  if (!state) return null;
-  if (state.status === 'CLOSED' || state.waitingFor === 'NONE') return '이미 완료된 상담입니다.';
-  if (state.waitingFor === 'TEACHER') return '답변을 보낸 뒤에 상담을 완료할 수 있습니다.';
-  return null;
-}
-
 // Labels for the seeded HIGH_ACKNOWLEDGEMENT variables; an unknown variable shows its own name.
 const serverTemplateVariableLabels: Record<string, string> = {
   parentName: '보호자 호칭',

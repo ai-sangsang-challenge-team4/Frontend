@@ -1,18 +1,17 @@
 import { toServerInstant } from '../../shared/api';
-import type { ComplaintStatus, WaitingFor } from '../../shared/types';
 import {
   parentComplaintApi,
   type ParentComplaintDetailResponse,
   type ParentComplaintPageResponse,
   type ParentConversationResponse,
 } from './api/parentComplaintApi';
-import { getConversation } from './conversation';
+import { applyServerComplaintState, getConversation } from './conversation';
 import { readSentMessages, updateSentMessages } from './messageDraft';
-import type { ConsultationStatus, ConversationMessage, SentParentMessage } from './parentMessageTypes';
+import type { ConversationMessage, SentParentMessage } from './parentMessageTypes';
 
 // Parent inquiry history from the backend (VITE_MESSAGE_API=http). The server is the source of truth for the
 // inquiries, their status, and the conversation; the browser copy keeps what the server has no API for
-// (stars, the parent's "확인했어요", unsent drafts) and lets the composer continue a follow-up.
+// (stars and unsent drafts) and lets the composer continue a follow-up.
 //
 // GET /complaints and GET /complaints/{id} have no side effects. GET /complaints/{id}/messages marks the
 // latest teacher reply as read, so only the detail screen loads it.
@@ -46,17 +45,14 @@ function latest(...values: (string | undefined)[]) {
     .reduce<string | undefined>((max, value) => (!max || Date.parse(value) > Date.parse(max) ? value : max), undefined);
 }
 
-// CLOSED is a completed consultation. Otherwise a teacher reply (or the server waiting on the parent, which
-// follows one) means it is in progress; a follow-up after a reply keeps it in progress.
-function toConsultationStatus(status: ComplaintStatus, waitingFor: WaitingFor, hasTeacherReply: boolean, current?: ConsultationStatus): ConsultationStatus {
-  if (status === 'CLOSED') return 'complete';
-  if (waitingFor === 'PARENT' || hasTeacherReply) return 'inProgress';
-  return current && current !== 'before' ? 'inProgress' : 'before';
+// A response already in flight must not undo a close or reopen recorded while it was loading.
+function hasSameServerState(current: SentParentMessage, previous: SentParentMessage | undefined) {
+  return current.serverComplaintStatus === previous?.serverComplaintStatus && current.serverWaitingFor === previous?.serverWaitingFor;
 }
 
 function createServerThread(detail: ParentComplaintDetailResponse): SentParentMessage {
   const sentAt = toInstant(detail.createdAt) ?? new Date().toISOString();
-  return {
+  return applyServerComplaintState({
     messageId: serverThreadId(detail.complaintId),
     serverComplaintId: detail.complaintId,
     teacherId: '',
@@ -69,27 +65,23 @@ function createServerThread(detail: ParentComplaintDetailResponse): SentParentMe
     status: 'SENT',
     sentAt,
     auditLog: [{ action: 'SENT', at: sentAt, selectionType: 'ORIGINAL' }],
-    consultationStatus: toConsultationStatus(detail.status, detail.waitingFor, false),
-    serverWaitingFor: detail.waitingFor,
     updatedAt: sentAt,
-  };
+  }, detail);
 }
 
-function applyListItem(thread: SentParentMessage, item: ListItem): SentParentMessage {
-  const hasTeacherReply = getConversation(thread).some((entry) => entry.authorRole === 'teacher');
-  return {
+function applyListItem(thread: SentParentMessage, item: ListItem, useResponseState: boolean): SentParentMessage {
+  const updated = {
     ...thread,
     title: item.title,
     teacherName: item.counterpartName ?? thread.teacherName,
-    consultationStatus: toConsultationStatus(item.status, item.waitingFor, hasTeacherReply, thread.consultationStatus),
-    serverWaitingFor: item.waitingFor,
     updatedAt: latest(thread.updatedAt, thread.sentAt, toInstant(item.latestReceivedAt)),
   };
+  return useResponseState ? applyServerComplaintState(updated, item) : updated;
 }
 
 // Server messages replace the local conversation. The first parent message keeps the thread's ID, as
 // getConversation gives it, and later parent messages keep their local IDs, which drafts and retries match on.
-function applyConversation(thread: SentParentMessage, response: ParentConversationResponse): SentParentMessage {
+function applyConversation(thread: SentParentMessage, response: ParentConversationResponse, useResponseState: boolean): SentParentMessage {
   const local = getConversation(thread);
   const sent = response.messages.filter((message) => message.status !== 'DRAFT' && message.sentAt);
   // Sent messages are immutable and /messages returns the whole conversation. A
@@ -111,22 +103,22 @@ function applyConversation(thread: SentParentMessage, response: ParentConversati
       sentAt,
     };
   });
-  if (conversation.length === 0) return thread;
+  if (conversation.length === 0) return useResponseState ? applyServerComplaintState(thread, response) : thread;
   const previousParent = local.filter((entry) => entry.authorRole === 'parent').at(-1);
   const latestParent = conversation.filter((entry) => entry.authorRole === 'parent').at(-1);
+  const latestTeacher = sent.filter((message) => message.senderRole === 'TEACHER').at(-1);
   const sameSubmission = latestParent && previousParent &&
     latestParent.id === previousParent.id && latestParent.body === previousParent.body;
-  return {
+  const updated = {
     ...thread,
     // Send metadata belongs to one parent message. A newer inquiry from another
     // device has no local analysis result; a teacher reply alone does not invalidate it.
     submissionAnalysis: sameSubmission ? thread.submissionAnalysis : undefined,
     conversation,
-    consultationStatus: toConsultationStatus(response.status, response.waitingFor,
-      conversation.some((entry) => entry.authorRole === 'teacher'), thread.consultationStatus),
-    serverWaitingFor: response.waitingFor,
+    parentAcknowledgedAt: latest(thread.parentAcknowledgedAt, toInstant(latestTeacher?.readAt)),
     updatedAt: latest(thread.updatedAt, conversation.at(-1)!.sentAt),
   };
+  return useResponseState ? applyServerComplaintState(updated, response) : updated;
 }
 
 function findServerThread(messages: SentParentMessage[], complaintId: number) {
@@ -141,6 +133,7 @@ function upsert(messages: SentParentMessage[], thread: SentParentMessage) {
 // Brings every submitted inquiry into the browser copy. Inquiries not stored yet are read once with
 // GET /complaints/{id} for their content. Server DRAFTs are the composer's, not history entries.
 export async function syncServerComplaints(userId: number, signal?: AbortSignal) {
+  const previous = new Map(readSentMessages(userId).map((thread) => [thread.serverComplaintId, thread]));
   const items: ListItem[] = [];
   for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
     const response = await parentComplaintApi.listComplaints({ page }, signal);
@@ -157,20 +150,22 @@ export async function syncServerComplaints(userId: number, signal?: AbortSignal)
   updateSentMessages(userId, (messages) => items.reduce((next, item) => {
     const thread = findServerThread(next, item.complaintId);
     const detail = details.get(item.complaintId);
-    if (thread) return upsert(next, applyListItem(thread, item));
-    return detail ? upsert(next, applyListItem(createServerThread(detail), item)) : next;
+    if (thread) return upsert(next, applyListItem(thread, item, hasSameServerState(thread, previous.get(item.complaintId))));
+    return detail ? upsert(next, applyListItem(createServerThread(detail), item, true)) : next;
   }, messages));
 }
 
 // Loads one inquiry's conversation, including the teacher's replies, into the browser copy. This marks the
 // latest teacher reply as read on the server.
 export async function syncServerConversation(userId: number, complaintId: number, signal?: AbortSignal) {
+  const previous = findServerThread(readSentMessages(userId), complaintId);
   const response = await parentComplaintApi.getConversation(complaintId, signal);
   const detail = findServerThread(readSentMessages(userId), complaintId)
     ? null : await parentComplaintApi.getComplaint(complaintId, signal);
   signal?.throwIfAborted();
   updateSentMessages(userId, (messages) => {
-    const thread = findServerThread(messages, complaintId) ?? (detail ? createServerThread(detail) : null);
-    return thread ? upsert(messages, applyConversation(thread, response)) : messages;
+    const existing = findServerThread(messages, complaintId);
+    const thread = existing ?? (detail ? createServerThread(detail) : null);
+    return thread ? upsert(messages, applyConversation(thread, response, !existing || hasSameServerState(existing, previous))) : messages;
   });
 }

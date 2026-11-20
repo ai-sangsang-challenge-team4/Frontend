@@ -115,6 +115,7 @@ function isSentMessage(value: unknown): value is SentParentMessage {
         ['aiDraftGenerated', 'officialTemplateApplied'].every((field) => draft[field] === undefined || typeof draft[field] === 'boolean')
       )))) &&
     (value.consultationStatus === undefined || ['before', 'inProgress', 'complete'].includes(String(value.consultationStatus))) &&
+    (value.serverComplaintStatus === undefined || ['DRAFT', 'OPEN', 'ANSWERED', 'CLOSED'].includes(String(value.serverComplaintStatus))) &&
     (value.serverWaitingFor === undefined || ['PARENT', 'TEACHER', 'NONE'].includes(String(value.serverWaitingFor))) &&
     (value.conversation === undefined || (Array.isArray(value.conversation) && value.conversation.every((entry: unknown) => (
       isRecord(entry) && typeof entry.id === 'string' && typeof entry.body === 'string' &&
