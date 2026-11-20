@@ -9,7 +9,9 @@ import type {
   EscalationMessageRequest,
   EscalationShareContentResponse,
   EscalationStateResponse,
-  MockTeacherEscalation,
+  TeacherEscalationListQuery,
+  TeacherEscalationPageResponse,
+  TeacherEscalationSummaryResponse,
   ShareEscalationRequest,
   TeacherHistoryResponse,
   TeacherRiskResponse,
@@ -36,8 +38,8 @@ export type EscalationApi = {
     request: TeacherRiskReviewRequest,
     options?: TeacherRequestOptions,
   ) => Promise<TeacherRiskReviewResponse>;
-  // Mock only: the spec has no "my shared complaints" endpoint, so the HTTP adapter leaves it out.
-  listMyEscalations?: (signal?: AbortSignal) => Promise<MockTeacherEscalation[]>;
+  listMyEscalations: (query?: TeacherEscalationListQuery, signal?: AbortSignal) => Promise<TeacherEscalationPageResponse>;
+  getMyEscalation: (escalationId: number, signal?: AbortSignal) => Promise<TeacherEscalationSummaryResponse>;
   // Emergency review is its own resource, independent of the admin share.
   requestEmergencyReview: (
     complaintId: ComplaintId,

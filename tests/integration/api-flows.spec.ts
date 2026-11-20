@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
+import type { TeacherEscalationPageResponse } from '../../src/features/escalation/escalationTypes';
 
 const review = {
   requestId: 9, complaintId: 12, riskAnalysisId: 4,
@@ -141,6 +142,46 @@ function teacherComplaintJson(key: string, current: typeof review): unknown {
     default: return undefined;
   }
 }
+
+test('교사 공유 내역의 링크를 누르면 메시지 목록에 없는 서버 민원 상세와 대화가 표시된다', async ({ page }) => {
+  const sharedPage: TeacherEscalationPageResponse = {
+    content: [{
+      escalationId: 100, complaintId: 12, complaintTitle: '긴급 문의', studentName: '학생',
+      assignedAdminName: '지정 관리자', reason: '학교 공동 검토가 필요합니다.', sharedScopes: ['MASKING_MESSAGES'],
+      escalationStatus: 'UNDER_REVIEW', currentRiskScore: 70, currentRiskLevel: 'EMERGENCY',
+      emergencyReviewRequestId: null, riskReviewStatus: null, safetyLock: true,
+      sharedAt: '2026-10-30T10:00:00', reviewStartedAt: '2026-10-30T11:00:00', completedAt: null,
+    }],
+    page: 0, size: 10, totalElements: 1, totalPages: 1,
+    first: true, last: true, hasNext: false, hasPrevious: false,
+  };
+  await setup(page, 'TEACHER', async (route, key) => {
+    if (key === 'GET /teacher/escalations') {
+      const status = new URL(route.request().url()).searchParams.get('status');
+      const result = status && status !== 'UNDER_REVIEW'
+        ? { ...sharedPage, content: [], totalElements: 0, totalPages: 0 }
+        : sharedPage;
+      await route.fulfill({ json: result });
+      return true;
+    }
+    if (key === 'GET /teacher/complaints') {
+      await route.fulfill({ json: { content: [], page: 0, size: 10, totalElements: 0, totalPages: 0, hasNext: false } });
+      return true;
+    }
+    const json = teacherComplaintJson(key, review);
+    if (json === undefined) return false;
+    await route.fulfill({ json });
+    return true;
+  });
+
+  await page.goto('/teacher/admin-share');
+  const list = page.getByRole('region', { name: '관리자에게 공유한 메시지 목록', exact: true });
+  await list.getByRole('link', { name: /^긴급 문의/ }).click();
+  await expect(page).toHaveURL(/\/teacher\/messages\/12$/);
+  await expect(page.getByRole('heading', { name: '메시지 상세', exact: true })).toBeVisible();
+  await expect(page.getByRole('main').getByText('긴급 문의', { exact: true })).toBeVisible();
+  await expect(page.getByRole('article').getByText('문의 요약', { exact: true })).toBeVisible();
+});
 
 for (const canCreateEvidence of [true, false]) {
   test(`공유 창의 증빙 ${canCreateEvidence ? '선택 첨부' : '생성 불가'}와 공유 실패 재시도는 선택한 HTTP scope를 유지한다`, async ({ page }) => {

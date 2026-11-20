@@ -31,6 +31,8 @@
     "GET /teacher/complaints/{complaintId}/response-draft",
     "GET /teacher/complaints/{complaintId}/response-templates",
     "GET /teacher/complaints/{complaintId}/risk",
+    "GET /teacher/escalations",
+    "GET /teacher/escalations/{escalationId}",
     "GET /users/me",
     "GET /users/me/policy-consents",
     "PATCH /admin/emergency-review/{requestId}",

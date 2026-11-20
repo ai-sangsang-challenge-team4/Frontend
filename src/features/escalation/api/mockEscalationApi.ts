@@ -23,6 +23,7 @@ import type {
   EscalationStateResponse,
   HistoryEvent,
   TeacherRiskReviewResponse,
+  TeacherEscalationSummaryResponse,
 } from '../escalationTypes';
 import { notifyEscalationsChanged, toServerComplaintId, type EscalationApi } from './escalationApiContract';
 
@@ -202,6 +203,21 @@ function toSummary(item: StoredEscalation, reviews = readReviews()): AdminEscala
     safetyLock: review?.safetyLock ?? false,
     sharedAt: item.sharedAt,
     sharedBy: item.sharedByName,
+  };
+}
+
+function toTeacherSummary(item: StoredEscalation): TeacherEscalationSummaryResponse {
+  const summary = toSummary(item);
+  return {
+    ...summary,
+    complaintId: item.complaintId,
+    complaintTitle: item.snapshot.title,
+    studentName: item.snapshot.studentName ?? '',
+    assignedAdminName: DEFAULT_ADMIN_NAME,
+    currentRiskScore: item.currentRiskScore,
+    sharedScopes: item.scopes,
+    reviewStartedAt: item.events.find((event) => event.type === 'ESCALATION_REVIEW_STARTED')?.occurredAt ?? null,
+    completedAt: item.events.find((event) => event.type === 'ESCALATION_COMPLETED')?.occurredAt ?? null,
   };
 }
 
@@ -518,19 +534,39 @@ export const mockEscalationApi: EscalationApi = {
     return review ? toEmergencyReview(review) : null;
   },
 
-  async listMyEscalations(signal) {
+  async listMyEscalations(query = {}, signal) {
     await wait(signal);
     const teacher = requireUser('TEACHER');
-    return readStore()
+    const keyword = query.keyword?.trim().toLocaleLowerCase();
+    const items = readStore()
       .filter((item) => item.sharedBy === teacher.userId)
-      .sort((left, right) => right.sharedAt.localeCompare(left.sharedAt))
-      .map((item) => ({
-        complaintId: item.complaintId,
-        escalationId: item.escalationId,
-        escalationStatus: item.escalationStatus,
-        sharedAt: item.sharedAt,
-        title: item.snapshot.title,
-      }));
+      .filter((item) => !query.status || item.escalationStatus === query.status)
+      .filter((item) => !query.riskLevel || item.currentRiskLevel === query.riskLevel)
+      .filter((item) => !keyword || `${item.snapshot.title} ${item.snapshot.studentName ?? ''}`.toLocaleLowerCase().includes(keyword))
+      .sort((left, right) => right.sharedAt.localeCompare(left.sharedAt) || right.escalationId - left.escalationId);
+    const page = query.page ?? 0;
+    const size = 10;
+    const totalPages = Math.ceil(items.length / size);
+    return {
+      content: items.slice(page * size, (page + 1) * size).map(toTeacherSummary),
+      page,
+      size,
+      totalElements: items.length,
+      totalPages,
+      first: page === 0,
+      last: page + 1 >= totalPages,
+      hasNext: page + 1 < totalPages,
+      hasPrevious: page > 0,
+    };
+  },
+
+  async getMyEscalation(escalationId, signal) {
+    await wait(signal);
+    const teacher = requireUser('TEACHER');
+    const item = readStore().find((entry) => entry.escalationId === escalationId);
+    if (!item) throw new ApiError({ status: 404, message: '공유 건을 찾을 수 없습니다.' });
+    if (item.sharedBy !== teacher.userId) throw new ApiError({ status: 403 });
+    return toTeacherSummary(item);
   },
 
   async listAdminEscalations(query = {}, signal) {

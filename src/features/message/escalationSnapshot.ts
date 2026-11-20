@@ -101,6 +101,7 @@ export function createEscalationSnapshot(thread: BoardThread): EscalationComplai
       name: factor.name,
       reason: factor.rationale,
     })),
+    studentName: thread.studentName,
     maskedMessages: [{ ...parentMessage, content: maskContactInfo(deliveredMessage).text, messageId: `${thread.id}-masked` }],
     originalMessages: original ? [{ ...parentMessage, content: original, messageId: `${thread.id}-original` }] : [],
     riskLevel: apiRiskLevel[level],
