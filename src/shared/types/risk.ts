@@ -35,3 +35,8 @@ export type SafetyFlags = {
   studentSafetyConcern?: boolean | null;
   privacyExposure?: boolean | null;
 };
+
+export type EmergencyOverride = {
+  applied: boolean;
+  safetySignals: { code: string; title: string; description: string }[];
+};

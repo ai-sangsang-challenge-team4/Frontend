@@ -90,6 +90,8 @@ export function toServerAnalysis(revision: RiskRevisionResponse, maskedContent: 
   return {
     status: 'ready',
     revisionStatus: revision.revisionStatus,
+    // An omitted field preserves the previous result. An explicit null clears it.
+    ...(revision.emergencyOverride !== undefined ? { emergencyOverride: revision.emergencyOverride } : {}),
     revisedText: revised && revised !== maskedContent ? revised : null,
     revisionReason: revision.finalRevision?.reason?.trim() || null,
     risks,

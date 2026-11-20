@@ -1,4 +1,4 @@
-import type { RiskAnalysisMetadata } from '../../shared/types/risk';
+import type { EmergencyOverride, RiskAnalysisMetadata } from '../../shared/types/risk';
 import type {
   EscalationScope,
   EscalationStatus,
@@ -211,6 +211,7 @@ export type TeacherRiskResponse = RiskAnalysisMetadata & {
   analyzedAt: string | null;
   latestReview: LatestReview | null;
   detectedFactors: DetectedFactor[];
+  emergencyOverride?: EmergencyOverride | null;
 };
 
 // @JsonInclude(NON_NULL): empty fields are omitted, not null. Compare with == null.

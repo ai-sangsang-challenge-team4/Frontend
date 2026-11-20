@@ -49,10 +49,16 @@
 - HTTP 500의 `PRIVACY_MASKING_FAILED`·`RISK_RULE_PROCESSING_FAILED`·`RISK_SCORE_CALCULATION_FAILED`·`RISK_ANALYSIS_SAVE_FAILED`는 코드별 안내를 표시하고 입력·초안을 유지합니다. 안전 처리 오류를 AI 폴백이나 전송 성공으로 처리하지 않습니다.
 - 상세 탐지의 **LLM 결과**에서 `severity`를 해당 없음(0)·경미(1)·보통(2)·심각(3)으로 표시합니다. null/누락은 상태에 따라 경계 사례·판단 정보 부족·심각도 정보 없음으로 구분합니다. Rule의 심각도·반복 횟수는 사용하지 않습니다.
 - `repeatCount`는 현재 민원에서 감지된 횟수이며 null/누락은 정보 없음입니다. 횟수로 위험 점수를 다시 계산하지 않습니다.
-- `safetyFlags`의 `credibleThreat`·`studentSafetyConcern`·`privacyExposure`가 각각 true이면 긴급 안전 신호를 표시하고, false이면 경고하지 않습니다. null/누락은 판단 불가 안내이며 false로 간주하지 않습니다. 전체 객체가 없으면 정보 미제공으로 표시합니다. 안전 신호로 프론트에서 점수나 등급을 덮어쓰지 않습니다.
+- `safetyFlags`의 `credibleThreat`·`studentSafetyConcern`·`privacyExposure`가 각각 true이면 감지된 신호를 표시하고, false이면 경고하지 않습니다. null/누락은 판단 불가로 안내합니다. 긴급 승격 정보가 생략된 이전 응답은 true 신호에 기존 '긴급 안전 신호' 배지를 사용합니다. 안전 신호로 프론트에서 점수나 등급을 덮어쓰지 않습니다.
 - 분석 상태·모드·수동 검토 필드는 이전 응답과 호환되도록 선택 필드로 받습니다. 필드가 없다는 이유로 정상 완료나 잠정 분석 상태를 만들어 넣지 않습니다.
 
 2026-11-17 #77 구현 단계의 검증은 인증·UI 494건, 학부모 HTTP 88건, 관리자 HTTP 14건, HTTP 통합 8건으로 **총 604건 통과**했습니다. build·lint·앱/테스트 TypeScript·diff 검사도 통과했습니다. 후속 #79의 Swagger 정렬과 최종 652건 검증은 [API 계약 점검](api-contract-audit.md)에 기록했습니다. HTTP 검증은 백엔드 계약에 따른 fixture 응답 interception 기반이며, 실제 배포 AI 연결 테스트는 실행하지 않았습니다. 아래의 2026-10-29·30 수동 확인은 당시 결과로 구분합니다.
+
+### 긴급 승격 사유 (#85)
+
+위험 분석 POST와 `GET /risk-analyses/{analysisId}/findings`의 `emergencyOverride`를 읽습니다. findings에 이 필드가 있으면 최신 값으로 사용하고, 생략하면 이전 응답의 값을 유지합니다. 수정안이 준비 중인 findings도 긴급 승격 사유를 표시합니다.
+
+`applied=true`일 때 일반 위험 태그의 탐지 건수와 별도로 **긴급 안전 신호**를 태그 목록 위에 표시합니다. `safetySignals`의 각 `code`로 항목을 구분하고 서버의 `title`과 `description`을 표시합니다. `applied=false` 또는 `null`이면 이 영역을 숨깁니다.
 
 ### 추가 문의
 

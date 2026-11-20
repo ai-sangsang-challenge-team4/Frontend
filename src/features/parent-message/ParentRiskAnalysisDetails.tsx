@@ -3,7 +3,7 @@ import { getApiErrorMessage, useApiRequest } from '../../shared/api';
 import { Accordion, Badge, Button, type BadgeVariant } from '../../shared/components/ui';
 import type { RiskFactorStatus } from '../../shared/types';
 import { maskContactInfo } from '../pii';
-import { RiskAnalysisNotice, SafetyFlagsNotice } from '../risk-analysis/RiskAnalysisNotice';
+import { EmergencySafetySignals, RiskAnalysisNotice, SafetyFlagsNotice } from '../risk-analysis/RiskAnalysisNotice';
 import { classificationStatusLabel } from '../risk-analysis';
 import { getRiskTagNames } from '../risk-analysis/riskTagCatalog';
 import { parentComplaintApi, type RiskDetection } from './api/parentComplaintApi';
@@ -37,6 +37,9 @@ export function ParentRiskAnalysisDetails({ analysis, analysisId }: { analysis: 
   const { data, error, isLoading, retry } = useApiRequest(request);
   // Optional: the results show without waiting for the catalog.
   const { data: tagNames } = useApiRequest(getRiskTagNames);
+  const emergencyOverride = analysis.emergencyOverride === undefined
+    ? analysis.riskSummary?.emergencyOverride : analysis.emergencyOverride;
+  const safetyFlags = data?.safetyFlags;
   return <section aria-label="위험 분석 결과" className="parent-review-analysis-details">
     {analysis.riskSummary ? <p className="parent-review-risk-score">
       시스템 위험도: <strong>{riskLabels[analysis.riskSummary.riskLevel]}</strong> · 위험 점수: {analysis.riskSummary.riskScore}/100
@@ -44,7 +47,9 @@ export function ParentRiskAnalysisDetails({ analysis, analysisId }: { analysis: 
     {analysis.riskSummary ? <RiskAnalysisNotice metadata={analysis.riskSummary} /> : null}
     {analysis.revisionReason ? <p><strong>수정 이유:</strong> {analysis.revisionReason}</p> : null}
     {analysis.maskingContentVersion !== undefined ? <p>서버에서 개인정보 마스킹을 확인한 내용입니다.</p> : null}
-    {data ? <SafetyFlagsNotice flags={data.safetyFlags} /> : null}
+    <EmergencySafetySignals emergencyOverride={emergencyOverride} />
+    {data && (safetyFlags != null || emergencyOverride?.applied !== true)
+      ? <SafetyFlagsNotice flags={safetyFlags} showEmergencyBadge={emergencyOverride === undefined} /> : null}
     <details>
       <summary>상세 탐지 결과 보기</summary>
       {isLoading ? <p role="status">상세 탐지 결과를 불러오고 있습니다.</p> : error ? <div role="alert">
