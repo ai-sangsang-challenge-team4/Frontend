@@ -38,7 +38,7 @@ export function ParentMessageReceipt({ userId, messageId }: { userId: number; me
   const dismissNotice = useCallback(() => setNotice(null), []);
   const isAnswered = message?.serverComplaintStatus === 'ANSWERED' && message.serverWaitingFor === 'PARENT';
   const isWaitingForTeacher = sync.enabled && message?.serverComplaintStatus === 'OPEN' && message.serverWaitingFor === 'TEACHER';
-  const serverActionsReady = !sync.isLoading && !sync.error;
+  const serverActionsReady = sync.hasSynced && !sync.error;
   const canClose = sync.enabled ? serverActionsReady && isAnswered
     : latest?.authorRole === 'teacher' && message?.consultationStatus !== 'complete';
   const canFollowUp = !sync.enabled || (serverActionsReady && (

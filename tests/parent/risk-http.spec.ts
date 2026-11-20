@@ -545,6 +545,33 @@ for (const closeConflict of [false, true]) {
   });
 }
 
+test('창에 포커스가 돌아와 대화를 조회하는 동안에도 한 번의 클릭으로 문의를 완료한다', async ({ page }) => {
+  const calls = await setup(page, { lifecycle: { status: 'ANSWERED' } });
+  const close = page.getByRole('button', { name: '문의 완료', exact: true });
+  await expect(close).toBeEnabled();
+
+  let finishRefresh!: () => void;
+  const refreshGate = new Promise<void>((resolve) => { finishRefresh = resolve; });
+  await page.route('**/api/complaints/42/messages', async (route) => {
+    await refreshGate;
+    await route.fallback();
+  });
+  const refreshStarted = page.waitForRequest((request) => request.method() === 'GET' &&
+    new URL(request.url()).pathname === '/api/complaints/42/messages');
+
+  try {
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await refreshStarted;
+    await expect(close).toBeEnabled({ timeout: 2000 });
+    await close.click();
+    const details = page.getByRole('region', { name: '문의 정보', exact: true });
+    await expect(details.getByText('상담 완료', { exact: true })).toBeVisible();
+    expect(calls.filter((call) => call === 'POST /complaints/42/close')).toHaveLength(1);
+  } finally {
+    finishRefresh();
+  }
+});
+
 for (const status of ['ANSWERED', 'CLOSED'] as const) {
   test(`${status} 문의에 추가 문의를 보내면 기존 민원이 교사 답변 대기로 재개된다`, async ({ page }) => {
     const calls = await setup(page, { followUp: true, lifecycle: { status } });
