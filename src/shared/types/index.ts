@@ -12,6 +12,7 @@ export type {
   GenerationMode,
   MessageSenderRole,
   MessageStatus,
+  MessageSummaryStatus,
   TeacherAllowedAction,
   WaitingFor,
 } from './message';

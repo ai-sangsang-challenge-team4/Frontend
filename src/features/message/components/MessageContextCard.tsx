@@ -13,6 +13,8 @@ type MessageContextCardProps = {
 export function MessageContextCard({ thread }: MessageContextCardProps) {
   const analysisStatus = getAnalysisStatus(thread);
   const analysis = thread.analysis;
+  const summary = thread.conversationSummary?.text ??
+    (thread.serverComplaintId === undefined ? 'AI 요약을 준비하고 있습니다.' : '');
   return (
     <div className="board-parent-card">
       <div className="board-card-profile">
@@ -24,7 +26,7 @@ export function MessageContextCard({ thread }: MessageContextCardProps) {
       </div>
       <div className="board-card-topic">
         <strong>{thread.conversationSummary?.topic ?? thread.title}</strong>
-        <span>{thread.conversationSummary?.text ?? 'AI 요약을 준비하고 있습니다.'}</span>
+        {summary ? <span>{summary}</span> : null}
       </div>
       <div className="board-card-meta-group">
         <div className="board-card-meta">

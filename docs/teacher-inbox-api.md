@@ -10,7 +10,7 @@
 | --- | --- | --- | --- |
 | 목록 | GET | `/teacher/complaints?page=&keyword=&status=&riskLevel=&sort=` | 페이지 크기 10 고정, "메시지 더 보기"로 다음 페이지 |
 | 상세 | GET | `/teacher/complaints/{id}` | |
-| 대화 | GET | `/teacher/complaints/{id}/messages` | LOW 초과 학부모 메시지는 메시지마다 완충 요약 카드로 표시. `summaryStatus=UNAVAILABLE`은 요약 실패 안내로 표시 |
+| 대화 | GET | `/teacher/complaints/{id}/messages` | 메시지별 `summaryStatus`로 원문·완충 요약·생성 실패 안내 표시 |
 | 위험 요소 | GET | `/teacher/complaints/{id}/risk` | 404(분석 없음)는 "분석 실패"로 표시 |
 | 처리 기록 | GET | `/teacher/complaints/{id}/history` | 최신순 응답을 오래된 순으로 표시 |
 | 원문 열람 | POST | `/teacher/complaints/{id}/messages/{messageId}/original-views` | 메시지 하나의 원문 반환 + 서버가 `ORIGINAL_VIEWED` 기록. 받은 뒤 원문 화면을 엶. 요약 카드마다 그 메시지의 원문을 열고, 위험 요소·답변 작성 화면의 원문 보기는 최신 학부모 메시지(최신 분석 대상)를 엶. `messageId`는 대화의 `message:{id}`에서 숫자만 사용 |
@@ -42,7 +42,8 @@
 - 증빙 패키지 가능 여부: `allowedActions`에 `CREATE_EVIDENCE_PACKAGE`가 있을 때.
 - 위험도 검토 가능: `status=OPEN`이고 `waitingFor=TEACHER`일 때(백엔드 규칙과 동일).
 - 날짜: 서버 `LocalDateTime`은 타임존이 없고 서버 시각이 KST라 `+09:00`을 붙여 해석합니다(`shared/api/serverDateTime.ts`).
-- 목록 미리보기는 서버 `aiSummary`, 대화 요약은 메시지별 `content`를 씁니다. `summaryStatus=UNAVAILABLE`이면 실패 안내 카드를 표시하고 응답 본문을 원문 말풍선으로 표시하지 않습니다. 원문 열람은 기존 권한·열람 API를 그대로 사용합니다. Backend는 Python AI의 완충 요약을 호출하며, AI 장애 시 요약 실패 상태를 반환합니다.
+- 목록 미리보기는 서버 `aiSummary`를 씁니다. 대화와 답변 작성 화면은 각 학부모 메시지의 `summaryStatus`를 따릅니다. `null`이면 `content`가 원문이므로 바로 보여 주고, `GENERATED`이면 완충 요약 카드와 원문 보기 버튼을 표시합니다. `UNAVAILABLE`이면 합의된 서버 실패 문구를 표시하고 원문 보기 버튼을 제공합니다. 예상과 다른 실패 본문은 고정 안내 문구로 대체합니다.
+- 백엔드는 대화 조회 때 HIGH·EMERGENCY 학부모 메시지의 완충 요약을 생성합니다. 이전 응답은 `summaryStatus`가 생략된 경우에만 `summarized`를 사용합니다. 요약 카드의 원문은 기존 확인창과 원문 열람 API를 거쳐 표시합니다.
 - 교사 답변의 `status=READ` 또는 `readAt`이 있으면 학부모가 읽은 상태로 표시합니다. 필드가 없는 이전 응답도 지원합니다.
 - 처리 기록의 AI 분석 제한·규칙 폴백·AI 초안 정책 차단·답변 정책 차단 이벤트도 한국어 작업명으로 표시합니다.
 

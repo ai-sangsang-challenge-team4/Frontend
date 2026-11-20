@@ -93,6 +93,10 @@
   color: #ff4b6c;
 }
 
+.board-moderation-message--unavailable .board-moderation-card {
+  --board-moderation-title-text-offset: 0px;
+}
+
 .board-moderation-card p {
   margin: 0;
   padding-left: var(--board-moderation-title-text-offset);

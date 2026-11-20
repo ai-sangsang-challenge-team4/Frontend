@@ -12,7 +12,7 @@ import type {
 } from './api/teacherInboxTypes';
 import { systemRiskLevelFromApi } from './escalationSnapshot';
 import { formatConversationDate, formatConversationTime } from './messageDates';
-import { systemRiskLabel, systemRiskTone } from './messageRules';
+import { getLatestParentReply, systemRiskLabel, systemRiskTone } from './messageRules';
 import type {
   ActivityLog,
   BoardReply,
@@ -61,7 +61,7 @@ export function toServerMessageNumber(replyId: string) {
 
 // The original opened without a chosen message: the latest parent message, which the latest analysis covers.
 export function getDefaultOriginalReplyId(thread: BoardThread) {
-  return [...thread.replies].reverse().find((reply) => reply.authorRole === 'parent')?.id;
+  return getLatestParentReply(thread.replies)?.id;
 }
 
 function className(grade: number | null, classNo: number | null) {
@@ -113,22 +113,28 @@ export type ServerThreadDetail = {
   history: HistoryEvent[] | null;
 };
 
+// UNAVAILABLE has a fixed server notice. Keep unexpected payloads out of the unconfirmed view.
+const summaryUnavailableNotice = '완충 요약을 생성하지 못했습니다. 원문 열람 버튼을 사용해주세요.';
+
 function toReplies(conversation: TeacherConversationResponse): BoardReply[] {
   return conversation.messages.map((message) => {
     const sentAt = toServerInstant(message.sentAt);
     const isParent = message.senderRole === 'PARENT';
+    // Only an omitted status uses the legacy flag. The explicit null means the server sent the original.
+    const summaryStatus = message.summaryStatus === undefined
+      ? (message.summarized ? 'GENERATED' : null) : message.summaryStatus;
+    const content = isParent && summaryStatus === 'UNAVAILABLE' && message.content?.trim() !== summaryUnavailableNotice
+      ? summaryUnavailableNotice : message.content;
     return {
       id: message.messageId,
       authorRole: isParent ? 'parent' : 'teacher',
       authorName: message.senderName,
-      content: message.content,
+      content,
       label: isParent ? '학부모 문의' : '선생님 답변',
       time: formatConversationTime(sentAt),
       sentAt,
-      ...(isParent ? {
-        summarized: message.summarized || message.summaryStatus === 'UNAVAILABLE',
-        summaryUnavailable: message.summaryStatus === 'UNAVAILABLE',
-      } : { deliveryStatus: 'SENT_TO_PARENT' as const, readByParent: Boolean(message.readAt) || message.status === 'READ' }),
+      ...(isParent ? { summaryStatus }
+        : { deliveryStatus: 'SENT_TO_PARENT' as const, readByParent: Boolean(message.readAt) || message.status === 'READ' }),
     };
   });
 }
@@ -178,10 +184,8 @@ function toClassifications(risk: TeacherRiskResponse): RiskClassification[] {
 function toAnalysis(
   { conversation, detail, history, risk }: ServerThreadDetail,
   local: ThreadAnalysis | undefined,
+  latestParent: BoardReply | undefined,
 ): ThreadAnalysis {
-  // The summary belongs to the latest parent message only; an older summary must not stand in for a newer,
-  // unsummarized message. The conversation shows each message's own summary.
-  const latestParent = [...conversation.messages].reverse().find((message) => message.senderRole === 'PARENT');
   const base: ThreadAnalysis = {
     aiAnalysisStatus: risk?.aiAnalysisStatus,
     analysisMode: risk?.analysisMode,
@@ -205,7 +209,7 @@ function toAnalysis(
     studentSafetySignal: 'NONE',
     summary: {
       status: latestParent?.summaryStatus === 'UNAVAILABLE' ? 'failed' : 'ready',
-      text: latestParent?.summarized && latestParent.summaryStatus !== 'UNAVAILABLE' ? latestParent.content : '',
+      text: latestParent?.summaryStatus === 'GENERATED' ? latestParent.content : '',
     },
     systemRiskLevel: systemRiskLevelFromApi[risk?.riskLevel ?? detail.riskLevel ?? 'LOW'],
   };
@@ -231,7 +235,8 @@ export function mergeServerDetail(thread: BoardThread, bundle: ServerThreadDetai
   const replies = toReplies(conversation);
   const latest = replies.at(-1);
   const hasTeacherReply = replies.some((reply) => reply.authorRole === 'teacher');
-  const analysis = toAnalysis(bundle, thread.analysis);
+  // The current analysis points to the latest parent message and its own summary.
+  const analysis = toAnalysis(bundle, thread.analysis, getLatestParentReply(replies));
   const level = analysis.currentRiskLevel ?? analysis.teacherReviewedRiskLevel ?? analysis.systemRiskLevel;
   const latestAt = latest?.sentAt ?? thread.latestAt;
   const firstSentAt = replies[0]?.sentAt ?? toServerInstant(detail.submittedAt);
