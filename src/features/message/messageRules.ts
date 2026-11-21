@@ -172,7 +172,7 @@ export const riskStageGuides: Record<
     lockDescription: '필요한 확인을 마친 뒤 답변을 작성할 수 있습니다.',
   },
   medium: {
-    headline: '‘주의’ 단계에서는 완충 요약과 원문 확인 후 답변을 진행합니다.',
+    headline: '‘주의’ 단계에서는 학부모 메시지와 판단 근거를 확인한 뒤 답변을 진행합니다.',
     description:
       '위험 표현과 판단 이유를 먼저 확인하고 오해 가능성을 낮춘 문장으로 답변해 주세요.',
     note: 'AI 답변 초안은 사용할 수 있지만, 교사 검토 후 수정하는 것을 권고합니다.',
@@ -317,4 +317,8 @@ export function getPrimaryParentMessage(thread: BoardThread) {
   }
 
   return parentReply?.content ?? thread.latestMessage;
+}
+
+export function getLatestParentReply(replies: BoardThread['replies']) {
+  return replies.filter((reply) => reply.authorRole === 'parent').at(-1);
 }

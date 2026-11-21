@@ -1,7 +1,7 @@
 import type { ThreadActivityLog } from '../parent-message/parentMessageTypes';
 import type { ReplyTemplate, ReplyTemplateDraft } from './replyTemplates';
 import type { RiskClassification } from '../risk-analysis';
-import type { ComplaintStatus, RiskReviewStatus, WaitingFor } from '../../shared/types';
+import type { ComplaintStatus, MessageSummaryStatus, RiskReviewStatus, WaitingFor } from '../../shared/types';
 import type { EmergencyOverride, RiskAnalysisMetadata } from '../../shared/types/risk';
 
 export type ThreadStatus = 'before' | 'inProgress' | 'complete';
@@ -97,9 +97,8 @@ export type BoardReply = {
   label: string;
   // Set once the reply is stored as the final answer delivered to the parent.
   deliveryStatus?: 'SENT_TO_PARENT';
-  // Server inbox: a parent message above LOW arrives as its buffered summary instead of the original.
-  summarized?: boolean;
-  summaryUnavailable?: boolean;
+  // Server inbox: null represents an original supplied in the conversation response.
+  summaryStatus?: MessageSummaryStatus | null;
   readByParent?: boolean;
   time: string;
   sentAt?: string;

@@ -2,6 +2,7 @@ import type {
   ComplaintStatus,
   MessageSenderRole,
   MessageStatus,
+  MessageSummaryStatus,
   RiskLevel,
   TeacherAllowedAction,
   UserRole,
@@ -82,14 +83,14 @@ export type TeacherConversationMessage = {
   messageId: string;
   senderRole: Extract<MessageSenderRole, 'PARENT' | 'TEACHER'>;
   senderName: string;
-  // A parent message whose latest analysis is above LOW comes as a buffered summary instead of the original.
+  // summaryStatus determines whether this is the original, a buffered summary, or a failure notice.
   content: string;
   sentAt: string;
   summarized: boolean;
   // Older deployments omit these fields. An unavailable summary is not an original message.
   status?: MessageStatus;
   readAt?: string | null;
-  summaryStatus?: 'GENERATED' | 'UNAVAILABLE' | null;
+  summaryStatus?: MessageSummaryStatus | null;
 };
 
 // GET /teacher/complaints/{complaintId}/messages
