@@ -3,7 +3,7 @@ import {
   Ban, ChevronDown, ChevronUp, Eye, Gavel, LockKeyhole, Megaphone, MessageCircleWarning, Pencil, Repeat2, RotateCcw, Save, Send,
   ShieldAlert, UserRoundX,
 } from 'lucide-react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth';
 import { getApiErrorMessage, isApiError, isRiskAnalysisSafetyError } from '../../shared/api';
 import { Accordion, Button, EmptyState, Modal, Tabs, TextareaField, Toast } from '../../shared/components/ui';
@@ -113,6 +113,7 @@ export function ParentMessageReview({ userId, messageId }: { userId: number; mes
 function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: number }) {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   // Every inquiry in HTTP mode has a server draft before it can be reviewed or sent.
   const isServer = parentMessageApiMode === 'http' && Boolean(draft.server);
   const [review, setReview] = useState<MessageReview>(() => {
@@ -258,7 +259,13 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
   function handleBack() {
     try {
       persistReview();
-      navigate(draft.threadId ? getDraftPath(draft) : '/parent/messages/new');
+      if (draft.threadId && location.state?.inlineFollowUp) {
+        navigate(`/parent/messages/${encodeURIComponent(draft.threadId)}`, {
+          state: { followUpOpen: true, followUpDraftId: draft.messageId },
+        });
+      } else {
+        navigate(draft.threadId ? getDraftPath(draft) : '/parent/messages/new');
+      }
     } catch {
       setNotice('작성한 내용을 저장하지 못했습니다. 임시저장 후 다시 시도해 주세요.');
     }

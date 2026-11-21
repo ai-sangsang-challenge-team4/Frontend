@@ -624,6 +624,9 @@ for (const status of ['ANSWERED', 'CLOSED'] as const) {
       await expect(page.getByRole('button', { name: '문의 완료', exact: true })).toHaveCount(0);
     }
     await page.getByRole('button', { name: '추가 문의하기', exact: true }).click();
+    await expect(page).toHaveURL(/\/parent\/messages\/thread-local$/);
+    await expect(page.getByLabel('문의 내용', { exact: true })).toBeFocused();
+    expect(calls.filter((call) => /^(POST|PUT|PATCH) /.test(call))).toEqual([]);
     await analyze(page);
     await page.getByRole('tab', { name: '원문', exact: true }).click();
     await page.getByRole('button', { name: '전송하기', exact: true }).click();
@@ -640,6 +643,47 @@ for (const status of ['ANSWERED', 'CLOSED'] as const) {
     expect(calls).not.toContain('POST /complaints');
   });
 }
+
+test('인라인 작성 중 교사 답변 대기로 바뀌면 내용을 보존하고 분석을 차단한다', async ({ page }) => {
+  const calls = await setup(page, { followUp: true, lifecycle: { status: 'ANSWERED' } });
+  await page.getByRole('button', { name: '추가 문의하기', exact: true }).click();
+  const input = page.getByLabel('문의 내용', { exact: true });
+  await input.fill('작성 중인 추가 문의를 보존합니다.');
+  await expect(page.getByRole('button', { name: '문의 완료', exact: true })).toBeDisabled();
+  await page.route('**/api/complaints/42/messages', async (route) => route.fulfill({ json: {
+    complaintId: 42, status: 'OPEN', waitingFor: 'TEACHER', messages: [{
+      messageId: 1, type: 'PARENT_INQUIRY', senderRole: 'PARENT', senderName: 'Demo Parent', content: thread.finalBody,
+      status: 'SENT', sentAt: thread.sentAt, readAt: null,
+    }, {
+      messageId: 2, type: 'TEACHER_REPLY', senderRole: 'TEACHER', senderName: thread.teacherName, content: '확인한 답변입니다.',
+      status: 'READ', sentAt: '2026-10-29T20:00:00Z', readAt: null,
+    }, {
+      messageId: 3, type: 'PARENT_INQUIRY', senderRole: 'PARENT', senderName: 'Demo Parent', content: '다른 기기에서 전송한 문의',
+      status: 'SENT', sentAt: '2026-10-30T10:03:00', readAt: null,
+    }],
+  } }));
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(page.getByRole('button', { name: 'AI 분석 시작', exact: true })).toBeDisabled();
+  await expect(input).toHaveValue('작성 중인 추가 문의를 보존합니다.');
+  await page.getByRole('button', { name: '추가 문의 입력창 접기', exact: true }).click();
+  await expect(input).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '추가 문의하기', exact: true })).toHaveCount(0);
+  expect(calls.filter((call) => /^(POST|PUT|PATCH) /.test(call))).toEqual([]);
+  expect(await page.evaluate(() => localStorage.getItem('teacher-hub.parent-message-draft.101'))).toContain('작성 중인 추가 문의를 보존합니다.');
+});
+
+test('인라인 추가 문의에서도 서버 초안을 복원하고 버전 충돌 시 본문을 보존한다', async ({ page }) => {
+  const calls = await setup(page, { followUp: true, conflict: true, lifecycle: { status: 'ANSWERED' } });
+  await page.getByRole('button', { name: '추가 문의하기', exact: true }).click();
+  await expect(page.getByLabel('문의 내용', { exact: true })).toHaveValue('내가 작성한 내용');
+  await page.getByRole('button', { name: 'AI 분석 시작', exact: true }).click();
+  await expect(page.getByText(/서버의 추가 문의 초안이 변경되었습니다/)).toBeVisible();
+  await expect(page).toHaveURL(/\/parent\/messages\/thread-local$/);
+  await expect(page.getByLabel('문의 내용', { exact: true })).toHaveValue('내가 작성한 내용');
+  expect(calls).not.toContain('PUT /complaints/42/message-draft');
+  await page.getByRole('button', { name: '서버 초안 불러오기', exact: true }).click();
+  await expect(page.getByLabel('문의 내용', { exact: true })).toHaveValue('다른 탭의 초안');
+});
 
 test('서버 마스킹 실패 시 작성 내용을 유지하고 분석을 중단한다', async ({ page }) => {
   const calls = await setup(page, { maskFailure: true });

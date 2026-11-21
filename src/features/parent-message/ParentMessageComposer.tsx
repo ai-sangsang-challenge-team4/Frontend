@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { ChevronDown, LockKeyhole, Save, Send, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronUp, LockKeyhole, Save, Send, Sparkles } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import analysisIllustration from '../../shared/assets/parent/message-analysis.svg';
 import { getApiErrorMessage, isApiError, isRiskAnalysisSafetyError } from '../../shared/api';
@@ -28,8 +28,9 @@ const CHILD_LINK_MESSAGE = '선택한 자녀와 계정의 연결을 확인하지
 // page waits for a creation that is still running instead of sending a second POST /complaints.
 const pendingCreations = new Map<string, Promise<ServerComplaintDraft>>();
 
-export function ParentMessageComposer({ userId, threadId, draftId, fresh = false }: {
+export function ParentMessageComposer({ userId, threadId, draftId, fresh = false, embedded = false, blocked = false, onCollapse }: {
   userId: number; threadId?: string; draftId?: string; fresh?: boolean;
+  embedded?: boolean; blocked?: boolean; onCollapse?: () => void;
 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -57,6 +58,8 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
     };
   });
   const [errors, setErrors] = useState<FieldErrors>({});
+  const [savedBody, setSavedBody] = useState<string | null>(initial.saved?.body ?? null);
+  const [saveFailed, setSaveFailed] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [maskingFailed, setMaskingFailed] = useState(false);
   const [canReloadServerDraft, setCanReloadServerDraft] = useState(false);
@@ -70,6 +73,9 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
   const [isCreatingServerDraft, setIsCreatingServerDraft] = useState(() => pendingCreations.has(creationKey));
   const loadingTitle = useRef<HTMLParagraphElement>(null);
   const dismissNotice = useCallback(() => setNotice(null), []);
+  useEffect(() => {
+    if (embedded) document.getElementById('parent-message-body')?.focus();
+  }, [embedded]);
   // Title, child, and teacher cannot change once the server draft exists (PATCH only takes the content),
   // nor while its creation is still running after the parent left the analysis.
   const serverLocked = isServer && (isServerFollowUp || Boolean(draft.server) || isCreatingServerDraft);
@@ -92,6 +98,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
     const controller = new AbortController();
     void parentComplaintApi.getFollowUpDraft(thread.serverComplaintId, controller.signal).then((saved) => {
       if (!saved || controller.signal.aborted) return;
+      setSavedBody(saved.content);
       setDraft((previous) => previous.body || previous.server ? previous : {
         ...previous, body: saved.content,
         server: toFollowUpServerDraft(previous, { teacherId: Number(thread.teacherId), teacherName: thread.teacherName }, saved),
@@ -132,8 +139,13 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
 
   useEffect(() => {
     if (!isAnalyzing) return;
+    if (blocked) {
+      analysisPending.current = false;
+      setIsAnalyzing(false);
+      return;
+    }
     loadingTitle.current?.focus();
-    window.scrollTo({ top: 0, behavior: 'instant' });
+    if (!embedded) window.scrollTo({ top: 0, behavior: 'instant' });
 
     const controller = new AbortController();
     let latestServer = draft.server;
@@ -234,7 +246,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
       }
       try {
         saveMessageDraft(userId, { ...draft, server: latestServer, status: 'PARENT_REVIEW', review: createMessageReview(analysis) });
-        navigate(`/parent/messages/${draft.messageId}/review`);
+        navigate(`/parent/messages/${draft.messageId}/review`, { state: { inlineFollowUp: embedded } });
       } catch {
         stopAnalyzing();
         setNotice('작성한 내용을 저장하지 못했습니다. 다시 시도해 주세요.');
@@ -243,7 +255,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
     void analyze();
 
     return () => controller.abort();
-  }, [creationKey, draft, isAnalyzing, isServer, isServerFollowUp, navigate, retryRecipients, userId]);
+  }, [blocked, creationKey, draft, embedded, isAnalyzing, isServer, isServerFollowUp, navigate, retryRecipients, userId]);
 
   async function reloadServerFollowUp() {
     const thread = initial.thread;
@@ -262,6 +274,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
         server: saved ? toFollowUpServerDraft(previous, { teacherId: Number(thread.teacherId), teacherName: thread.teacherName }, saved) : undefined,
       }));
       setCanReloadServerDraft(false);
+      if (saved) setSavedBody(saved.content);
       setNotice(saved ? '서버 초안을 불러왔습니다.' : '저장된 서버 초안이 없습니다. 현재 내용으로 다시 분석해 주세요.');
     } catch (failure) {
       if (attempt === reloadAttempt.current) setNotice(getApiErrorMessage(failure, '서버 초안을 불러오지 못했습니다.'));
@@ -270,6 +283,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
 
   function updateField(field: Exclude<FieldName, 'studentId'>, value: string) {
     draftEdits.current += 1;
+    setSaveFailed(false);
     setDraft((previous) => ({ ...previous, [field]: value, status: 'DRAFT', review: undefined }));
     setErrors((previous) => ({ ...previous, [field]: undefined }));
     setMaskingFailed(false);
@@ -294,16 +308,34 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
     }
     try {
       saveMessageDraft(userId, withTeacherName({ ...draft, status: 'DRAFT' }));
+      setSavedBody(draft.body);
+      setSaveFailed(false);
       setNotice('문의가 임시저장되었습니다.');
       if (fresh) navigate(getDraftPath(draft), { replace: true, state: { draftSaved: true } });
     } catch {
+      setSaveFailed(true);
       setNotice('임시저장하지 못했습니다. 다시 시도해 주세요.');
+    }
+  }
+
+  function handleCollapse() {
+    try {
+      // Preserve the exact draft, including any existing analysis and server version.
+      // Closing before the initial server read finishes must not hide that server draft
+      // behind a new empty browser draft on the next open.
+      if (initial.saved || draftEdits.current > 0 || draft.server || draft.body) {
+        saveMessageDraft(userId, withTeacherName(draft));
+      }
+      onCollapse?.();
+    } catch {
+      setSaveFailed(true);
+      setNotice('작성한 내용을 저장하지 못했습니다. 입력창을 유지합니다. 다시 시도해 주세요.');
     }
   }
 
   function handleAnalyze(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
-    if (analysisPending.current) return;
+    if (analysisPending.current || blocked) return;
     const nextErrors: FieldErrors = {};
     if (isServer && !isServerFollowUp && !studentId) nextErrors.studentId = '문의할 자녀를 선택해 주세요.';
     const teacher = teacherOptions.find((option) => option.value === draft.teacherId);
@@ -327,7 +359,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
     if (draft.review && (!isServer || draft.server)) {
       try {
         saveMessageDraft(userId, { ...draft, status: 'PARENT_REVIEW' });
-        navigate(`/parent/messages/${draft.messageId}/review`);
+        navigate(`/parent/messages/${draft.messageId}/review`, { state: { inlineFollowUp: embedded } });
       } catch {
         setNotice('작성한 내용을 저장하지 못했습니다. 다시 시도해 주세요.');
       }
@@ -342,6 +374,8 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
         ...draft, title: draft.title.trim(), body: draft.body.trim(), status: 'DRAFT',
       });
       saveMessageDraft(userId, nextDraft);
+      setSavedBody(nextDraft.body);
+      setSaveFailed(false);
       const recipient = recipients.data?.find((item) => String(item.teacherId) === draft.teacherId);
       analysisTarget.current = draft.server ?? (isServerFollowUp && initial.thread?.serverComplaintId
         ? { complaintId: initial.thread.serverComplaintId, teacherId: Number(initial.thread.teacherId), teacherName: initial.thread.teacherName }
@@ -368,13 +402,14 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
   }
 
   const localOnlyFollowUp = isServerFollowUp && initial.thread?.serverComplaintId === undefined;
+  const Content = embedded ? 'div' : 'main';
   if (initial.unavailable || localOnlyFollowUp) return <>
-    <ParentMessageHeader title={threadId ? '추가 문의하기' : '새 문의 작성'} />
-    <main className="layout-main"><EmptyState
+    {!embedded ? <ParentMessageHeader title={threadId ? '추가 문의하기' : '새 문의 작성'} /> : null}
+    <Content className={embedded ? 'parent-inline-composer' : 'layout-main'}><EmptyState
       title={localOnlyFollowUp ? '서버에 등록되지 않은 문의입니다. 새 문의로 작성해 주세요.' : '작성할 문의를 찾을 수 없습니다.'}
       action={localOnlyFollowUp
         ? <Button onClick={() => navigate('/parent/messages/new?fresh=1')}>새 문의 작성</Button>
-        : <Button onClick={() => navigate('/parent/messages')}>문의 내역</Button>} /></main>
+        : <Button onClick={() => navigate('/parent/messages')}>문의 내역</Button>} /></Content>
   </>;
 
   const analysisNotice = threadId
@@ -397,11 +432,21 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
 
   return (
     <>
-      <ParentMessageHeader title={threadId ? '추가 문의하기' : '새 문의 작성'}
+      {!embedded ? <ParentMessageHeader title={threadId ? '추가 문의하기' : '새 문의 작성'}
         breadcrumbLabel={threadId ? '추가 문의하기' : '새 문의 작성'} showBack={Boolean(threadId) || isAnalyzing}
-        backLabel={isAnalyzing ? '문의 작성으로 돌아가기' : '문의 내역으로 돌아가기'} onBack={handleBack} />
+        backLabel={isAnalyzing ? '문의 작성으로 돌아가기' : '문의 내역으로 돌아가기'} onBack={handleBack} /> : null}
 
-      <main className="layout-main parent-write-main" aria-busy={isAnalyzing}>
+      <Content className={embedded ? 'parent-inline-composer' : 'layout-main parent-write-main'} aria-busy={isAnalyzing}>
+        {embedded ? <div className="parent-inline-composer-heading">
+          <h2>추가 문의 작성</h2>
+          <Button className="parent-inline-composer-collapse" variant="ghost" disabled={isAnalyzing}
+            aria-label="추가 문의 입력창 접기" aria-expanded={true} aria-controls="parent-inline-follow-up"
+            title="입력창 접기 (작성 내용은 임시저장됩니다)" onClick={handleCollapse} rightIcon={<ChevronUp size={18} />}>
+            접기
+          </Button>
+          <p id={analysisDescriptionId}>기존 대화에 이어서 작성합니다. 문의 대상과 제목은 그대로 유지됩니다.</p>
+        </div> : null}
+        {blocked ? <p className="parent-inline-composer-blocked" role="status">현재 문의 상태에서는 추가 문의를 진행할 수 없습니다. 작성한 내용은 임시저장할 수 있어요.</p> : null}
         {isAnalyzing ? (
           <section className="parent-analysis" aria-label="메시지 분석 중">
             <div className="parent-analysis-progress" role="status" aria-live="polite">
@@ -414,6 +459,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
               <LockKeyhole aria-hidden="true" size={24} />
               <p>전화번호·이메일·주민등록번호를 가린 문장으로 AI 분석을 진행하고 있습니다. 분석이 끝나면 전송할 내용을 직접 확인할 수 있습니다.</p>
             </div>
+            {embedded ? <Button onClick={handleBack} variant="outline">문의 작성으로 돌아가기</Button> : null}
           </section>
         ) : (
           <>
@@ -421,9 +467,10 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
               id: 'parent-write-guidelines',
               title: <span className="parent-write-notice-copy">
                 <span className="parent-write-notice-title">문의 작성 시 유의사항</span>
-                <span className="parent-write-notice-summary">문의는 전송 후 수정하거나 삭제할 수 없습니다.</span>
+                {!embedded ? <span className="parent-write-notice-summary">문의는 전송 후 수정하거나 삭제할 수 없습니다.</span> : null}
               </span>,
               content: <ul>
+                {embedded ? <li>문의는 전송 후 수정하거나 삭제할 수 없습니다.</li> : null}
                 <li>서로를 배려하는 표현으로 문의를 작성해 주세요.</li>
                 <li>폭언, 욕설 등 부적절한 표현은 관련 법령에 따라 문제가 될 수 있습니다.</li>
                 <li>개인정보나 계좌번호·카드번호·비밀번호 등 금융정보를 요구받으면 금융사기일 수 있으니 주의해 주세요.</li>
@@ -435,6 +482,8 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
                 <p>다른 곳에서 저장한 초안과 내용이 다릅니다. 서버 초안을 불러오면 현재 입력한 내용이 서버의 내용으로 바뀝니다.</p>
                 <Button onClick={() => { void reloadServerFollowUp(); }} variant="outline">서버 초안 불러오기</Button>
               </div> : null}
+              {embedded && (errors.teacherId || errors.title) ? <p role="alert">{errors.teacherId ?? errors.title}</p> : null}
+              {!embedded ? <>
               {isServer && !isServerFollowUp ? <Select containerClassName="parent-write-field" disabled={serverLocked || childOptions.length === 0}
                 aria-describedby={analysisDescriptionId}
                 error={errors.studentId} helperText={childHelper} id="parent-message-studentId" label="자녀" name="studentId"
@@ -453,37 +502,47 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
                 id="parent-message-title" label="문의 제목" maxLength={COMPLAINT_TITLE_MAX_LENGTH} name="title"
                 onChange={(event) => updateField('title', event.target.value)}
                 placeholder="문의 제목을 입력해 주세요." readOnly={Boolean(threadId) || serverLocked} required value={draft.title} />
+              </> : null}
               <TextareaField containerClassName="parent-write-field parent-write-body" error={errors.body}
-                id="parent-message-body" label="문의 내용" maxLength={MESSAGE_MAX_LENGTH} name="body"
+                id="parent-message-body" label={embedded ? <>문의 내용 <span aria-hidden="true">*</span></> : '문의 내용'} maxLength={MESSAGE_MAX_LENGTH} name="body"
+                aria-label={embedded ? '문의 내용' : undefined}
+                aria-describedby={embedded ? 'parent-inline-character-count' : undefined}
                 onChange={(event) => updateField('body', event.target.value)}
                 placeholder={threadId ? '추가로 문의할 내용을 작성해 주세요.' : '선생님께 전달할 문의 내용을 작성해 주세요.'} required rows={6} value={draft.body} />
               <div className="parent-write-guidance">
                 {maskingFailed || draft.body.trim() || draft.title.trim() ? <PrivacyMaskingNotice
                   compact
+                  inline={embedded}
                   onRetry={() => handleAnalyze()}
                   result={maskingFailed ? { status: 'failed', text: null, count: null }
                     : { status: 'ready', ...maskContactInfo(`제목: ${draft.title}\n\n내용: ${draft.body}`) }}
                 /> : null}
-                <div className="parent-write-analysis-note">
+                {embedded ? <p className="parent-inline-character-count" id="parent-inline-character-count">
+                  {draft.body.length.toLocaleString('ko-KR')} / {MESSAGE_MAX_LENGTH.toLocaleString('ko-KR')}자
+                </p> : <div className="parent-write-analysis-note">
                   {threadId ? <LockKeyhole aria-hidden="true" size={18} /> : <Sparkles aria-hidden="true" size={18} />}
                   <p id={analysisDescriptionId}>
                     <span>{analysisNotice}</span>
                     {analysisDetail ? <span className="sr-only"> {analysisDetail}</span> : null}
                   </p>
                   {analysisDetail ? <InformationTooltip label="AI 분석 안내" content={analysisDetail} /> : null}
-                </div>
+                </div>}
               </div>
               <div className="parent-write-footer">
+                {embedded ? <p className="parent-inline-save-status" aria-live="polite">
+                  {saveFailed ? '임시저장 실패' : savedBody === draft.body ? '임시저장됨'
+                    : draftEdits.current > 0 ? '저장되지 않은 변경사항' : '아직 저장하지 않음'}
+                </p> : null}
                 <div className="parent-write-actions">
                   <Button className="parent-write-save" leftIcon={<Save size={18} />} onClick={handleSaveDraft} size="md" variant="outline">임시저장</Button>
-                  <Button aria-describedby={analysisDescriptionId} className="parent-write-analyze" disabled={teacherOptions.length === 0 || maskingFailed}
+                  <Button aria-describedby={analysisDescriptionId} className="parent-write-analyze" disabled={blocked || teacherOptions.length === 0 || maskingFailed}
                     leftIcon={<Send size={18} />} size="md" type="submit">AI 분석 시작</Button>
                 </div>
               </div>
             </form>
           </>
         )}
-      </main>
+      </Content>
       {notice ? <Toast message={notice} onClose={dismissNotice} /> : null}
     </>
   );

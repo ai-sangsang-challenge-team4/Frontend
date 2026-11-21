@@ -100,14 +100,14 @@ test('완료된 문의를 추가 질문으로 재개하고 교사 답변 뒤 학
   const infoCard = page.getByRole('region', { name: '문의 정보', exact: true });
   await expect(infoCard.getByText('상담 완료', { exact: true })).toBeVisible();
   await expect(infoCard.getByText('재확인 필요', { exact: true })).toHaveCount(0);
-  const acknowledgeButton = page.getByRole('button', { name: '확인했어요.', exact: true });
-  const acknowledgeHint = page.locator('.parent-acknowledge-hint');
-  await expect(acknowledgeButton).toBeDisabled();
-  await expect(acknowledgeHint).toBeVisible();
-  await expect(acknowledgeButton).toHaveAccessibleDescription('선생님 답변이 도착하면 확인할 수 있어요.');
+  const acknowledgeButton = page.getByRole('button', { name: /확인했어요|확인 완료/ });
+  await expect(acknowledgeButton).toHaveCount(0);
   await page.getByRole('button', { name: '추가 문의하기', exact: true }).click();
-  await expect(page.getByLabel('문의 대상', { exact: true })).toHaveValue('김OO 선생님');
-  await expect(page.getByLabel('문의 제목', { exact: true })).toHaveAttribute('readonly', '');
+  await expect(page).toHaveURL(/\/parent\/messages\/done$/);
+  await expect(page.getByLabel('문의 대상', { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('문의 제목', { exact: true })).toHaveCount(0);
+  await expect(infoCard).toContainText('김OO 선생님');
+  await expect(infoCard).toContainText('방과후 출결 확인');
   await page.getByRole('button', { name: 'AI 분석 시작', exact: true }).click();
   await expect(page.getByText('문의 내용을 입력해 주세요.', { exact: true })).toBeVisible();
   await page.getByLabel('문의 내용', { exact: true }).fill('방과후 출결은 생활기록부에도 반영되나요?');
@@ -165,20 +165,13 @@ test('완료된 문의를 추가 질문으로 재개하고 교사 답변 뒤 학
   await parentRow.click();
   await expect(page.getByRole('region', { name: '전체 대화 내역', exact: true })).toContainText('학교 출결 규정에 따라 안내드리겠습니다.');
   await expect(infoCard.getByText('재확인 필요', { exact: true })).toHaveCount(0);
-  await expect(acknowledgeButton).toBeEnabled();
-  await expect(acknowledgeHint).toHaveCount(0);
-  await acknowledgeButton.click();
-  const acknowledgedButton = page.getByRole('button', { name: '확인 완료', exact: true });
-  await expect(acknowledgedButton).toBeDisabled();
-  await expect(acknowledgeHint).toBeVisible();
-  await expect(acknowledgedButton).toHaveAccessibleDescription('이 답변은 확인을 마쳤어요.');
+  await expect(acknowledgeButton).toHaveCount(0);
   await page.getByRole('button', { name: '문의 완료', exact: true }).click();
   await expect(infoCard.getByText('상담 완료', { exact: true })).toBeVisible();
   expect(await storedStatus(page, 'done')).toBe('complete');
   await expect(page.getByRole('button', { name: '문의 완료', exact: true })).toHaveCount(0);
   await page.reload();
-  await expect(acknowledgedButton).toBeDisabled();
-  await expect(acknowledgedButton).toHaveAccessibleDescription('이 답변은 확인을 마쳤어요.');
+  await expect(acknowledgeButton).toHaveCount(0);
   await page.goto('/parent/messages');
   await expect(recheck).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -212,6 +205,109 @@ test('교사 화면에는 확인했어요와 상담 시작이 없고 카드에�
   await expect(topic.locator('strong')).toHaveText('상담 일정 요청');
   await expect(topic.locator('span')).toHaveText('상담 일정 조율을 요청함.');
   await expect(topic).not.toContainText('확인 후 안내드리겠습니다.');
+});
+
+test('추가 문의 입력창은 대화 아래에서 열리고 접기·새로고침 후 초안을 복원한다', async ({ page }, testInfo) => {
+  await login(page);
+  await seed(page);
+  await page.goto('/parent/messages/done');
+  const input = page.getByLabel('문의 내용', { exact: true });
+  await expect(input).toHaveCount(0);
+  await page.getByRole('button', { name: '추가 문의하기', exact: true }).click();
+  await expect(page).toHaveURL(/\/parent\/messages\/done$/);
+  await expect(input).toBeFocused();
+  await expect(page.getByRole('main')).toHaveCount(1);
+  const composer = page.locator('.parent-inline-composer');
+  const saveStatus = composer.locator('.parent-inline-save-status');
+  await expect(saveStatus).toHaveText('아직 저장하지 않음');
+  await expect(composer.locator('.parent-inline-character-count')).toHaveText('0 / 5,000자');
+  await expect(composer.getByRole('button', { name: '추가 문의 입력창 접기' })).toHaveText('접기');
+  const guidelines = composer.getByRole('button', { name: '문의 작성 시 유의사항', exact: true });
+  await expect(guidelines).toHaveAttribute('aria-expanded', 'false');
+  await expect(composer.getByText('문의는 전송 후 수정하거나 삭제할 수 없습니다.', { exact: true })).toHaveCount(0);
+  await guidelines.click();
+  await expect(composer.getByText('문의는 전송 후 수정하거나 삭제할 수 없습니다.', { exact: true })).toBeVisible();
+  await guidelines.click();
+  await expect(composer.getByText('개인정보가 포함되지 않았는지 확인해 주세요.', { exact: true })).toBeVisible();
+  await expect(composer.locator('.parent-write-analysis-note')).toHaveCount(0);
+  await expect(page.locator('.parent-conversation .parent-conversation-new-inquiry')).toHaveCount(0);
+  await expect(page.locator('.parent-conversation-new-inquiry a')).toHaveAttribute('href', '/parent/messages/new?fresh=1');
+  await input.fill('이전 답변을 읽고 질문드립니다.');
+  await expect(saveStatus).toHaveText('저장되지 않은 변경사항');
+  await composer.getByRole('button', { name: '임시저장', exact: true }).click();
+  await expect(saveStatus).toHaveText('임시저장됨');
+  await input.focus();
+  await input.press('Enter');
+  await input.press('End');
+  await input.press('KeyA');
+  await expect(page).toHaveURL(/\/parent\/messages\/done$/);
+  const content = await input.inputValue();
+  expect(content).toContain('\n');
+  await expect(saveStatus).toHaveText('저장되지 않은 변경사항');
+  await page.getByRole('button', { name: '추가 문의 입력창 접기', exact: true }).click();
+  await expect(input).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '추가 문의하기', exact: true })).toBeFocused();
+  await page.getByRole('button', { name: '추가 문의하기', exact: true }).click();
+  await expect(input).toHaveValue(content);
+  await expect(saveStatus).toHaveText('임시저장됨');
+  await page.reload();
+  await expect(input).toHaveValue(content);
+  for (const width of [320, 375, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const inputBox = (await input.boundingBox())!;
+    expect(inputBox.height).toBeGreaterThanOrEqual(180);
+    expect(inputBox.height).toBeLessThanOrEqual(220);
+    await composer.screenshot({ path: testInfo.outputPath(`inline-composer-${width}.png`) });
+  }
+  await page.screenshot({ path: testInfo.outputPath('inline-follow-up.png'), fullPage: true });
+});
+
+test('인라인 추가 문의의 저장 실패는 완료로 표시하지 않고 입력창과 개인정보 경고를 유지한다', async ({ page }) => {
+  await login(page);
+  await seed(page);
+  await page.goto('/parent/messages/done');
+  await page.getByRole('button', { name: '추가 문의하기', exact: true }).click();
+  const input = page.getByLabel('문의 내용', { exact: true });
+  const content = '연락처는 010-1234-5678입니다.';
+  await input.fill(content);
+  const privacy = page.getByRole('region', { name: '개인정보 마스킹 상태', exact: true });
+  await expect(privacy).toContainText('개인정보가 포함되어 있습니다.');
+  await expect(privacy).toContainText('1건 마스킹');
+  await privacy.getByText('마스킹 결과 보기', { exact: true }).click();
+  await expect(privacy.locator('.privacy-masking-preview p')).toContainText('[전화번호]');
+  await expect(privacy.locator('.privacy-masking-preview p')).not.toContainText('010-1234-5678');
+  await page.evaluate(() => {
+    const originalSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key.startsWith('teacher-hub.parent-message-draft.')) throw new DOMException('Quota exceeded', 'QuotaExceededError');
+      originalSetItem.call(this, key, value);
+    };
+  });
+  await page.getByRole('button', { name: '임시저장', exact: true }).click();
+  await expect(page.locator('.parent-inline-save-status')).toHaveText('임시저장 실패');
+  await page.getByRole('button', { name: '추가 문의 입력창 접기', exact: true }).click();
+  await expect(input).toHaveValue(content);
+  await expect(page.getByRole('alert')).toContainText('입력창을 유지합니다.');
+});
+
+test('인라인 추가 문의의 AI 검토에서 돌아오면 같은 대화와 입력창을 복원한다', async ({ page }) => {
+  await login(page);
+  await seed(page);
+  await page.goto('/parent/messages/done');
+  await page.getByRole('button', { name: '추가 문의하기', exact: true }).click();
+  const content = '방과후 출결은 언제 확인할 수 있나요?';
+  await page.getByLabel('문의 내용', { exact: true }).fill(content);
+  await page.getByRole('button', { name: 'AI 분석 시작', exact: true }).click();
+  await expect(page).toHaveURL(/\/review$/);
+  await page.getByRole('button', { name: '문의 작성으로 돌아가기', exact: true }).click();
+  await expect(page).toHaveURL(/\/parent\/messages\/done$/);
+  await expect(page.getByLabel('문의 내용', { exact: true })).toHaveValue(content);
+  await expect(page.getByRole('region', { name: '전체 대화 내역', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'AI 분석 시작', exact: true }).click();
+  await expect(page).toHaveURL(/\/review$/);
+  await page.goBack();
+  await expect(page.getByLabel('문의 내용', { exact: true })).toHaveValue(content);
 });
 
 test('완료되지 않은 문의의 추가 질문은 재확인 필요로 표시하지 않는다', async ({ page }) => {
