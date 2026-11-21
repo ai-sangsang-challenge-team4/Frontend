@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import type { ParentConversationResponse, RiskDetectorResponse, RiskSummaryResponse, SubmissionAnalysisResponse } from '../../src/features/parent-message/api/parentComplaintTypes';
+import type { ParentConversationResponse, RiskDetectorResponse, RiskRevisionResponse, RiskSummaryResponse, SubmissionAnalysisResponse } from '../../src/features/parent-message/api/parentComplaintTypes';
 
 const body = '상담 시간을 알려 주세요. 010-1234-5678';
 const maskedContent = '상담 시간을 알려 주세요. [전화번호]';
@@ -22,6 +22,7 @@ async function setup(page: Page, options: {
   tagFailure?: boolean; finding?: boolean; followUp?: boolean; maskFailure?: boolean; detectorFailure?: boolean;
   conflict?: boolean; localOnly?: boolean; failFollowUpSendOnce?: boolean; changedBeforeSend?: boolean;
   summary?: Partial<RiskSummaryResponse>; detector?: RiskDetectorResponse; submission?: SubmissionAnalysisResponse;
+  findingsResponse?: Partial<RiskRevisionResponse>;
   analysisErrorCode?: string; sendErrorCode?: string; noRevision?: boolean;
   lifecycle?: { status: 'OPEN' | 'ANSWERED' | 'CLOSED'; waitingFor?: 'PARENT' | 'TEACHER'; closeConflict?: boolean };
   uncachedFollowUp?: boolean; cachedAnswered?: boolean;
@@ -75,7 +76,11 @@ async function setup(page: Page, options: {
         json = options.analysisErrorCode ? { code: options.analysisErrorCode, message: 'Internal Java exception' }
           : { analysisId: options.followUp ? 8 : 7, complaintId: 42, riskScore: 30, riskLevel: 'HIGH', ...options.summary }; break;
       case 'GET /risk-analyses/7/findings':
-      case 'GET /risk-analyses/8/findings': json = { findings: options.finding ? [{ code: 'THREAT', evidences: ['상담 시간을 알려 주세요.'], revisionSuggestions: [] }] : [], finalRevision: options.noRevision ? null : { content: '상담 가능한 시간을 안내해 주세요.', reason: '요청을 구체적이고 부드럽게 표현했습니다.' } }; break;
+      case 'GET /risk-analyses/8/findings': json = {
+        findings: options.finding ? [{ code: 'THREAT', evidences: ['상담 시간을 알려 주세요.'], revisionSuggestions: [] }] : [],
+        finalRevision: options.noRevision ? null : { content: '상담 가능한 시간을 안내해 주세요.', reason: '요청을 구체적이고 부드럽게 표현했습니다.' },
+        ...options.findingsResponse,
+      }; break;
       case 'GET /risk-analyses/7/detector-results':
       case 'GET /risk-analyses/8/detector-results':
         status = failDetector ? 500 : 200;
@@ -811,6 +816,76 @@ test('분석 모드와 수동 검토 플래그는 상태값이 없는 이전 응
   await expect(page.getByText('잠정 분석', { exact: true })).toBeVisible();
   await expect(page.getByText('교사의 직접 검토가 필요합니다.', { exact: true })).toBeVisible();
 });
+
+const safetySignal = {
+  code: 'STUDENT_SAFETY_CONCERN',
+  title: '학생 안전 우려',
+  description: '학생 안전 우려 신호가 확인되어 긴급 단계로 상향되었습니다.',
+};
+const emergencyOverride = { applied: true, safetySignals: [safetySignal] };
+
+test('학부모 분석 POST의 긴급 승격 사유를 일반 위험 태그가 없어도 표시한다', async ({ page }) => {
+  await setup(page, {
+    summary: { riskLevel: 'EMERGENCY', emergencyOverride },
+    detector: { analysisId: 7, llm: null, results: [{ code: 'THREAT', finalState: 'ABSENT', rule: null, llm: null }] },
+  });
+  await analyze(page);
+  const results = page.getByRole('region', { name: '위험 분석 결과' });
+  const signals = results.getByRole('region', { name: '긴급 안전 신호', exact: true });
+  await expect(signals.getByText(safetySignal.title, { exact: true })).toBeVisible();
+  await expect(signals.getByText(safetySignal.description, { exact: true })).toBeVisible();
+  await expect(results).toContainText('시스템 위험도: 긴급');
+  await results.getByText('상세 탐지 결과 보기', { exact: true }).click();
+  await expect(results.getByRole('button', { name: '서버에서 관리하는 협박 명칭 미탐지', exact: true })).toBeVisible();
+  await page.reload();
+  await expect(signals.getByText(safetySignal.description, { exact: true })).toBeVisible();
+});
+
+test('학부모 findings의 긴급 승격 사유와 기존 위험 태그 목록을 함께 표시한다', async ({ page }) => {
+  await setup(page, {
+    finding: true,
+    summary: { riskLevel: 'EMERGENCY' },
+    findingsResponse: { emergencyOverride },
+  });
+  await analyze(page);
+  await page.getByRole('tab', { name: '원문', exact: true }).click();
+  const signals = page.getByRole('region', { name: '긴급 안전 신호', exact: true });
+  const tags = page.getByRole('region', { name: '탐지된 위험 표현 목록 (1)', exact: true });
+  await expect(signals).toContainText(safetySignal.description);
+  await expect(tags).toContainText('서버에서 관리하는 협박 명칭');
+  expect(await signals.evaluate((element, next) =>
+    Boolean(element.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING), await tags.elementHandle())).toBe(true);
+});
+
+test('학부모 findings가 수정안 준비 중이어도 긴급 승격 사유를 먼저 표시한다', async ({ page }) => {
+  await setup(page, {
+    summary: { riskLevel: 'EMERGENCY' },
+    findingsResponse: { revisionStatus: 'PENDING', finalRevision: null },
+  });
+  await analyze(page);
+  await expect(page.getByText('AI 수정안을 준비하고 있습니다.', { exact: false })).toBeVisible();
+
+  await page.route((url) => url.pathname === '/api/risk-analyses/7/findings', (route) => route.fulfill({ json: {
+    revisionStatus: 'PENDING', findings: [], finalRevision: null, emergencyOverride,
+  } }));
+  await expect(page.getByRole('region', { name: '긴급 안전 신호', exact: true })).toContainText(safetySignal.description, { timeout: 10_000 });
+  await expect(page.getByRole('tab', { name: 'AI 초안', exact: true })).toBeDisabled();
+});
+
+for (const applied of [false, null] as const) {
+  test(`학부모 findings에서 긴급 승격을 해제하면 사유 영역을 숨긴다 (${applied})`, async ({ page }) => {
+    await setup(page, {
+      summary: { riskLevel: 'EMERGENCY', emergencyOverride },
+      findingsResponse: { emergencyOverride: applied === null ? null : { ...emergencyOverride, applied } },
+      detector: { analysisId: 7, results: [], llm: null,
+        safetyFlags: { credibleThreat: false, studentSafetyConcern: true, privacyExposure: false } },
+    });
+    await analyze(page);
+    await expect(page.getByRole('region', { name: '안전 신호', exact: true })).toBeVisible();
+    await expect(page.getByText('긴급 안전 신호', { exact: true })).toHaveCount(0);
+    await expect(page.getByText(safetySignal.description, { exact: true })).toHaveCount(0);
+  });
+}
 
 for (const severity of [0, 1, 2, 3, null] as const) {
   test(`심각도 ${severity}: 반복 횟수와 안전 신호의 true·false·null을 구분한다`, async ({ page }) => {

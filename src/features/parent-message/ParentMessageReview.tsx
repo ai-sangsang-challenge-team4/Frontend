@@ -152,6 +152,14 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
   useEffect(() => {
     if (!revision.analysis) return;
     const update = revision.analysis;
+    if (update.revisionStatus === 'PENDING') {
+      // The safety result can be ready before the text revision.
+      const { emergencyOverride } = update;
+      if (emergencyOverride !== undefined) setReview((previous) => ({
+        ...previous, analysis: { ...previous.analysis, emergencyOverride },
+      }));
+      return;
+    }
     setReview((previous) => ({
       ...previous,
       analysis: { ...previous.analysis, ...update },

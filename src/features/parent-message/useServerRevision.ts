@@ -28,11 +28,13 @@ export function useServerRevision(analysisId: number | undefined, maskedContent:
         if (controller.signal.aborted) return;
         if (analysis.revisionStatus !== 'PENDING') {
           setState({ analysisId, analysis, needsRetry: false });
-        } else if (++polls < MAX_POLL_ATTEMPTS) {
-          timer = setTimeout(() => { void poll(); }, POLL_INTERVAL_MS);
-        } else {
-          setState({ analysisId, analysis: null, needsRetry: true });
+          return;
         }
+        const needsRetry = ++polls >= MAX_POLL_ATTEMPTS;
+        if (analysis.emergencyOverride !== undefined || needsRetry) {
+          setState({ analysisId, analysis, needsRetry });
+        }
+        if (!needsRetry) timer = setTimeout(() => { void poll(); }, POLL_INTERVAL_MS);
       } catch (error) {
         if (!controller.signal.aborted && !isAbortError(error)) {
           setState({ analysisId, analysis: null, needsRetry: true });

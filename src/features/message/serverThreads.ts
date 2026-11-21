@@ -187,6 +187,7 @@ function toAnalysis(
     analysisMode: risk?.analysisMode,
     analysisMessage: risk?.analysisMessage,
     manualReviewRequired: risk?.manualReviewRequired,
+    emergencyOverride: risk?.emergencyOverride,
     systemRiskScore: risk?.riskScore,
     currentRiskLevel: risk?.currentRiskLevel ? systemRiskLevelFromApi[risk.currentRiskLevel] : undefined,
     // Kept from the browser: the server has no AI objections endpoint.

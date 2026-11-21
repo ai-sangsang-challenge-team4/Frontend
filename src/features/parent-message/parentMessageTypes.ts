@@ -2,7 +2,7 @@ import type { ComplaintStatus, WaitingFor } from '../../shared/types';
 import type { ReplyTemplateDraft } from '../message/replyTemplates';
 import type { ReplyDraftState, ReplyDraftTab } from '../message/types';
 import type { RiskSummaryResponse } from './api/parentComplaintTypes';
-import type { RevisionStatus, RiskAnalysisMetadata } from '../../shared/types/risk';
+import type { EmergencyOverride, RevisionStatus, RiskAnalysisMetadata } from '../../shared/types/risk';
 
 export const MESSAGE_MAX_LENGTH = 5000;
 
@@ -32,7 +32,8 @@ export type ParentMessageAnalysis = {
   // The server already reviewed an earlier version of this message, so the edited content gets no new
   // suggestions and is analyzed again on submit.
   analyzeOnSubmit?: boolean;
-  riskSummary?: Pick<RiskSummaryResponse, 'riskScore' | 'riskLevel'> & RiskAnalysisMetadata;
+  riskSummary?: Pick<RiskSummaryResponse, 'riskScore' | 'riskLevel' | 'emergencyOverride'> & RiskAnalysisMetadata;
+  emergencyOverride?: EmergencyOverride | null;
   revisionReason?: string | null;
   revisionStatus?: RevisionStatus;
   maskedContent?: string;
