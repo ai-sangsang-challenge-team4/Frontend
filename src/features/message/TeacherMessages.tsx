@@ -2145,6 +2145,7 @@ function ReplyComposerPage({
   const bufferedSummaryText = getBufferedSummaryText(thread);
   const isLocked = isReplyLocked(thread);
   const riskLevel = getThreadRiskLevel(thread);
+  const isServerThread = thread.serverComplaintId !== undefined;
   const regulationResult = useMemo(() => {
     if (!isServerThread) return searchRegulations(thread);
     if (thread.aiRagReferences === undefined) return { status: 'not_found' as const };
@@ -2158,7 +2159,6 @@ function ReplyComposerPage({
     }));
     return sources.length ? { status: 'found' as const, sources } : { status: 'not_found' as const };
   }, [thread, isServerThread]);
-  const isServerThread = thread.serverComplaintId !== undefined;
   const isAiDraftAvailable = canUseAiDraftTab(thread);
   const serverBlockReason = getServerReplyBlockReason(thread);
   const isOfficialTemplateAvailable = canUseOfficialReplyTemplate(thread);
