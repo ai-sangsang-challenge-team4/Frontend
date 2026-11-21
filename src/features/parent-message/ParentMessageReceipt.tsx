@@ -1,4 +1,4 @@
-import { CalendarDays, Info, Pencil } from 'lucide-react';
+import { CalendarDays, ChevronUp, Info, Pencil } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import completeIllustration from '../../shared/assets/parent/message-analysis.svg';
@@ -9,9 +9,10 @@ import { applyServerComplaintState, canWriteAdditionalInquiry, consultationChips
 import { ParentMessageHeader } from './ParentMessageHeader';
 import { ParentMessageComposer } from './ParentMessageComposer';
 import { useParentMessages } from './useParentMessages';
-import { complaintIdFromThreadId, syncServerConversation } from './serverHistory';
+import { complaintIdFromThreadId, prepareServerFollowUp, syncServerConversation } from './serverHistory';
 import { useServerHistorySync } from './useServerHistorySync';
-import { getApiErrorMessage, isApiError } from '../../shared/api';
+import { getApiErrorMessage, isApiError, useApiRequest } from '../../shared/api';
+import { ApiErrorFallback, LoadingState } from '../../shared/components/feedback';
 import { parentComplaintApi } from './api/parentComplaintApi';
 import './ParentMessageHistory.css';
 import './ParentMessageReceipt.css';
@@ -157,8 +158,8 @@ export function ParentMessageReceipt({ userId, messageId }: { userId: number; me
               </div>
             </div>
             <div id="parent-inline-follow-up" hidden={!followUpOpen}>
-              {followUpOpen ? <ParentMessageComposer userId={userId} threadId={messageId}
-                draftId={location.state?.followUpDraftId} embedded blocked={!canFollowUp || isClosing}
+              {followUpOpen ? <InlineFollowUp userId={userId} threadId={messageId} server={sync.enabled}
+                draftId={location.state?.followUpDraftId} blocked={!canFollowUp || isClosing}
                 onCollapse={() => setFollowUpOpen(false)} /> : null}
             </div>
           </div>
@@ -170,4 +171,25 @@ export function ParentMessageReceipt({ userId, messageId }: { userId: number; me
     </main>
     {notice ? <Toast message={notice} onClose={dismissNotice} /> : null}
   </>;
+}
+
+function InlineFollowUp({ userId, threadId, draftId, server, blocked, onCollapse }: {
+  userId: number; threadId: string; draftId?: string; server: boolean; blocked: boolean; onCollapse: () => void;
+}) {
+  // Keep the legacy write route's fresh server-turn check before reading a draft.
+  const request = useCallback(async (signal: AbortSignal) => server
+    ? prepareServerFollowUp(userId, threadId, signal) : null, [server, userId, threadId]);
+  const { data, error, isLoading, retry } = useApiRequest(request);
+  if (isLoading || error || data?.canWrite === false) return <div className="parent-inline-composer">
+    <div className="parent-inline-composer-heading">
+      <h2>추가 문의 작성</h2>
+      <Button className="parent-inline-composer-collapse" aria-label="추가 문의 입력창 접기"
+        onClick={onCollapse} rightIcon={<ChevronUp size={18} />} variant="ghost">접기</Button>
+    </div>
+    {error ? <ApiErrorFallback error={error} homePath="/parent/messages" onRetry={retry} variant="section" />
+      : isLoading ? <LoadingState message="추가 문의 가능 여부를 확인하고 있어요." />
+        : <p role="status">선생님의 답변을 기다리고 있어요. 답변이 도착하면 추가 문의를 작성할 수 있습니다.</p>}
+  </div>;
+  return <ParentMessageComposer userId={userId} threadId={data?.threadId ?? threadId} draftId={draftId}
+    embedded blocked={blocked} onCollapse={onCollapse} />;
 }

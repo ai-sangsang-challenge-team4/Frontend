@@ -40,7 +40,11 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
       const saved = draftId ? readMessageDraft(userId, draftId) : fresh ? null : threadId
         ? readMessageDrafts(userId).find((item) => item.threadId === threadId) : readMessageDraft(userId);
       const matching = saved && saved.threadId === threadId ? saved : null;
-      return { thread, saved: matching, unavailable: Boolean((threadId && !thread) || (draftId && !matching)) };
+      // Browser Back can restore an inline draft ID that was removed after sending.
+      // Recover only this user's existing thread; standalone draft URLs stay strict.
+      const recoverInline = embedded && thread && draftId && !matching;
+      const restored = recoverInline ? readMessageDrafts(userId).find((item) => item.threadId === threadId) : matching;
+      return { thread, saved: restored, unavailable: Boolean((threadId && !thread) || (draftId && !matching && !recoverInline)) };
     } catch {
       return { thread: null, saved: null, unavailable: true };
     }

@@ -308,6 +308,14 @@ test('인라인 추가 문의의 AI 검토에서 돌아오면 같은 대화와 �
   await expect(page).toHaveURL(/\/review$/);
   await page.goBack();
   await expect(page.getByLabel('문의 내용', { exact: true })).toHaveValue(content);
+  await send(page);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/parent\/messages\/done$/);
+  await expect(page.getByRole('region', { name: '전체 대화 내역', exact: true })).toContainText(content);
+  await expect(page.getByLabel('문의 내용', { exact: true })).toHaveValue('');
+  await page.getByRole('button', { name: '추가 문의 입력창 접기', exact: true }).click();
+  await page.getByRole('button', { name: '추가 문의하기', exact: true }).click();
+  await expect(page.getByLabel('문의 내용', { exact: true })).toBeEditable();
 });
 
 test('완료되지 않은 문의의 추가 질문은 재확인 필요로 표시하지 않는다', async ({ page }) => {
