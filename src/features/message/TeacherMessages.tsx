@@ -2145,7 +2145,19 @@ function ReplyComposerPage({
   const bufferedSummaryText = getBufferedSummaryText(thread);
   const isLocked = isReplyLocked(thread);
   const riskLevel = getThreadRiskLevel(thread);
-  const regulationResult = useMemo(() => searchRegulations(thread), [thread]);
+  const regulationResult = useMemo(() => {
+    if (!isServerThread) return searchRegulations(thread);
+    if (thread.aiRagReferences === undefined) return { status: 'not_found' as const };
+    const sources: RegulationSource[] = thread.aiRagReferences.map((reference, index) => ({
+      id: `rag-${index}`,
+      title: reference.source,
+      organization: '검색된 참고자료',
+      version: '버전 미확인',
+      article: reference.page == null ? '페이지 미확인' : `${reference.page + 1}페이지 (PDF 기준)`,
+      sections: [{ heading: 'RAG 검색 내용', text: reference.content }],
+    }));
+    return sources.length ? { status: 'found' as const, sources } : { status: 'not_found' as const };
+  }, [thread, isServerThread]);
   const isServerThread = thread.serverComplaintId !== undefined;
   const isAiDraftAvailable = canUseAiDraftTab(thread);
   const serverBlockReason = getServerReplyBlockReason(thread);
