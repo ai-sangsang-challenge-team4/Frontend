@@ -5,7 +5,7 @@ import completeIllustration from '../../shared/assets/parent/message-analysis.sv
 import { ProfileAvatar } from '../message/components/ProfileAvatar';
 import { mockConnectedTeachers, updateSentMessage } from './messageDraft';
 import { Button, EmptyState, MessageText, StatusChip, Toast } from '../../shared/components/ui';
-import { applyServerComplaintState, compareMessageTimes, consultationChips, formatMessageDate, getConversation } from './conversation';
+import { applyServerComplaintState, canWriteAdditionalInquiry, compareMessageTimes, consultationChips, formatMessageDate, getConversation } from './conversation';
 import { ParentMessageHeader } from './ParentMessageHeader';
 import { useParentMessages } from './useParentMessages';
 import { complaintIdFromThreadId, syncServerConversation } from './serverHistory';
@@ -41,10 +41,8 @@ export function ParentMessageReceipt({ userId, messageId }: { userId: number; me
   const serverActionsReady = sync.hasSynced && !sync.error;
   const canClose = sync.enabled ? serverActionsReady && isAnswered
     : latest?.authorRole === 'teacher' && message?.consultationStatus !== 'complete';
-  const canFollowUp = !sync.enabled || (serverActionsReady && (
-    isAnswered || message?.serverComplaintStatus === 'CLOSED' ||
-    (message?.serverComplaintStatus === 'OPEN' && message.serverWaitingFor === 'PARENT')
-  ));
+  const canFollowUp = !sync.enabled || (serverActionsReady &&
+    canWriteAdditionalInquiry(message?.serverComplaintStatus, message?.serverWaitingFor));
 
   // Records acknowledgement for browser-local conversations.
   function handleAcknowledge() {

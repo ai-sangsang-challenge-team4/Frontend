@@ -1,9 +1,14 @@
+import type { ComplaintStatus, WaitingFor } from '../../shared/types/message';
 import { findSentMessage, readSentMessages, updateSentMessage, type MessageDraft } from './messageDraft';
 import type { ComplaintResponse } from './api/parentComplaintTypes';
 import { getSelectedMessage, maskContactInfo, type ConversationMessage, type MessageReview, type SentParentMessage } from './parentMessageTypes';
 
 export const consultationLabels = { before: '상담 전', inProgress: '상담 중', complete: '상담 완료' };
 export const consultationChips = { before: 'pending', inProgress: 'progress', complete: 'complete' } as const;
+
+export function canWriteAdditionalInquiry(status: ComplaintStatus | undefined, waitingFor: WaitingFor | undefined) {
+  return status === 'CLOSED' || (waitingFor === 'PARENT' && (status === 'OPEN' || status === 'ANSWERED'));
+}
 
 export function getConversation(message: SentParentMessage): ConversationMessage[] {
   return message.conversation?.length ? message.conversation : [{
