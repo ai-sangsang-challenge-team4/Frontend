@@ -143,6 +143,44 @@ function teacherComplaintJson(key: string, current: typeof review): unknown {
   }
 }
 
+for (const applied of [true, false, null] as const) {
+  test(`교사 위험 요소의 긴급 승격 사유를 서버 응답대로 표시한다 (${applied})`, async ({ page }) => {
+    const emergencyOverride = applied === null ? null : {
+      applied,
+      safetySignals: [
+        { code: 'STUDENT_SAFETY_CONCERN', title: '학생 안전 우려', description: '학생 안전 우려 신호로 긴급 단계로 상향되었습니다.' },
+        { code: 'CREDIBLE_THREAT', title: '구체적인 위해 위협', description: '위해 위협 신호가 확인되었습니다.' },
+      ],
+    };
+    await setup(page, 'TEACHER', async (route, key) => {
+      let json = key === 'GET /teacher/complaints/12/emergency-review/current' ? review : teacherComplaintJson(key, review);
+      if (json === undefined) return false;
+      if (key === 'GET /teacher/complaints/12/risk') json = { ...json as object, emergencyOverride };
+      await route.fulfill({ json });
+      return true;
+    });
+    await page.goto('/teacher/messages/12');
+    await page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name: '위험 요소', exact: true }).click();
+
+    const summary = page.getByRole('group', { name: '위험 요소 분류 요약' });
+    await expect(summary).toContainText('미탐지 8개');
+    const signals = page.getByRole('region', { name: '긴급 안전 신호', exact: true });
+    if (emergencyOverride?.applied) {
+      await expect(signals).toBeVisible();
+      await expect(signals.getByRole('listitem')).toHaveCount(2);
+      for (const signal of emergencyOverride.safetySignals) {
+        const item = signals.locator(`[data-signal-code="${signal.code}"]`);
+        await expect(item).toContainText(signal.title);
+        await expect(item).toContainText(signal.description);
+      }
+      expect(await signals.evaluate((element, next) =>
+        Boolean(element.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING), await summary.elementHandle())).toBe(true);
+    } else {
+      await expect(signals).toHaveCount(0);
+    }
+  });
+}
+
 test('교사 공유 내역의 링크를 누르면 메시지 목록에 없는 서버 민원 상세와 대화가 표시된다', async ({ page }) => {
   const sharedPage: TeacherEscalationPageResponse = {
     content: [{

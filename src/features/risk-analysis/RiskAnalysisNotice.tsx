@@ -1,5 +1,6 @@
+import { useId } from 'react';
 import { Badge } from '../../shared/components/ui';
-import type { RiskAnalysisMetadata, SafetyFlags } from '../../shared/types/risk';
+import type { EmergencyOverride, RiskAnalysisMetadata, SafetyFlags } from '../../shared/types/risk';
 import { isProvisionalAnalysis } from './index';
 import './RiskAnalysisNotice.css';
 
@@ -29,20 +30,47 @@ export function RiskAnalysisNotice({ metadata }: { metadata: RiskAnalysisMetadat
   </div>;
 }
 
+export function EmergencySafetySignals({ emergencyOverride }: { emergencyOverride: EmergencyOverride | null | undefined }) {
+  const headingId = useId();
+  if (emergencyOverride?.applied !== true) return null;
+
+  const signals = Array.isArray(emergencyOverride.safetySignals)
+    ? emergencyOverride.safetySignals.filter((signal) => typeof signal?.code === 'string' &&
+      typeof signal.title === 'string' && typeof signal.description === 'string')
+    : [];
+  return <section aria-labelledby={headingId} className="risk-analysis-notice risk-analysis-notice--emergency">
+    <h2 id={headingId}>긴급 안전 신호</h2>
+    {signals.length > 0 ? <ul role="list">
+      {signals.map((signal, index) => <li key={`${signal.code}-${index}`} data-signal-code={signal.code}>
+        <div className="risk-analysis-notice-heading">
+          <strong>{signal.title}</strong>
+          <Badge variant="critical" size="sm">확인</Badge>
+        </div>
+        <p>{signal.description}</p>
+      </li>)}
+    </ul> : <p>긴급 승격 사유 상세가 제공되지 않았습니다.</p>}
+  </section>;
+}
+
 const safetyLabels: Record<keyof SafetyFlags, string> = {
   credibleThreat: '구체적인 위해 위협',
   studentSafetyConcern: '학생 안전 위험',
   privacyExposure: '개인정보 노출 또는 유포 위험',
 };
 
-export function SafetyFlagsNotice({ flags }: { flags: SafetyFlags | null | undefined }) {
+export function SafetyFlagsNotice({ flags, showEmergencyBadge }: {
+  flags: SafetyFlags | null | undefined;
+  showEmergencyBadge: boolean;
+}) {
   if (flags && (Object.keys(safetyLabels) as (keyof SafetyFlags)[]).every((key) => flags[key] === false)) return null;
   return <section aria-label="안전 신호" className="risk-analysis-notice">
     <strong>안전 신호</strong>
     {flags == null ? <p>안전 신호 정보가 제공되지 않았습니다. 기존 분석 또는 규칙 기반 분석에서는 확인할 수 없습니다.</p>
       : (Object.keys(safetyLabels) as (keyof SafetyFlags)[]).map((key) => (
         flags[key] === false ? null : <p className={flags[key] === true ? 'risk-analysis-safety-alert' : undefined} key={key}>
-          {flags[key] === true ? <><Badge variant="critical" size="sm">긴급 안전 신호</Badge> {safetyLabels[key]}이 감지되었습니다.</>
+          {flags[key] === true ? <><Badge variant={showEmergencyBadge ? 'critical' : 'warning'} size="sm">
+            {showEmergencyBadge ? '긴급 안전 신호' : '감지'}
+          </Badge> {safetyLabels[key]}이 감지되었습니다.</>
             : <>{safetyLabels[key]}: 현재 정보만으로 안전 신호를 판단할 수 없습니다. 추가 검토가 필요합니다.</>}
         </p>
       ))}

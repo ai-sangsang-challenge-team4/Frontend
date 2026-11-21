@@ -42,7 +42,7 @@ import { ConversationDateChip } from './components/ConversationDateChip';
 import { BufferedSummaryCard } from './components/BufferedSummaryCard';
 import { AnalysisStateNotice } from './components/AnalysisStateNotice';
 import { RiskClassificationPanel, RiskClassificationSummary } from '../risk-analysis/RiskClassificationPanel';
-import { RiskAnalysisNotice } from '../risk-analysis/RiskAnalysisNotice';
+import { EmergencySafetySignals, RiskAnalysisNotice } from '../risk-analysis/RiskAnalysisNotice';
 import {
   BreadcrumbSeparator,
   CheckCircleIcon,
@@ -1345,6 +1345,8 @@ function RiskAnalysisPanel({
           ) : null}
         </div>
       </section>
+
+      <EmergencySafetySignals emergencyOverride={analysis.emergencyOverride} />
 
       <section className="board-risk-evidence-panel">
         <div className="board-risk-evidence-header">

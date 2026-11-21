@@ -1,7 +1,7 @@
 import type { ComplaintStatus, MessageStatus, RiskFactorStatus, RiskLevel, WaitingFor } from '../../../shared/types';
 import type { DetectedFactorCode } from '../../escalation/escalationTypes';
 import type { ComplaintListQuery, ComplaintPageResponse } from '../../message/api/teacherInboxTypes';
-import type { AiAnalysisStatus, RevisionStatus, RiskAnalysisMetadata, SafetyFlags } from '../../../shared/types/risk';
+import type { AiAnalysisStatus, EmergencyOverride, RevisionStatus, RiskAnalysisMetadata, SafetyFlags } from '../../../shared/types/risk';
 
 // Shapes in this file follow the backend parent complaint and risk analysis DTOs
 // (complaint/parent/dto/complaint, risk/dto/response). Do not add fields the backend does not define.
@@ -75,6 +75,7 @@ export type RiskSummaryResponse = RiskAnalysisMetadata & {
   complaintId: number;
   riskScore: number;
   riskLevel: RiskLevel;
+  emergencyOverride?: EmergencyOverride | null;
 };
 
 // Older deployments return only { message }. dev currently calls the top-level
@@ -112,6 +113,7 @@ export type RiskRevisionResponse = {
   revisionStatus?: RevisionStatus;
   findings: RiskFinding[];
   finalRevision: { reason: string | null; content: string } | null;
+  emergencyOverride?: EmergencyOverride | null;
 };
 
 export type ComplaintMaskResponse = {
