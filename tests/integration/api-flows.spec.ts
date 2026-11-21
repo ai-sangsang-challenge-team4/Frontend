@@ -143,6 +143,44 @@ function teacherComplaintJson(key: string, current: typeof review): unknown {
   }
 }
 
+for (const applied of [true, false, null] as const) {
+  test(`교사 위험 요소의 긴급 승격 사유를 서버 응답대로 표시한다 (${applied})`, async ({ page }) => {
+    const emergencyOverride = applied === null ? null : {
+      applied,
+      safetySignals: [
+        { code: 'STUDENT_SAFETY_CONCERN', title: '학생 안전 우려', description: '학생 안전 우려 신호로 긴급 단계로 상향되었습니다.' },
+        { code: 'CREDIBLE_THREAT', title: '구체적인 위해 위협', description: '위해 위협 신호가 확인되었습니다.' },
+      ],
+    };
+    await setup(page, 'TEACHER', async (route, key) => {
+      let json = key === 'GET /teacher/complaints/12/emergency-review/current' ? review : teacherComplaintJson(key, review);
+      if (json === undefined) return false;
+      if (key === 'GET /teacher/complaints/12/risk') json = { ...json as object, emergencyOverride };
+      await route.fulfill({ json });
+      return true;
+    });
+    await page.goto('/teacher/messages/12');
+    await page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name: '위험 요소', exact: true }).click();
+
+    const summary = page.getByRole('group', { name: '위험 요소 분류 요약' });
+    await expect(summary).toContainText('미탐지 8개');
+    const signals = page.getByRole('region', { name: '긴급 안전 신호', exact: true });
+    if (emergencyOverride?.applied) {
+      await expect(signals).toBeVisible();
+      await expect(signals.getByRole('listitem')).toHaveCount(2);
+      for (const signal of emergencyOverride.safetySignals) {
+        const item = signals.locator(`[data-signal-code="${signal.code}"]`);
+        await expect(item).toContainText(signal.title);
+        await expect(item).toContainText(signal.description);
+      }
+      expect(await signals.evaluate((element, next) =>
+        Boolean(element.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING), await summary.elementHandle())).toBe(true);
+    } else {
+      await expect(signals).toHaveCount(0);
+    }
+  });
+}
+
 test('교사 공유 내역의 링크를 누르면 메시지 목록에 없는 서버 민원 상세와 대화가 표시된다', async ({ page }) => {
   const sharedPage: TeacherEscalationPageResponse = {
     content: [{
@@ -300,6 +338,99 @@ for (const canCreateEvidence of [true, false]) {
     await expect(shareSection.getByRole('button', { name: '공유 완료', exact: true })).toBeDisabled();
   });
 }
+
+for (const riskLevel of ['LOW', 'MEDIUM'] as const) {
+  test(`교사 ${riskLevel} 민원은 summaryStatus null의 원문을 대화와 답변 작성에 표시한다`, async ({ page }) => {
+    const original = '상담 가능한 시간을 알려주세요.';
+    await setup(page, 'TEACHER', async (route, key) => {
+      let json = teacherComplaintJson(key, review);
+      switch (key) {
+        case 'GET /teacher/complaints/12': json = { ...json as object, riskLevel }; break;
+        case 'GET /teacher/complaints/12/risk': json = {
+          ...json as object, riskLevel, currentRiskLevel: riskLevel, safetyLock: false,
+        }; break;
+        case 'GET /teacher/complaints/12/messages': json = {
+          complaintId: 12, allowedActions: [], messages: [
+            { messageId: 'message:1', senderRole: 'PARENT', senderName: '학부모', content: '처음 문의입니다.',
+              sentAt: '2026-10-30T09:00:00', summarized: false, summaryStatus: null },
+            { messageId: 'message:2', senderRole: 'TEACHER', senderName: '선생님', content: '확인하고 있습니다.',
+              sentAt: '2026-10-30T10:00:00', summarized: false, summaryStatus: null },
+            { messageId: 'message:3', senderRole: 'PARENT', senderName: '학부모', content: original,
+              sentAt: '2026-10-30T11:00:00', summarized: true, summaryStatus: null },
+          ],
+        }; break;
+        case 'GET /teacher/complaints/12/response-draft':
+          await route.fulfill({ status: 404, json: { code: 'RESPONSE_DRAFT_NOT_FOUND' } }); return true;
+        case 'POST /teacher/complaints/12/response/ai-draft':
+          json = { complaintId: 12, content: '생성된 초안입니다.', modelName: 'test', generatedAt: '2026-10-30T11:01:00' }; break;
+        default: break;
+      }
+      if (json === undefined) return false;
+      await route.fulfill({ json }); return true;
+    });
+    await page.goto('/teacher/messages/12');
+    await expect(page.locator('.board-reply-parent').getByText(original, { exact: true })).toBeVisible();
+    await expect(page.locator('.board-reply-teacher').getByText('확인하고 있습니다.', { exact: true })).toBeVisible();
+    await expect(page.locator('.board-moderation-card')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '원문 보기', exact: true })).toHaveCount(0);
+    await expect(page.getByText('AI 요약을 준비하고 있습니다.', { exact: true })).toHaveCount(0);
+    await expect(page.locator('.board-info-box')).not.toContainText('완충 요약');
+
+    await page.getByRole('button', { name: /답변 (작성하러 가기|이어서 작성하기)/ }).click();
+    const context = page.locator('.board-reply-context-panel');
+    await expect(context.getByRole('heading', { name: '학부모 메시지', exact: true })).toBeVisible();
+    await expect(context).toContainText(original);
+    await expect(context.getByRole('button', { name: '원문 보기', exact: true })).toHaveCount(0);
+  });
+}
+
+test('교사 대화는 메시지별 summaryStatus로 분기하고 요약 카드에서만 원문을 요청한다', async ({ page }) => {
+  const generated = '가정과 학교의 상담 일정에 관한 요약입니다.';
+  const unavailable = '완충 요약을 생성하지 못했습니다. 원문 열람 버튼을 사용해주세요.';
+  const originalViews: number[] = [];
+  await setup(page, 'TEACHER', async (route, key) => {
+    const requestForOriginal = /^POST \/teacher\/complaints\/12\/messages\/(\d+)\/original-views$/.exec(key);
+    if (requestForOriginal) {
+      const messageId = Number(requestForOriginal[1]);
+      originalViews.push(messageId);
+      await route.fulfill({ json: { complaintId: 12, messageId, content: `열람 승인된 원문 ${messageId}`,
+        viewedAt: '2026-10-30T11:00:00' } });
+      return true;
+    }
+    let json = teacherComplaintJson(key, review);
+    if (key === 'GET /teacher/complaints/12/emergency-review/current') json = review;
+    if (key === 'GET /teacher/complaints/12/messages') json = {
+      complaintId: 12, allowedActions: [], messages: [
+        { messageId: 'message:1', senderRole: 'PARENT', senderName: '학부모', content: generated,
+          sentAt: '2026-10-30T09:00:00', summarized: false, summaryStatus: 'GENERATED' },
+        { messageId: 'message:2', senderRole: 'PARENT', senderName: '학부모', content: '요약 미적용 문의 원문',
+          sentAt: '2026-10-30T09:05:00', summarized: false, summaryStatus: null },
+        { messageId: 'message:3', senderRole: 'PARENT', senderName: '학부모', content: unavailable,
+          sentAt: '2026-10-30T09:10:00', summarized: false, summaryStatus: 'UNAVAILABLE' },
+      ],
+    };
+    if (json === undefined) return false;
+    await route.fulfill({ json }); return true;
+  });
+  await page.goto('/teacher/messages/12');
+  const generatedCard = page.locator('.board-moderation-card').filter({ hasText: generated });
+  const unavailableCard = page.locator('.board-moderation-card').filter({ hasText: unavailable });
+  await expect(generatedCard).toContainText('위험 메시지 완충 요약');
+  await expect(unavailableCard).toContainText('완충 요약을 확인할 수 없습니다');
+  await expect(unavailableCard).not.toContainText('위험 메시지 완충 요약');
+  await expect(unavailableCard.locator('.board-moderation-title svg')).toHaveCount(0);
+  await expect(page.locator('.board-reply-parent')).toContainText('요약 미적용 문의 원문');
+  expect(originalViews).toEqual([]);
+
+  for (const [card, messageId] of [[generatedCard, 1], [unavailableCard, 3]] as const) {
+    await card.getByRole('button', { name: '원문 보기', exact: true }).click();
+    expect(originalViews).not.toContain(messageId);
+    await page.getByRole('dialog', { name: '원문 열람 안내' }).getByRole('button', { name: '원문 확인', exact: true }).click();
+    await expect(page.getByText(`열람 승인된 원문 ${messageId}`, { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: '이전 화면으로 돌아가기', exact: true }).click();
+  }
+  expect(originalViews).toEqual([1, 3]);
+});
 
 test('완충 요약 실패 응답은 원문 말풍선 대신 명시적인 요약 실패 안내를 표시한다', async ({ page }) => {
   await setup(page, 'TEACHER', async (route, key) => {

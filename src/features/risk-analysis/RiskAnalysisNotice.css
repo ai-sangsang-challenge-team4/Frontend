@@ -14,6 +14,27 @@
   color: var(--color-text-primary);
 }
 
+.risk-analysis-notice--emergency {
+  background: var(--color-danger-subtle);
+  color: var(--color-text-primary);
+}
+
+.risk-analysis-notice--emergency h2 {
+  margin: 0;
+  font-size: var(--font-size-title-sm);
+  line-height: var(--line-height-title-sm);
+}
+
+.risk-analysis-notice--emergency ul {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.risk-analysis-notice--emergency li p { margin-top: var(--space-1); }
+
 .risk-analysis-notice-heading {
   display: flex;
   flex-wrap: wrap;

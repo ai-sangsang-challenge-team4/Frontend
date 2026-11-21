@@ -5,7 +5,7 @@ import {
   type ParentComplaintPageResponse,
   type ParentConversationResponse,
 } from './api/parentComplaintApi';
-import { applyServerComplaintState, getConversation } from './conversation';
+import { applyServerComplaintState, canWriteAdditionalInquiry, getConversation } from './conversation';
 import { readSentMessages, updateSentMessages } from './messageDraft';
 import type { ConversationMessage, SentParentMessage } from './parentMessageTypes';
 
@@ -128,6 +128,23 @@ function findServerThread(messages: SentParentMessage[], complaintId: number) {
 function upsert(messages: SentParentMessage[], thread: SentParentMessage) {
   const index = messages.findIndex((message) => message.messageId === thread.messageId);
   return index < 0 ? [thread, ...messages] : messages.map((message, i) => (i === index ? thread : message));
+}
+
+export async function prepareServerFollowUp(userId: number, threadId: string, signal: AbortSignal) {
+  const localThread = readSentMessages(userId).find((message) => message.messageId === threadId);
+  const complaintId = localThread ? localThread.serverComplaintId : complaintIdFromThreadId(threadId);
+  if (complaintId === undefined) return null;
+
+  // Check the turn without marking teacher replies as read.
+  const detail = await parentComplaintApi.getComplaint(complaintId, signal);
+  signal.throwIfAborted();
+  const canWrite = canWriteAdditionalInquiry(detail.status, detail.waitingFor);
+  const existing = findServerThread(readSentMessages(userId), complaintId);
+  if (existing || !canWrite) return { canWrite, threadId: existing?.messageId ?? threadId };
+
+  const thread = createServerThread(detail);
+  updateSentMessages(userId, (messages) => upsert(messages, thread));
+  return { canWrite, threadId: thread.messageId };
 }
 
 // Brings every submitted inquiry into the browser copy. Inquiries not stored yet are read once with

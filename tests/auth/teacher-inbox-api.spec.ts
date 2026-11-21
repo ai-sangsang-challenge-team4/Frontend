@@ -291,11 +291,11 @@ test('학부모 메시지마다 완충 요약 여부를 유지하고, 최신 문
       messages: [
         ...conversation.messages,
         { messageId: 'message:2', senderRole: 'TEACHER', senderName: 'Demo Teacher', content: '답변', sentAt: '2026-10-29T11:10:00', summarized: false },
-        { messageId: 'message:3', senderRole: 'PARENT', senderName: 'Demo Parent', content: '두 번째 문의 원문', sentAt: '2026-10-29T11:20:00', summarized: false },
+        { messageId: 'message:3', senderRole: 'PARENT', senderName: 'Demo Parent', content: '두 번째 문의 원문', sentAt: '2026-10-29T11:20:00', summarized: true, summaryStatus: null },
       ],
     },
   }));
-  expect(thread.replies.map((reply) => reply.summarized)).toEqual([true, undefined, false]);
+  expect(thread.replies.map((reply) => reply.summaryStatus)).toEqual(['GENERATED', undefined, null]);
   expect(thread.analysis?.summary.text).toBe('');
 });
 
@@ -313,8 +313,7 @@ test('summaryStatus UNAVAILABLE은 생성된 요약과 구분하며 원문 말�
     messages: [{ ...conversation.messages[0], summarized: false, summaryStatus: 'UNAVAILABLE', content: '완충 요약을 생성하지 못했습니다.' }],
   } }));
   expect(thread.analysis?.summary.status).toBe('failed');
-  expect(thread.replies[0].summarized).toBe(true);
-  expect(thread.replies[0].summaryUnavailable).toBe(true);
+  expect(thread.replies[0].summaryStatus).toBe('UNAVAILABLE');
 });
 
 test('교사 답변의 READ 상태나 readAt이 있을 때만 학부모 읽음으로 표시한다', () => {

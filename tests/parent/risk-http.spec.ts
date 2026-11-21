@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import type { ParentConversationResponse, RiskDetectorResponse, RiskSummaryResponse, SubmissionAnalysisResponse } from '../../src/features/parent-message/api/parentComplaintTypes';
+import type { ParentConversationResponse, RiskDetectorResponse, RiskRevisionResponse, RiskSummaryResponse, SubmissionAnalysisResponse } from '../../src/features/parent-message/api/parentComplaintTypes';
 
 const body = '상담 시간을 알려 주세요. 010-1234-5678';
 const maskedContent = '상담 시간을 알려 주세요. [전화번호]';
@@ -22,21 +22,24 @@ async function setup(page: Page, options: {
   tagFailure?: boolean; finding?: boolean; followUp?: boolean; maskFailure?: boolean; detectorFailure?: boolean;
   conflict?: boolean; localOnly?: boolean; failFollowUpSendOnce?: boolean; changedBeforeSend?: boolean;
   summary?: Partial<RiskSummaryResponse>; detector?: RiskDetectorResponse; submission?: SubmissionAnalysisResponse;
+  findingsResponse?: Partial<RiskRevisionResponse>;
   analysisErrorCode?: string; sendErrorCode?: string; noRevision?: boolean;
-  lifecycle?: { status: 'ANSWERED' | 'CLOSED'; closeConflict?: boolean };
+  lifecycle?: { status: 'OPEN' | 'ANSWERED' | 'CLOSED'; waitingFor?: 'PARENT' | 'TEACHER'; closeConflict?: boolean };
+  uncachedFollowUp?: boolean; cachedAnswered?: boolean;
 } = {}) {
   const calls: string[] = [];
   let content = maskedContent;
   let savedFollowUp = false;
   let sendAttempts = 0;
-  let complaintStatus: ParentConversationResponse['status'] = options.lifecycle?.status ?? 'OPEN';
+  let complaintStatus: ParentConversationResponse['status'] = options.lifecycle?.status ?? (options.followUp ? 'ANSWERED' : 'OPEN');
   let followUpSentAt: string | null = null;
   // The server's contentVersion: it grows only when the content changes.
   let version = 1;
   const failDetector = options.detectorFailure;
   const versionConflict = { code: 'CONTENT_VERSION_CONFLICT', message: '추가 문의 초안이 다른 기기에서 변경되었습니다.' };
   const followUp = () => ({ messageId: 101, complaintId: 42, content, contentVersion: version, status: 'DRAFT', waitingFor: 'PARENT', createdAt: '2026-10-30T10:00:00', updatedAt: '2026-10-30T10:00:00', sentAt: null });
-  const waitingFor = () => complaintStatus === 'CLOSED' ? 'NONE' : complaintStatus === 'ANSWERED' ? 'PARENT' : 'TEACHER';
+  const waitingFor = () => complaintStatus === 'CLOSED' ? 'NONE' : complaintStatus === 'ANSWERED' ? 'PARENT'
+    : (!followUpSentAt && options.lifecycle?.waitingFor === 'PARENT') ? 'PARENT' : 'TEACHER';
   await page.route((url) => url.pathname.startsWith('/api/'), async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname.replace('/api', '');
@@ -53,6 +56,11 @@ async function setup(page: Page, options: {
       }; break;
       case 'GET /users/me': json = { userId: 101, email: 'parent@example.com', name: 'Demo Parent', role: 'PARENT', students: [{ studentId: 10, name: 'Demo Student', studentNo: '1' }] }; break;
       case 'GET /complaints/recipients': json = [{ teacherId: 20, teacherName: 'Demo Teacher', homeroomTeacher: true }]; break;
+      case 'GET /complaints/42': json = {
+        complaintId: 42, title: thread.title, teacherName: thread.teacherName, content: thread.finalBody,
+        studentId: 10, studentName: 'Demo Student', parentName: 'Demo Parent', riskLevel: null,
+        status: complaintStatus, waitingFor: waitingFor(), createdAt: thread.sentAt, updatedAt: followUpSentAt ?? thread.sentAt,
+      }; break;
       case 'POST /complaints':
         expect(request.postDataJSON().content).not.toContain('010-1234-5678');
         content = request.postDataJSON().content;
@@ -68,7 +76,11 @@ async function setup(page: Page, options: {
         json = options.analysisErrorCode ? { code: options.analysisErrorCode, message: 'Internal Java exception' }
           : { analysisId: options.followUp ? 8 : 7, complaintId: 42, riskScore: 30, riskLevel: 'HIGH', ...options.summary }; break;
       case 'GET /risk-analyses/7/findings':
-      case 'GET /risk-analyses/8/findings': json = { findings: options.finding ? [{ code: 'THREAT', evidences: ['상담 시간을 알려 주세요.'], revisionSuggestions: [] }] : [], finalRevision: options.noRevision ? null : { content: '상담 가능한 시간을 안내해 주세요.', reason: '요청을 구체적이고 부드럽게 표현했습니다.' } }; break;
+      case 'GET /risk-analyses/8/findings': json = {
+        findings: options.finding ? [{ code: 'THREAT', evidences: ['상담 시간을 알려 주세요.'], revisionSuggestions: [] }] : [],
+        finalRevision: options.noRevision ? null : { content: '상담 가능한 시간을 안내해 주세요.', reason: '요청을 구체적이고 부드럽게 표현했습니다.' },
+        ...options.findingsResponse,
+      }; break;
       case 'GET /risk-analyses/7/detector-results':
       case 'GET /risk-analyses/8/detector-results':
         status = failDetector ? 500 : 200;
@@ -126,19 +138,21 @@ async function setup(page: Page, options: {
     }
     await route.fulfill({ status, json });
   });
-  if (options.followUp || options.lifecycle) await page.addInitScript(({ initial, conflict }) => {
+  if ((options.followUp || options.lifecycle) && !options.uncachedFollowUp) await page.addInitScript(({ initial, conflict }) => {
     localStorage.setItem('teacher-hub.parent-sent-messages.101', JSON.stringify([initial]));
     if (conflict) localStorage.setItem('teacher-hub.parent-message-draft.101', JSON.stringify({
       messageId: 'follow-up-local', teacherId: '20', title: initial.title, body: '내가 작성한 내용', status: 'DRAFT', threadId: initial.messageId,
       server: { complaintId: 42, serverMessageId: 101, teacherId: 20, teacherName: 'Demo Teacher', title: initial.title, content: '이전에 저장한 내용', analysisId: null },
     }));
-  }, { initial: { ...thread, serverComplaintId: options.localOnly ? undefined : thread.serverComplaintId }, conflict: options.conflict });
+  }, { initial: { ...thread, serverComplaintId: options.localOnly ? undefined : thread.serverComplaintId,
+    ...(options.cachedAnswered ? { serverComplaintStatus: 'ANSWERED', serverWaitingFor: 'PARENT' } : {}) }, conflict: options.conflict });
   await page.goto('/login?role=PARENT');
   await page.locator('input[name="email"]').fill('parent@example.com');
   await page.locator('input[name="password"]').fill('password123');
   await page.getByRole('button', { name: '로그인', exact: true }).click();
   await expect(page).toHaveURL(/\/parent\/messages\/new$/);
-  if (options.lifecycle) await page.goto('/parent/messages/thread-local');
+  if (options.uncachedFollowUp) await page.goto('/parent/messages/server-42/follow-up');
+  else if (options.lifecycle) await page.goto('/parent/messages/thread-local');
   else if (options.followUp) await page.goto('/parent/messages/thread-local/follow-up');
   else {
     await expect(page.getByLabel('문의 대상', { exact: true })).toBeEnabled();
@@ -526,6 +540,58 @@ test('추가 문의는 서버 메시지 초안부터 분석·전송까지 연결
   expect(calls).not.toContain('POST /complaints/42/mask');
 });
 
+test('교사 답변 대기 중에는 추가 문의 버튼과 작성 URL을 막는다', async ({ page }) => {
+  const calls = await setup(page, { lifecycle: { status: 'OPEN', waitingFor: 'TEACHER' }, cachedAnswered: true });
+  const waiting = page.getByText('선생님의 답변을 기다리고 있어요.', { exact: false });
+  await expect(waiting).toBeVisible();
+  await expect(page.getByRole('button', { name: '추가 문의하기', exact: true })).toHaveCount(0);
+
+  // Reloading a direct link reseeds the older ANSWERED/PARENT browser copy.
+  await page.goto('/parent/messages/thread-local/follow-up');
+  await expect(page).toHaveURL(/\/parent\/messages\/thread-local$/);
+  await expect(waiting).toBeVisible();
+  await expect(page.getByLabel('문의 내용', { exact: true })).toHaveCount(0);
+  expect(calls).toContain('GET /complaints/42');
+  expect(calls.some((call) => call.endsWith('/message-draft'))).toBe(false);
+});
+
+test('기존 OPEN/PARENT 응답에서는 추가 문의 버튼으로 작성 화면을 열 수 있다', async ({ page }) => {
+  const calls = await setup(page, { lifecycle: { status: 'OPEN', waitingFor: 'PARENT' } });
+  await page.getByRole('button', { name: '추가 문의하기', exact: true }).click();
+  await expect(page.getByLabel('문의 내용', { exact: true })).toBeEditable();
+  await expect.poll(() => calls).toContain('GET /complaints/42/message-draft');
+  const statusLookup = calls.indexOf('GET /complaints/42');
+  expect(statusLookup).toBeGreaterThanOrEqual(0);
+  expect(statusLookup).toBeLessThan(calls.indexOf('GET /complaints/42/message-draft'));
+});
+
+test('다른 기기에서도 종료된 문의의 추가 작성 URL로 바로 접근할 수 있다', async ({ page }) => {
+  const calls = await setup(page, { lifecycle: { status: 'CLOSED' }, uncachedFollowUp: true });
+  await expect(page).toHaveURL(/\/parent\/messages\/server-42\/follow-up$/);
+  await expect(page.getByLabel('문의 제목', { exact: true })).toHaveValue(thread.title);
+  await expect(page.getByLabel('문의 내용', { exact: true })).toBeEditable();
+  await expect.poll(() => calls).toContain('GET /complaints/42/message-draft');
+  expect(calls).not.toContain('GET /complaints/42/messages');
+});
+
+test('문의 상태 조회에 실패하면 작성 화면을 열기 전에 다시 조회할 수 있다', async ({ page }) => {
+  const calls = await setup(page, { lifecycle: { status: 'ANSWERED' } });
+  let detailAvailable = false;
+  await page.route((url) => url.pathname === '/api/complaints/42', (route) =>
+    detailAvailable ? route.fallback()
+      : route.fulfill({ status: 503, json: { code: 'INTERNAL_SERVER_ERROR' } }));
+
+  await page.getByRole('button', { name: '추가 문의하기', exact: true }).click();
+  const retry = page.getByRole('alert').getByRole('button', { name: '다시 시도하기', exact: true });
+  await expect(retry).toBeVisible();
+  await expect(page.getByLabel('문의 내용', { exact: true })).toHaveCount(0);
+  expect(calls.some((call) => call.endsWith('/message-draft'))).toBe(false);
+
+  detailAvailable = true;
+  await retry.click();
+  await expect(page.getByLabel('문의 내용', { exact: true })).toBeEditable();
+});
+
 for (const closeConflict of [false, true]) {
   test(`학부모 문의 완료 ${closeConflict ? '충돌 시 상태를 다시 조회한다' : '성공을 상세 화면에 반영한다'}`, async ({ page }) => {
     const calls = await setup(page, { lifecycle: { status: 'ANSWERED', closeConflict } });
@@ -794,6 +860,76 @@ test('분석 모드와 수동 검토 플래그는 상태값이 없는 이전 응
   await expect(page.getByText('잠정 분석', { exact: true })).toBeVisible();
   await expect(page.getByText('교사의 직접 검토가 필요합니다.', { exact: true })).toBeVisible();
 });
+
+const safetySignal = {
+  code: 'STUDENT_SAFETY_CONCERN',
+  title: '학생 안전 우려',
+  description: '학생 안전 우려 신호가 확인되어 긴급 단계로 상향되었습니다.',
+};
+const emergencyOverride = { applied: true, safetySignals: [safetySignal] };
+
+test('학부모 분석 POST의 긴급 승격 사유를 일반 위험 태그가 없어도 표시한다', async ({ page }) => {
+  await setup(page, {
+    summary: { riskLevel: 'EMERGENCY', emergencyOverride },
+    detector: { analysisId: 7, llm: null, results: [{ code: 'THREAT', finalState: 'ABSENT', rule: null, llm: null }] },
+  });
+  await analyze(page);
+  const results = page.getByRole('region', { name: '위험 분석 결과' });
+  const signals = results.getByRole('region', { name: '긴급 안전 신호', exact: true });
+  await expect(signals.getByText(safetySignal.title, { exact: true })).toBeVisible();
+  await expect(signals.getByText(safetySignal.description, { exact: true })).toBeVisible();
+  await expect(results).toContainText('시스템 위험도: 긴급');
+  await results.getByText('상세 탐지 결과 보기', { exact: true }).click();
+  await expect(results.getByRole('button', { name: '서버에서 관리하는 협박 명칭 미탐지', exact: true })).toBeVisible();
+  await page.reload();
+  await expect(signals.getByText(safetySignal.description, { exact: true })).toBeVisible();
+});
+
+test('학부모 findings의 긴급 승격 사유와 기존 위험 태그 목록을 함께 표시한다', async ({ page }) => {
+  await setup(page, {
+    finding: true,
+    summary: { riskLevel: 'EMERGENCY' },
+    findingsResponse: { emergencyOverride },
+  });
+  await analyze(page);
+  await page.getByRole('tab', { name: '원문', exact: true }).click();
+  const signals = page.getByRole('region', { name: '긴급 안전 신호', exact: true });
+  const tags = page.getByRole('region', { name: '탐지된 위험 표현 목록 (1)', exact: true });
+  await expect(signals).toContainText(safetySignal.description);
+  await expect(tags).toContainText('서버에서 관리하는 협박 명칭');
+  expect(await signals.evaluate((element, next) =>
+    Boolean(element.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING), await tags.elementHandle())).toBe(true);
+});
+
+test('학부모 findings가 수정안 준비 중이어도 긴급 승격 사유를 먼저 표시한다', async ({ page }) => {
+  await setup(page, {
+    summary: { riskLevel: 'EMERGENCY' },
+    findingsResponse: { revisionStatus: 'PENDING', finalRevision: null },
+  });
+  await analyze(page);
+  await expect(page.getByText('AI 수정안을 준비하고 있습니다.', { exact: false })).toBeVisible();
+
+  await page.route((url) => url.pathname === '/api/risk-analyses/7/findings', (route) => route.fulfill({ json: {
+    revisionStatus: 'PENDING', findings: [], finalRevision: null, emergencyOverride,
+  } }));
+  await expect(page.getByRole('region', { name: '긴급 안전 신호', exact: true })).toContainText(safetySignal.description, { timeout: 10_000 });
+  await expect(page.getByRole('tab', { name: 'AI 초안', exact: true })).toBeDisabled();
+});
+
+for (const applied of [false, null] as const) {
+  test(`학부모 findings에서 긴급 승격을 해제하면 사유 영역을 숨긴다 (${applied})`, async ({ page }) => {
+    await setup(page, {
+      summary: { riskLevel: 'EMERGENCY', emergencyOverride },
+      findingsResponse: { emergencyOverride: applied === null ? null : { ...emergencyOverride, applied } },
+      detector: { analysisId: 7, results: [], llm: null,
+        safetyFlags: { credibleThreat: false, studentSafetyConcern: true, privacyExposure: false } },
+    });
+    await analyze(page);
+    await expect(page.getByRole('region', { name: '안전 신호', exact: true })).toBeVisible();
+    await expect(page.getByText('긴급 안전 신호', { exact: true })).toHaveCount(0);
+    await expect(page.getByText(safetySignal.description, { exact: true })).toHaveCount(0);
+  });
+}
 
 for (const severity of [0, 1, 2, 3, null] as const) {
   test(`심각도 ${severity}: 반복 횟수와 안전 신호의 true·false·null을 구분한다`, async ({ page }) => {

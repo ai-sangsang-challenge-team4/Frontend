@@ -41,7 +41,8 @@ export function BufferedSummaryCard({
   thread,
 }: BufferedSummaryCardProps) {
   return (
-    <article className="board-moderation-message" role={unavailable ? 'status' : undefined}>
+    <article className={`board-moderation-message${unavailable ? ' board-moderation-message--unavailable' : ''}`}
+      role={unavailable ? 'status' : undefined}>
       <div className="board-reply-author">
         <ProfileAvatar className="board-mini-avatar" />
         <strong>{thread.parentName}</strong>
@@ -50,7 +51,7 @@ export function BufferedSummaryCard({
         <div className="board-moderation-card">
           <div>
             <strong className="board-moderation-title">
-              <BufferedSummaryIcon />
+              {unavailable ? null : <BufferedSummaryIcon />}
               <span>{unavailable ? '완충 요약을 확인할 수 없습니다' : '위험 메시지 완충 요약'}</span>
             </strong>
             <p><MessageText>{summaryText}</MessageText></p>

@@ -1,8 +1,8 @@
 import type { ThreadActivityLog } from '../parent-message/parentMessageTypes';
 import type { ReplyTemplate, ReplyTemplateDraft } from './replyTemplates';
 import type { RiskClassification } from '../risk-analysis';
-import type { ComplaintStatus, RiskReviewStatus, WaitingFor } from '../../shared/types';
-import type { RiskAnalysisMetadata } from '../../shared/types/risk';
+import type { ComplaintStatus, MessageSummaryStatus, RiskReviewStatus, WaitingFor } from '../../shared/types';
+import type { EmergencyOverride, RiskAnalysisMetadata } from '../../shared/types/risk';
 
 export type ThreadStatus = 'before' | 'inProgress' | 'complete';
 export type RiskLevel = 'normal' | 'attention' | 'danger' | 'urgent';
@@ -66,6 +66,7 @@ export type ThreadAnalysis = RiskAnalysisMetadata & {
   // Omitted by existing fixtures; a populated analysis was ready before status was added.
   status?: 'ready' | 'loading' | 'failed';
   riskClassifications?: RiskClassification[];
+  emergencyOverride?: EmergencyOverride | null;
   aiObjections?: AiObjection[];
   activityLogs: ActivityLog[];
   canReviewRisk: boolean;
@@ -96,9 +97,8 @@ export type BoardReply = {
   label: string;
   // Set once the reply is stored as the final answer delivered to the parent.
   deliveryStatus?: 'SENT_TO_PARENT';
-  // Server inbox: a parent message above LOW arrives as its buffered summary instead of the original.
-  summarized?: boolean;
-  summaryUnavailable?: boolean;
+  // Server inbox: null represents an original supplied in the conversation response.
+  summaryStatus?: MessageSummaryStatus | null;
   readByParent?: boolean;
   time: string;
   sentAt?: string;

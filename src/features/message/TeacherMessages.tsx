@@ -42,7 +42,7 @@ import { ConversationDateChip } from './components/ConversationDateChip';
 import { BufferedSummaryCard } from './components/BufferedSummaryCard';
 import { AnalysisStateNotice } from './components/AnalysisStateNotice';
 import { RiskClassificationPanel, RiskClassificationSummary } from '../risk-analysis/RiskClassificationPanel';
-import { RiskAnalysisNotice } from '../risk-analysis/RiskAnalysisNotice';
+import { EmergencySafetySignals, RiskAnalysisNotice } from '../risk-analysis/RiskAnalysisNotice';
 import {
   BreadcrumbSeparator,
   CheckCircleIcon,
@@ -69,6 +69,7 @@ import {
   filterOptions,
   getAnalysisStatus,
   getBufferedSummaryText,
+  getLatestParentReply,
   getPrimaryParentMessage,
   getReplyLockNotice,
   getThreadRiskLevel,
@@ -1345,6 +1346,8 @@ function RiskAnalysisPanel({
         </div>
       </section>
 
+      <EmergencySafetySignals emergencyOverride={analysis.emergencyOverride} />
+
       <section className="board-risk-evidence-panel">
         <div className="board-risk-evidence-header">
           <h2 className="board-risk-section-title">
@@ -1616,35 +1619,35 @@ function ThreadDetail({
   const serverReplyBlockReason = getServerReplyBlockReason(thread);
   const lockedGuide = getReplyLockNotice(thread);
   const bufferedSummaryText = getBufferedSummaryText(thread);
-  const needsBufferedSummary = effectiveRiskLevel !== 'low' ||
-    Boolean(thread.analysis && getAnalysisStatus(thread) !== 'ready');
   // A server thread carries a summary per parent message, so every message stays in the conversation and
-  // each summarized one shows as its own summary card.
-  const usesMessageSummaries = Boolean(thread.serverComplaintId);
-  const visibleConversationReplies = needsBufferedSummary && !usesMessageSummaries
+  // each generated or unavailable summary has its own card.
+  const usesMessageSummaries = thread.serverComplaintId !== undefined;
+  const needsMockSummary = !usesMessageSummaries && (effectiveRiskLevel !== 'low' ||
+    Boolean(thread.analysis && getAnalysisStatus(thread) !== 'ready'));
+  const visibleConversationReplies = needsMockSummary
     ? thread.replies.filter((reply) => reply.authorRole !== 'parent')
     : thread.replies;
   const initialConversationDate = thread.messageDateLabel ?? formatConversationDate(
     thread.replies[0]?.sentAt ?? thread.latestAt,
   );
-  const showBufferedSummaryOnly =
-    needsBufferedSummary && !usesMessageSummaries && visibleConversationReplies.length === 0;
+  const showBufferedSummaryOnly = needsMockSummary && visibleConversationReplies.length === 0;
   const canInspectOriginal = Boolean(
     thread.analysis?.canViewOriginal &&
       thread.analysis.originalMessageAvailable &&
       hasOriginalMessage(thread),
   );
-  const conversationInfoText =
-    effectiveRiskLevel === 'low'
-      ? '일반 단계 메시지는 원문을 기준으로 확인합니다. 답변 작성 시 원문과 관련 자료를 바탕으로 초안을 생성할 수 있습니다.'
-      : (
+  const hasBufferedConversation = usesMessageSummaries
+    ? thread.replies.some((reply) => reply.summaryStatus != null) : effectiveRiskLevel !== 'low';
+  const conversationInfoText = hasBufferedConversation
+      ? (
           <>
-            주의 이상 단계의 학부모 게시글은 완충 요약으로 먼저 표시됩니다.
+            완충 요약이 적용된 학부모 메시지는 요약 또는 생성 실패 안내를 표시합니다.
             <br />
             필요 시 원문 보기와 판단 근거를 함께 확인한 뒤 답변을 남길 수
             있습니다.
           </>
-        );
+        )
+      : '학부모 메시지를 원문으로 확인할 수 있습니다. 답변 작성 시 메시지와 관련 자료를 바탕으로 초안을 생성할 수 있습니다.';
 
   // The thread on screen, so a slow original request for a thread left behind does not open its viewer here.
   const activeThreadIdRef = useRef(thread.id);
@@ -1786,7 +1789,7 @@ function ThreadDetail({
         <>
           {thread.analysis ? (
             <AnalysisStateNotice
-              onOriginalOpen={() => openOriginalViewer()}
+              onOriginalOpen={usesMessageSummaries ? undefined : () => openOriginalViewer()}
               onRetry={onReloadServerDetail ? () => onReloadServerDetail(thread.id) : undefined}
               thread={thread}
             />
@@ -1804,7 +1807,7 @@ function ThreadDetail({
           >
         <ConversationDateChip label={initialConversationDate} />
 
-        {needsBufferedSummary && !usesMessageSummaries ? (
+        {needsMockSummary ? (
           <BufferedSummaryCard
             canInspectOriginal={canInspectOriginal}
             onOpenOriginal={() => openOriginalViewer()}
@@ -1826,14 +1829,14 @@ function ThreadDetail({
           return (
             <Fragment key={reply.id}>
               {dateLabel !== previousDateLabel ? <ConversationDateChip label={dateLabel} /> : null}
-              {reply.summarized ? (
+              {reply.summaryStatus != null ? (
                 <BufferedSummaryCard
                   canInspectOriginal={canInspectOriginal}
                   onOpenOriginal={() => openOriginalViewer(undefined, reply.id)}
                   onOpenRiskEvidence={() => setActiveDetailTab('risk')}
                   sentAt={reply.sentAt}
-                  summaryText={reply.summaryUnavailable ? '완충 요약을 생성하지 못했습니다. 필요한 경우 원문 보기에서 내용을 직접 확인해 주세요.' : reply.content}
-                  unavailable={reply.summaryUnavailable}
+                  summaryText={reply.content}
+                  unavailable={reply.summaryStatus === 'UNAVAILABLE'}
                   thread={thread}
                 />
               ) : (
@@ -2164,12 +2167,15 @@ function ReplyComposerPage({
       thread.analysis.originalMessageAvailable &&
       hasOriginalMessage(thread),
   );
-  const isBufferedContext = riskLevel !== 'low' ||
-    Boolean(thread.analysis && getAnalysisStatus(thread) !== 'ready');
-  const contextMessageText = isBufferedContext
-    ? (bufferedSummaryText ?? '완충 요약을 확인할 수 없습니다. 필요한 경우 원문 보기를 이용해 주세요.')
-    : getPrimaryParentMessage(thread);
-  const shouldShowOriginalButton = riskLevel !== 'low' && canInspectOriginal;
+  const latestParentReply = isServerThread ? getLatestParentReply(thread.replies) : undefined;
+  const isBufferedContext = isServerThread ? latestParentReply?.summaryStatus != null
+    : riskLevel !== 'low' || Boolean(thread.analysis && getAnalysisStatus(thread) !== 'ready');
+  const contextMessageText = isServerThread
+    ? latestParentReply?.content ?? '학부모 메시지를 확인할 수 없습니다.'
+    : isBufferedContext
+      ? bufferedSummaryText ?? '완충 요약을 확인할 수 없습니다. 필요한 경우 원문 보기를 이용해 주세요.'
+      : getPrimaryParentMessage(thread);
+  const shouldShowOriginalButton = canInspectOriginal && (isServerThread ? isBufferedContext : riskLevel !== 'low');
   // Server threads: the AI tab offers the draft again once it is empty (failed, reset).
   const canRequestAiDraft = isServerThread && isAiDraftAvailable && !hasDraft && !serverBlockReason &&
     Boolean(onGenerateAiDraft);
@@ -2191,7 +2197,7 @@ function ReplyComposerPage({
         ? '관련 규정이 등록된 자료에 없어 AI 초안을 생성하지 않습니다. 직접 작성해 주세요.'
         : riskLevel === 'low'
           ? '일반 단계: 원문과 RAG 기반 참고자료로 답변 초안을 생성할 수 있습니다.'
-          : '주의 단계: 완충 요약과 원문을 확인한 뒤 AI 초안을 교사가 검토하고 수정하는 것을 권고합니다.';
+          : `주의 단계: ${isBufferedContext ? '완충 요약과 원문을' : '학부모 메시지를'} 확인한 뒤 AI 초안을 교사가 검토하고 수정하는 것을 권고합니다.`;
   const draftStatusText = isLocked
     ? '안전 잠금 · 전송 불가'
     : serverReplyAction
@@ -2305,7 +2311,8 @@ function ReplyComposerPage({
 
         <section className="board-reply-context-panel">
           <div className="board-reply-context-heading">
-            <h2>{isBufferedContext ? '완충 요약' : '학부모 메시지'}</h2>
+            <h2>{latestParentReply?.summaryStatus === 'UNAVAILABLE' ? '완충 요약을 확인할 수 없습니다'
+              : isBufferedContext ? '완충 요약' : '학부모 메시지'}</h2>
             {shouldShowOriginalButton ? (
               <button
                 className="board-reference-button"

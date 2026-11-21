@@ -3,6 +3,8 @@
 // Single message state (ParentMessageResponse.status).
 export type MessageStatus = 'DRAFT' | 'SENT' | 'READ';
 
+export type MessageSummaryStatus = 'GENERATED' | 'UNAVAILABLE';
+
 // Complaint (conversation) state. Admin sharing lives in EscalationStatus, not here.
 export type ComplaintStatus = 'DRAFT' | 'OPEN' | 'ANSWERED' | 'CLOSED';
 
