@@ -86,7 +86,10 @@ export function useServerReply({ setThreads, reloadDetail, onMessage }: UseServe
         const aiDraft = getReplyDraftTab(current) === 'ai' ? current.draftText : current.replyDrafts?.ai?.draftText;
         // The lock may have been set meanwhile; a tab the teacher already wrote in is not replaced.
         if (isReplyLocked(current) || aiDraft?.trim()) return current;
-        return setReplyDraftTabState(current, 'ai', { draftText: response.content, aiDraftGenerated: true });
+        return {
+          ...setReplyDraftTabState(current, 'ai', { draftText: response.content, aiDraftGenerated: true }),
+          aiRagReferences: response.references ?? [],
+        };
       });
       // The server records AI_DRAFT_GENERATED in the history.
       refresh(thread.id);

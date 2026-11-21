@@ -3,6 +3,7 @@ import type { ReplyTemplate, ReplyTemplateDraft } from './replyTemplates';
 import type { RiskClassification } from '../risk-analysis';
 import type { ComplaintStatus, MessageSummaryStatus, RiskReviewStatus, WaitingFor } from '../../shared/types';
 import type { EmergencyOverride, RiskAnalysisMetadata } from '../../shared/types/risk';
+import type { TeacherRagReference } from './api/teacherInboxTypes';
 
 export type ThreadStatus = 'before' | 'inProgress' | 'complete';
 export type RiskLevel = 'normal' | 'attention' | 'danger' | 'urgent';
@@ -127,6 +128,7 @@ export type BoardThread = {
   // Used only when there is no analysis, e.g. threads loaded from parent messages.
   activityLogs?: ActivityLog[];
   aiDraftGenerated?: boolean;
+  aiRagReferences?: TeacherRagReference[];
   className: string;
   draftSavedAt?: string;
   draftText: string;

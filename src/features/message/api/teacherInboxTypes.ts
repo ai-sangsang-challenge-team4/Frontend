@@ -152,11 +152,14 @@ export const TEACHER_RESPONSE_MAX_LENGTH = 1500;
 
 // POST /teacher/complaints/{complaintId}/response/ai-draft. Not stored as a draft; the server records
 // an AI_DRAFT_GENERATED event. The generator is still a mock.
+export type TeacherRagReference = { source: string; page: number | null; content: string };
+
 export type TeacherAiDraftResponse = {
   complaintId: number;
   content: string;
   modelName: string;
   generatedAt: string;
+  references?: TeacherRagReference[];
 };
 
 // GET and PUT /teacher/complaints/{complaintId}/response-draft. GET answers 404 RESPONSE_DRAFT_NOT_FOUND
