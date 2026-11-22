@@ -3,6 +3,7 @@ import { configureApiClient } from '../../src/shared/api/apiClient';
 import { toServerInstant } from '../../src/shared/api/serverDateTime';
 import { getThreadRiskLevel } from '../../src/features/message/messageRules';
 import { httpTeacherInboxApi } from '../../src/features/message/api/httpTeacherInboxApi';
+import { countActiveComplaints, loadTeacherInboxPage } from '../../src/features/message/serverInboxPage';
 import type { ComplaintListItem, TeacherConversationResponse } from '../../src/features/message/api/teacherInboxTypes';
 import type { HistoryEvent, TeacherRiskResponse } from '../../src/features/escalation/escalationTypes';
 import {
@@ -23,6 +24,43 @@ type FetchCall = { url: string; init: RequestInit };
 
 const originalFetch = globalThis.fetch;
 let calls: FetchCall[] = [];
+
+test('진행 중 문의는 완료 페이지만 건너뛰고 OPEN과 ANSWERED의 서버 순서를 유지한다', async () => {
+  mockFetch((call) => {
+    const url = new URL(call.url);
+    expect(url.searchParams.get('status')).toBeNull();
+    expect(url.searchParams.get('keyword')).toBe('학교');
+    const page = Number(url.searchParams.get('page'));
+    return json(200, { content: page === 0 ? [{ ...listItem, status: 'CLOSED' }] : [
+      { ...listItem, complaintId: 2, status: 'ANSWERED' }, { ...listItem, complaintId: 3 },
+      { ...listItem, complaintId: 4, status: 'CLOSED' },
+    ], page, hasNext: page === 0 });
+  });
+  const result = await loadTeacherInboxPage({ keyword: '학교', sort: 'LATEST' }, true);
+  expect(result.content.map((item) => item.complaintId)).toEqual([2, 3]);
+  expect(result).toMatchObject({ page: 1, hasNext: false });
+  expect(calls).toHaveLength(2);
+});
+
+test('진행 중 건수는 OPEN과 ANSWERED를 합하고 취소한 조회는 요청하지 않는다', async () => {
+  mockFetch((call) => json(200, { totalElements: new URL(call.url).searchParams.get('status') === 'OPEN' ? 7 : 3 }));
+  expect(await countActiveComplaints()).toBe(10);
+  const controller = new AbortController();
+  controller.abort();
+  await expect(loadTeacherInboxPage({}, true, controller.signal)).rejects.toThrow();
+  expect(calls).toHaveLength(2);
+});
+
+test('불완전 이력은 빈 기록이어도 누락 사유를 유지하고 정상 재조회 시 해제한다', () => {
+  const incomplete = mergeServerDetail(toListThread(listItem), bundle({ history: [], historyMetadata: {
+    logComplete: false, missingLogs: [{ expectedType: 'RISK_ANALYZED', description: '위험 분석 기록 누락' }],
+  } }));
+  expect(incomplete.analysis).toMatchObject({ activityLogs: [], activityLogsIncomplete: true, missingActivityLogs: ['위험 분석 기록 누락'] });
+  const failed = mergeServerDetail(incomplete, bundle({ history: null }));
+  expect(failed.analysis).toMatchObject({ activityLogsUnavailable: true, activityLogsIncomplete: true });
+  const complete = mergeServerDetail(failed, bundle({ historyMetadata: { logComplete: true, missingLogs: [] } }));
+  expect(complete.analysis).toMatchObject({ activityLogsUnavailable: false, activityLogsIncomplete: false, missingActivityLogs: [] });
+});
 
 function mockFetch(handler: (call: FetchCall) => Response) {
   globalThis.fetch = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
@@ -134,7 +172,7 @@ test('교사 메시지함 조회 API는 백엔드 경로와 목록 쿼리를 사
 
 test('메시지함 필터를 서버 목록 쿼리로 바꾼다', () => {
   expect(toComplaintListQuery({ query: ' 홍길동 ', risk: 'emergency', sort: 'latest', status: 'active' }, 0))
-    .toEqual({ page: 0, keyword: '홍길동', status: 'OPEN', riskLevel: 'EMERGENCY', sort: 'LATEST' });
+    .toEqual({ page: 0, keyword: '홍길동', status: undefined, riskLevel: 'EMERGENCY', sort: 'LATEST' });
   expect(toComplaintListQuery({ query: '', risk: 'all', sort: 'oldest', status: 'all' }, 3))
     .toEqual({ page: 3, keyword: undefined, status: undefined, riskLevel: undefined, sort: 'OLDEST' });
   expect(toComplaintListQuery({ query: '', risk: 'all', sort: 'latest', status: 'complete' }, 0).status).toBe('CLOSED');
@@ -181,7 +219,7 @@ test('상세·대화·위험·이력을 합쳐 위험 분류, 완충 요약, 처
   // detectedFactors THREAT → PRESENT, every other category → ABSENT (the analysis completed).
   const classifications = thread.analysis?.riskClassifications ?? [];
   expect(classifications).toHaveLength(8);
-  expect(classifications.find((item) => item.code === 'THREAT')).toMatchObject({ status: 'PRESENT', evidenceSpan: '직접 다치게 하겠습니다' });
+  expect(classifications.find((item) => item.code === 'THREAT')).toMatchObject({ status: 'PRESENT', evidenceSpans: ['직접 다치게 하겠습니다'] });
   expect(classifications.filter((item) => item.status === 'ABSENT')).toHaveLength(7);
   // Without a teacher review the review fields are null.
   expect(thread.analysis?.teacherReviewedRiskLevel).toBeUndefined();
@@ -250,7 +288,7 @@ test('이력 이벤트 전체에 한글 라벨이 있어 코드값이 그대로 
   expect(logs.map((log) => log.action)).toEqual(['안전 잠금으로 답변 차단', '답변 템플릿 채택', '메시지 읽음']);
 });
 
-test('새 위험 응답의 상태를 유지하고, 원문 하이라이트가 가능하도록 첫 근거 구간만 교사 화면에 쓴다', () => {
+test('새 위험 응답의 상태와 모든 근거 구간을 교사 화면에 유지한다', () => {
   const thread = mergeServerDetail(toListThread(listItem), bundle({
     risk: {
       ...risk,
@@ -262,7 +300,7 @@ test('새 위험 응답의 상태를 유지하고, 원문 하이라이트가 가
     },
   }));
   expect(thread.analysis?.riskClassifications).toEqual(expect.arrayContaining([
-    expect.objectContaining({ code: 'THREAT', status: 'BOUNDARY', evidenceSpan: '첫 근거' }),
+    expect.objectContaining({ code: 'THREAT', status: 'BOUNDARY', evidenceSpans: ['첫 근거', '둘째 근거'] }),
     expect.objectContaining({ code: 'PERSONAL_ATTACK', status: 'ABSENT' }),
     expect.objectContaining({ code: 'PERSONAL_INFORMATION_RISK', status: 'UNKNOWN' }),
   ]));
@@ -273,7 +311,7 @@ test('명시적으로 빈 근거 구간이 오면 이전 evidence 문자열을 �
     risk: { ...risk, detectedFactors: [{ code: 'THREAT', name: '위협', state: 'PRESENT', reason: '확인 필요', evidenceSpans: [], evidence: '이전 근거' }] },
   }));
   expect(thread.analysis?.riskClassifications).toEqual(expect.arrayContaining([
-    expect.objectContaining({ code: 'THREAT', evidenceSpan: '' }),
+    expect.objectContaining({ code: 'THREAT', evidenceSpans: [] }),
   ]));
 });
 

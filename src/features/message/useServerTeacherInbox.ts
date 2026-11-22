@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { isAbortError, isApiError, toApiError, type ApiError } from '../../shared/api';
-import type { HistoryEvent, TeacherRiskResponse } from '../escalation/escalationTypes';
+import type { TeacherRiskResponse } from '../escalation/escalationTypes';
 import { teacherInboxApi, type TeacherComplaintDetailResponse } from './api/teacherInboxApi';
 import {
   markServerDetailFailed,
@@ -14,6 +14,7 @@ import {
   type ServerInboxFilters,
 } from './serverThreads';
 import type { BoardThread } from './types';
+import { loadTeacherInboxPage } from './serverInboxPage';
 
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -95,8 +96,9 @@ export function useServerTeacherInbox({ enabled, filters, setThreads }: UseServe
     listController.current = controller;
     setListState((current) => ({ ...current, error: null, isLoading: page === 0, isLoadingMore: page > 0 }));
     try {
-      const response = await teacherInboxApi.listComplaints(
+      const response = await loadTeacherInboxPage(
         toComplaintListQuery({ query: debouncedQuery, risk, sort, status }, page),
+        status === 'active',
         controller.signal,
       );
       if (controller.signal.aborted) return;
@@ -158,7 +160,7 @@ export function useServerTeacherInbox({ enabled, filters, setThreads }: UseServe
           if (isApiError(error) && error.status === 404) return null;
           throw error;
         }),
-        teacherInboxApi.getHistory(complaintId, signal).then((response) => response.events, (): HistoryEvent[] | null => null),
+        teacherInboxApi.getHistory(complaintId, signal).catch(() => null),
       ]);
     } catch (error) {
       // Leave no endless loading notice behind; the risk tab offers a retry.
@@ -172,7 +174,9 @@ export function useServerTeacherInbox({ enabled, filters, setThreads }: UseServe
     const [detail, conversation, risk, history] = bundle;
     setThreads((current) => {
       const existing = current.find((thread) => thread.id === threadId);
-      const merged = mergeServerDetail(existing ?? detailToListThread(detail), { detail, conversation, risk, history });
+      const merged = mergeServerDetail(existing ?? detailToListThread(detail), {
+        detail, conversation, risk, history: history?.events ?? null, historyMetadata: history ?? undefined,
+      });
       return existing ? current.map((thread) => thread.id === threadId ? merged : thread) : [...current, merged];
     });
   }, [setThreads]);

@@ -275,11 +275,11 @@ export function getVisibleRiskFactors(thread: BoardThread) {
   const factors = thread.analysis?.riskFactors.filter((factor) => factor.status !== 'unknown') ?? [];
   const classifications = getRiskClassifications(thread.analysis?.riskClassifications)
     .filter((result) => result.status === 'PRESENT' || result.status === 'BOUNDARY')
-    .map((result) => ({
-      id: result.code, name: result.label, description: result.label,
-      evidence: result.evidenceSpan ?? '', rationale: result.rationale ?? '판단 이유가 제공되지 않았습니다.',
+    .flatMap((result) => (result.evidenceSpans.length ? result.evidenceSpans : ['']).map((evidence, index) => ({
+      id: index === 0 ? result.code : `${result.code}-${index}`, name: result.label, description: result.label,
+      evidence, rationale: result.rationale ?? '판단 이유가 제공되지 않았습니다.',
       status: result.status === 'PRESENT' ? 'detected' as const : 'boundary' as const,
-    }));
+    })));
   return [...factors, ...classifications.filter((result) =>
     !factors.some((factor) => factor.evidence && factor.evidence === result.evidence))];
 }

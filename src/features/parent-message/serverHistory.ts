@@ -4,6 +4,7 @@ import {
   type ParentComplaintDetailResponse,
   type ParentComplaintPageResponse,
   type ParentConversationResponse,
+  type ParentComplaintListQuery,
 } from './api/parentComplaintApi';
 import { applyServerComplaintState, canWriteAdditionalInquiry, getConversation } from './conversation';
 import { readSentMessages, updateSentMessages } from './messageDraft';
@@ -17,9 +18,6 @@ import type { ConversationMessage, SentParentMessage } from './parentMessageType
 // latest teacher reply as read, so only the detail screen loads it.
 
 type ListItem = ParentComplaintPageResponse['content'][number];
-
-// GET /complaints pages by 10; this caps one sync at 200 inquiries.
-const MAX_LIST_PAGES = 20;
 
 const SERVER_THREAD_PREFIX = 'server-';
 
@@ -147,15 +145,21 @@ export async function prepareServerFollowUp(userId: number, threadId: string, si
   return { canWrite, threadId: thread.messageId };
 }
 
-// Brings every submitted inquiry into the browser copy. Inquiries not stored yet are read once with
-// GET /complaints/{id} for their content. Server DRAFTs are the composer's, not history entries.
-export async function syncServerComplaints(userId: number, signal?: AbortSignal) {
+// Loads one server page into the local copy, without marking replies as read. The caller owns
+// pagination and search; locally cached inquiries are never mistaken for the server's search results.
+export async function syncServerComplaints(userId: number, signal?: AbortSignal, query: ParentComplaintListQuery = {}) {
   const previous = new Map(readSentMessages(userId).map((thread) => [thread.serverComplaintId, thread]));
   const items: ListItem[] = [];
-  for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
-    const response = await parentComplaintApi.listComplaints({ page }, signal);
+  let page = query.page ?? 0;
+  let hasNext = false;
+  while (true) {
+    signal?.throwIfAborted();
+    const response = await parentComplaintApi.listComplaints({ ...query, page }, signal);
     items.push(...response.content.filter((item) => item.status !== 'DRAFT'));
-    if (!response.hasNext) break;
+    hasNext = response.hasNext;
+    if (items.length > 0 || !hasNext) break;
+    // Draft-only pages must not strand submitted inquiries on a later page.
+    page += 1;
   }
   const stored = readSentMessages(userId);
   const details = new Map<number, ParentComplaintDetailResponse>();
@@ -170,6 +174,7 @@ export async function syncServerComplaints(userId: number, signal?: AbortSignal)
     if (thread) return upsert(next, applyListItem(thread, item, hasSameServerState(thread, previous.get(item.complaintId))));
     return detail ? upsert(next, applyListItem(createServerThread(detail), item, true)) : next;
   }, messages));
+  return { complaintIds: items.map((item) => item.complaintId), page, hasNext };
 }
 
 // Loads one inquiry's conversation, including the teacher's replies, into the browser copy. This marks the

@@ -7,7 +7,7 @@ import { mockConnectedTeachers, updateSentMessage, type MessageDraft } from '../
 import { consultationChips, formatHistoryTime, formatMessageDate, getConversation, getDraftPath, needsParentReview } from '../../features/parent-message/conversation';
 import { ParentMessageHeader } from '../../features/parent-message/ParentMessageHeader';
 import { useParentMessages } from '../../features/parent-message/useParentMessages';
-import { useServerHistorySync } from '../../features/parent-message/useServerHistorySync';
+import { useServerParentList } from '../../features/parent-message/useServerParentList';
 import { getApiErrorMessage } from '../../shared/api';
 import { Badge, Button, EmptyState, Modal, StatusChip, Tabs, TextField, Toast } from '../../shared/components/ui';
 import { SearchIcon } from '../../shared/components/teacher-shell/icons';
@@ -27,7 +27,7 @@ function MessageHistory({ userId }: { userId: number }) {
   const [notice, setNotice] = useState<string | null>(null);
   const dismissNotice = useCallback(() => setNotice(null), []);
   const { messages, drafts, error, refresh } = useParentMessages(userId);
-  const sync = useServerHistorySync(userId, null);
+  const sync = useServerParentList(userId, tab === 'drafts' ? '' : query);
   const teacherName = (draft: MessageDraft) => {
     const serverName = draft.server?.teacherName ?? draft.teacherName;
     return serverName ? `${serverName} 선생님`
@@ -35,8 +35,11 @@ function MessageHistory({ userId }: { userId: number }) {
   };
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const matches = (values: string[]) => values.join(' ').toLocaleLowerCase().includes(normalizedQuery);
-  const visibleMessages = messages.filter((message) => (tab !== 'starred' || message.isImportant) &&
-    matches([message.teacherName, message.title, ...getConversation(message).map((entry) => entry.body)]));
+  const messagesByComplaintId = new Map(messages.map((message) => [message.serverComplaintId, message]));
+  const serverMessages = sync.complaintIds.map((id) => messagesByComplaintId.get(id))
+    .filter((message): message is (typeof messages)[number] => Boolean(message));
+  const visibleMessages = (sync.enabled ? serverMessages : messages).filter((message) => (tab !== 'starred' || message.isImportant) &&
+    (sync.enabled || matches([message.teacherName, message.title, ...getConversation(message).map((entry) => entry.body)])));
   const visibleDrafts = drafts.filter((draft) => matches([teacherName(draft), draft.title, draft.body]));
 
   function toggleImportant(messageId: string) {
@@ -50,10 +53,11 @@ function MessageHistory({ userId }: { userId: number }) {
   const content = <>
     <div className="parent-history-toolbar">
       <TextField aria-label="문의 검색" containerClassName="parent-history-search ui-search-field" leadingIcon={<SearchIcon />}
-        onChange={(event) => setQuery(event.target.value)} placeholder="선생님 성함 또는 문의 내용으로 검색" type="search" value={query} />
+        onChange={(event) => setQuery(event.target.value)} maxLength={sync.enabled ? 100 : undefined}
+        placeholder={sync.enabled && tab !== 'drafts' ? '문의 제목 또는 내용으로 검색' : '선생님 성함 또는 문의 내용으로 검색'} type="search" value={query} />
     </div>
     {sync.error && !error ? <div className="parent-history-sync-error" role="alert">
-      <p>{getApiErrorMessage(sync.error, '서버에서 문의 내역을 불러오지 못했습니다.')} 이 기기에 저장된 내역만 표시합니다.</p>
+      <p>{getApiErrorMessage(sync.error, '서버에서 문의 내역을 불러오지 못했습니다.')} 조회하지 못한 문의가 있을 수 있습니다.</p>
       <Button onClick={sync.retry} size="sm" variant="outline">다시 불러오기</Button>
     </div> : null}
     {error ? <EmptyState title={error} action={<Button onClick={refresh}>다시 시도</Button>} /> : (
@@ -87,10 +91,13 @@ function MessageHistory({ userId }: { userId: number }) {
               </li>;
             })}
           </ul>
-        ) : sync.isLoading && !messages.length ? <EmptyState title="문의 내역을 불러오고 있습니다." /> : <EmptyState title={query ? '검색 결과가 없습니다.' : tab === 'starred' ? '중요 문의가 없습니다.' : '전송한 문의가 없습니다.'}
-          description={query ? '선생님 성함이나 문의 내용을 다시 확인해 주세요.' : tab === 'starred' ? '문의 옆 별표를 눌러 중요 문의로 등록할 수 있습니다.' : '선생님께 문의를 작성하면 이곳에서 대화를 확인할 수 있습니다.'} />}
+        ) : sync.isLoading ? <EmptyState title="문의 내역을 불러오고 있습니다." /> : sync.error ? null : <EmptyState title={tab === 'starred' && sync.hasNext ? '불러온 문의 중 중요 문의가 없습니다.' : query ? '검색 결과가 없습니다.' : tab === 'starred' ? '중요 문의가 없습니다.' : '전송한 문의가 없습니다.'}
+          description={tab === 'starred' && sync.hasNext ? '문의 더 보기를 눌러 다음 문의를 확인해 주세요.' : query ? '문의 제목이나 내용을 다시 확인해 주세요.' : tab === 'starred' ? '문의 옆 별표를 눌러 중요 문의로 등록할 수 있습니다.' : '선생님께 문의를 작성하면 이곳에서 대화를 확인할 수 있습니다.'} />}
       </>
     )}
+    {sync.enabled && tab !== 'drafts' && sync.hasNext ? <Button disabled={sync.isLoading} onClick={sync.loadMore} variant="outline">
+      {sync.isLoading ? '문의 내역을 불러오는 중…' : '문의 더 보기'}
+    </Button> : null}
   </>;
 
   return <>

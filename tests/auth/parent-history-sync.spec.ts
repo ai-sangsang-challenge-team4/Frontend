@@ -9,6 +9,27 @@ import { complaintIdFromThreadId, syncServerComplaints, syncServerConversation }
 // (stubbed fetch, not the real server).
 
 const USER_ID = 7;
+
+test('200건 이후 페이지와 서버 검색 결과를 가져오며 임시저장만 있는 페이지는 건너뛴다', async () => {
+  serve({
+    'GET /complaints?page=20&keyword=reply': page([listItem(201, { status: 'DRAFT' })], 20, true),
+    'GET /complaints?page=21&keyword=reply': page([listItem(211)], 21, false),
+    'GET /complaints/211': detail(211),
+  });
+  expect(await syncServerComplaints(USER_ID, undefined, { page: 20, keyword: 'reply' })).toEqual({ complaintIds: [211], page: 21, hasNext: false });
+  expect(readSentMessages(USER_ID).map((item) => item.serverComplaintId)).toEqual([211]);
+  expect(requests.some((path) => path.endsWith('/messages'))).toBe(false);
+});
+
+test('취소한 검색 응답은 로컬 문의 사본에 반영하지 않는다', async () => {
+  const controller = new AbortController();
+  globalThis.fetch = (async () => {
+    controller.abort();
+    return json(page([], 0, false));
+  }) as typeof fetch;
+  await expect(syncServerComplaints(USER_ID, controller.signal)).rejects.toThrow();
+  expect(changeEvents).toBe(0);
+});
 const originalFetch = globalThis.fetch;
 let requests: string[] = [];
 let changeEvents = 0;
@@ -91,7 +112,7 @@ test.afterAll(() => {
   globalThis.fetch = originalFetch;
 });
 
-test('목록 동기화는 모든 페이지를 받아 기존 사본을 갱신하고 새 문의만 상세 조회한다', async () => {
+test('목록 동기화는 요청한 페이지를 받아 기존 사본을 갱신하고 새 문의만 상세 조회한다', async () => {
   storeSentMessage(USER_ID, localThread());
   changeEvents = 0;
   serve({
@@ -100,11 +121,13 @@ test('목록 동기화는 모든 페이지를 받아 기존 사본을 갱신하�
     'GET /complaints/43': detail(43, { status: 'CLOSED', waitingFor: 'NONE' }),
   });
 
-  await syncServerComplaints(USER_ID);
+  expect(await syncServerComplaints(USER_ID)).toEqual({ complaintIds: [42], page: 0, hasNext: true });
+  expect(requests).toEqual(['GET /complaints?page=0']);
+  expect(await syncServerComplaints(USER_ID, undefined, { page: 1 })).toEqual({ complaintIds: [43], page: 1, hasNext: false });
 
   // No /messages: it would mark the teacher's reply as read before the parent opens it.
   expect(requests).toEqual(['GET /complaints?page=0', 'GET /complaints?page=1', 'GET /complaints/43']);
-  expect(changeEvents).toBe(1);
+  expect(changeEvents).toBe(2);
   const [created, existing] = readSentMessages(USER_ID);
   expect(existing).toMatchObject({ messageId: 'local-thread', consultationStatus: 'inProgress', serverWaitingFor: 'PARENT', updatedAt: '2026-10-30T01:00:00.000Z' });
   expect(needsParentReview(existing)).toBe(true);
@@ -116,7 +139,7 @@ test('목록 동기화는 모든 페이지를 받아 기존 사본을 갱신하�
 
   // A second sync with nothing new writes nothing.
   await syncServerComplaints(USER_ID);
-  expect(changeEvents).toBe(1);
+  expect(changeEvents).toBe(2);
 });
 
 test('대화 동기화는 교사 답변을 넣고 학부모 메시지의 로컬 ID를 유지한다', async () => {

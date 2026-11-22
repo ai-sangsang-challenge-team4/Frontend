@@ -77,6 +77,8 @@ export type ThreadAnalysis = RiskAnalysisMetadata & {
   canViewActivityLog: boolean;
   // Server inbox: GET /history failed, so activityLogs are the last ones loaded (possibly none).
   activityLogsUnavailable?: boolean;
+  activityLogsIncomplete?: boolean;
+  missingActivityLogs?: string[];
   canViewOriginal: boolean;
   originalMessageAvailable: boolean;
   packageAvailable: boolean;
