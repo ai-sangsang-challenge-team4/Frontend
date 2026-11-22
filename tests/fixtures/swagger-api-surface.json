@@ -1,6 +1,6 @@
 {
   "source": "https://teacherhub.duckdns.org/v3/api-docs",
-  "checkedAt": "2026-11-17",
+  "checkedAt": "2026-11-22",
   "operations": [
     "GET /admin/emergency-review",
     "GET /admin/emergency-review/{requestId}",
@@ -27,6 +27,8 @@
     "GET /teacher/complaints/{complaintId}/emergency-review/current",
     "GET /teacher/complaints/{complaintId}/escalation",
     "GET /teacher/complaints/{complaintId}/history",
+    "GET /teacher/complaints/{complaintId}/mediation-packages/{packageId}",
+    "GET /teacher/complaints/{complaintId}/mediation-packages/{packageId}/download",
     "GET /teacher/complaints/{complaintId}/messages",
     "GET /teacher/complaints/{complaintId}/response-draft",
     "GET /teacher/complaints/{complaintId}/response-templates",
@@ -50,6 +52,7 @@
     "POST /complaints/{complaintId}/send",
     "POST /teacher/complaints/{complaintId}/emergency-review",
     "POST /teacher/complaints/{complaintId}/escalation",
+    "POST /teacher/complaints/{complaintId}/mediation-packages",
     "POST /teacher/complaints/{complaintId}/messages/{messageId}/original-views",
     "POST /teacher/complaints/{complaintId}/response-templates/{versionId}/adoptions",
     "POST /teacher/complaints/{complaintId}/response/ai-draft",

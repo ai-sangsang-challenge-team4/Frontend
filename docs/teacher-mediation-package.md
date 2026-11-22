@@ -1,0 +1,31 @@
+# 증빙 패키지 연동 (#95)
+
+[이슈 #95](https://github.com/ai-sangsang-challenge-team4/Frontend/issues/95)에서 기존 브라우저 상태만 변경하던 패키지 버튼을 서버에 연결했습니다. 교사 위험 요소 탭의 높음·긴급 화면에서 생성·내용 확인·JSON 다운로드를 제공합니다. 생성 버튼은 기존 `CREATE_EVIDENCE_PACKAGE` 허용 상태를 사용하며, Emergency 답변 잠금과 관리자 공유 조건은 유지합니다.
+
+## API 계약
+
+공통 경로: `/teacher/complaints/{complaintId}/mediation-packages`.
+
+| 동작 | 요청 | 결과 |
+| --- | --- | --- |
+| 생성 | `POST`, `{ includeOriginalMessages: boolean }`, `Idempotency-Key` 필수 | 201, 패키지 ID·생성 시각·원문 포함 여부·체크섬·내용 |
+| 조회 | `GET /{packageId}` | 생성 시점의 불변 스냅샷 |
+| 다운로드 | `GET /{packageId}/download` | 스냅샷 JSON 파일 |
+
+배포 Swagger에 성공 응답 스키마가 없어 [Backend 컨트롤러](https://github.com/ai-sangsang-challenge-team4/Backend/blob/976891e3d8592a752f28a3aadeeae99725bb27bf/src/main/java/com/teacherhub/complaint/mediation/controller/TeacherMediationPackageController.java)와 같은 커밋의 `MediationPackageResponse`·`MediationPackageContent`·서비스를 확인했습니다. 목록 API는 제공되지 않습니다.
+
+원문 포함은 기본 해제이며 기존 원문 접근 가능 상태에서 명시적으로 선택합니다. 생성 시 원문 포함을 요청하지 않으면 백엔드가 개인정보가 가려진 메시지만 저장합니다. 생성 성공 응답을 받은 뒤에만 생성 완료를 표시합니다. 실패·권한 오류는 안내하고, 응답 유실 시 같은 조건의 재시도에는 동일한 멱등 키를 사용합니다. 중복 클릭은 요청 중 상태와 ref로 차단합니다.
+
+다운로드는 공통 API 클라이언트의 인증·401·오류 처리를 거쳐 Blob으로 읽습니다. JSON을 다시 직렬화하지 않아 서버가 계산한 체크섬의 원본 바이트를 유지합니다. 원문이 포함된 패키지의 조회·다운로드에도 기존 원문 접근 가능 상태를 확인합니다. 서버 권한 검증이 최종 기준입니다.
+
+## 관리자 공유 및 제한
+
+- 공유 창의 ‘생성 후 첨부’는 실제 **원문 제외 패키지** 생성 성공 뒤 선택됩니다. 원문 메시지 공유 선택은 별도로 유지합니다.
+- 기존 공유 요청의 `MEDIATION_PACKAGE` scope를 유지합니다. 현재 공유 API에는 `packageId` 필드가 없으므로 임의로 추가하지 않습니다. 특정 패키지 ID를 관리자 공유 건에 연결하는 기능은 백엔드 계약이 추가되어야 가능합니다.
+- 패키지 ID와 메타데이터는 현재 교사 화면의 메모리에 보관합니다. 패키지 목록 API가 없어 페이지 새로고침 후 과거 패키지 목록 복원은 제공하지 않습니다. 내려받은 JSON 및 서버 스냅샷은 그대로 남습니다.
+- 내용 보기에서는 저장된 메시지·주요 위험 근거·처리 기록을 확인합니다. 모든 필드를 포함한 원본 기록은 JSON 다운로드로 제공합니다.
+- 실제 서버 계정으로 생성·다운로드하는 최종 확인과 모의 API 테스트는 구분합니다.
+
+## 검증 범위
+
+API 경로·메서드, 멱등 재시도, 원문 포함 선택, 생성·조회·다운로드 오류, 인증 헤더, 다운로드 바이트 보존, 공유 범위, AI 인용 경고의 탭별 보존·초기화 및 1440·1024·768·375px 화면을 테스트합니다.

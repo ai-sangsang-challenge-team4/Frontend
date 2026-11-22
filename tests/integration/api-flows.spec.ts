@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+import { mediationPackage } from '../fixtures/mediationPackage';
 import { expect, test, type Page, type Route } from '@playwright/test';
 import type { TeacherEscalationPageResponse } from '../../src/features/escalation/escalationTypes';
 
@@ -141,6 +143,228 @@ function teacherComplaintJson(key: string, current: typeof review): unknown {
     case 'GET /teacher/complaints/12/escalation': return { escalationId: null, emergencyReviewRequestId: current.requestId, escalationStatus: 'NOT_SHARED', riskReviewStatus: current.status, currentRiskScore: 70, currentRiskLevel: 'EMERGENCY', safetyLock: true };
     default: return undefined;
   }
+}
+
+for (const riskLevel of ['HIGH', 'EMERGENCY'] as const) {
+  test(`패키지 ${riskLevel} 생성 실패·중복 방지·조회·다운로드와 원문 선택을 처리한다`, async ({ page }, testInfo) => {
+    const keys: (string | undefined)[] = [];
+    const bodies: unknown[] = [];
+    let reads = 0;
+    let downloads = 0;
+    let finishCreate!: () => void;
+    const createGate = new Promise<void>((resolve) => { finishCreate = resolve; });
+    const downloaded = JSON.stringify(mediationPackage().content, null, 2) + '\n';
+    await setup(page, 'TEACHER', async (route, key) => {
+      if (key === 'POST /teacher/complaints/12/mediation-packages') {
+        keys.push(route.request().headers()['idempotency-key']);
+        bodies.push(route.request().postDataJSON());
+        if (keys.length === 1) {
+          await createGate;
+          await route.fulfill({ status: 503, json: { message: '패키지 생성 지연' } });
+        } else await route.fulfill({ status: 201, json: mediationPackage(route.request().postDataJSON().includeOriginalMessages) });
+        return true;
+      }
+      if (key === 'GET /teacher/complaints/12/mediation-packages/package-masked') {
+        reads += 1;
+        await route.fulfill(reads === 1 ? { status: 503, json: { message: '패키지 조회 지연' } } : { json: mediationPackage() });
+        return true;
+      }
+      if (key === 'GET /teacher/complaints/12/mediation-packages/package-original') {
+        await route.fulfill({ json: mediationPackage(true) }); return true;
+      }
+      if (key === 'GET /teacher/complaints/12/mediation-packages/package-masked/download') {
+        downloads += 1;
+        expect(route.request().headers().authorization).toBe('Bearer test-jwt');
+        await route.fulfill(downloads === 1 ? { status: 403, json: { code: 'COMPLAINT_ACCESS_DENIED', message: '다운로드 권한을 확인해 주세요.' } }
+          : { contentType: 'application/json', body: downloaded });
+        return true;
+      }
+      if (key === 'GET /teacher/complaints/12/emergency-review/current') {
+        await route.fulfill({ status: 404, json: { code: 'EMERGENCY_REVIEW_NOT_FOUND' } }); return true;
+      }
+      let json = teacherComplaintJson(key, review);
+      if (key === 'GET /teacher/complaints/12') json = { ...json as object, riskLevel };
+      if (key === 'GET /teacher/complaints/12/risk') json = { ...json as object, riskLevel, currentRiskLevel: riskLevel, safetyLock: riskLevel === 'EMERGENCY' };
+      if (key === 'GET /teacher/complaints/12/messages') json = { ...json as object, allowedActions: ['CREATE_EVIDENCE_PACKAGE'] };
+      if (key === 'GET /teacher/complaints/12/escalation') json = { ...json as object, emergencyReviewRequestId: null, riskReviewStatus: null, currentRiskLevel: riskLevel };
+      if (json === undefined) return false;
+      await route.fulfill({ json }); return true;
+    });
+    await page.goto('/teacher/messages/12');
+    await page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name: '위험 요소', exact: true }).click();
+    const panel = page.getByRole('region', { name: '증빙 패키지', exact: true });
+    await expect(panel.getByRole('checkbox')).not.toBeChecked();
+    await panel.getByRole('button', { name: '증빙 패키지 생성', exact: true }).evaluate((el) => { (el as HTMLButtonElement).click(); (el as HTMLButtonElement).click(); });
+    await expect(panel.getByRole('button', { name: '생성 중…', exact: true })).toBeDisabled();
+    await expect.poll(() => keys.length).toBe(1);
+    await expect(panel.getByRole('button', { name: '패키지 내용 보기' })).toHaveCount(0);
+    finishCreate();
+    await expect(panel.getByRole('alert')).toContainText('일시적인 문제가 발생했어요.');
+    await panel.getByRole('button', { name: '증빙 패키지 생성', exact: true }).click();
+    await expect(panel.getByRole('status')).toContainText('원문 제외');
+    expect(keys[0]).toBeTruthy();
+    expect(keys[1]).toBe(keys[0]);
+    const view = panel.getByRole('button', { name: '패키지 내용 보기', exact: true });
+    await view.click();
+    await expect(panel.getByRole('alert')).toContainText('일시적인 문제가 발생했어요.');
+    await view.click();
+    const dialog = page.getByRole('dialog', { name: '증빙 패키지 내용', exact: true });
+    await dialog.getByRole('button', { name: '메시지 1개', exact: true }).click();
+    await expect(dialog).toContainText('[이름] 학생의 상담 기록입니다.');
+    await expect(dialog).not.toContainText('테스트 학생 원문입니다.');
+    await dialog.getByRole('button', { name: '위험 분석 1건', exact: true }).click();
+    await expect(dialog).toContainText('같은 문의가 반복되었습니다.');
+    await dialog.getByRole('button', { name: '처리 기록', exact: true }).click();
+    await expect(dialog).toContainText('분석 완료');
+    await page.keyboard.press('Escape');
+    await expect(view).toBeFocused();
+    await panel.getByRole('button', { name: 'JSON 다운로드', exact: true }).click();
+    await expect(panel.getByRole('alert')).toContainText('해당 문의를 확인할 권한이 없어요.');
+    const downloadPromise = page.waitForEvent('download');
+    await panel.getByRole('button', { name: 'JSON 다운로드', exact: true }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toBe('mediation-package-12-package-masked.json');
+    expect(await readFile((await download.path())!, 'utf8')).toBe(downloaded);
+    await panel.getByRole('checkbox').check();
+    await panel.getByRole('button', { name: '새 패키지 생성', exact: true }).click();
+    await expect(panel.getByRole('status')).toContainText('원문 포함');
+    expect(bodies).toEqual([{ includeOriginalMessages: false }, { includeOriginalMessages: false }, { includeOriginalMessages: true }]);
+    await view.click();
+    await dialog.getByRole('button', { name: '메시지 1개', exact: true }).click();
+    await expect(dialog).toContainText('테스트 학생 원문입니다.');
+    for (const width of testInfo.project.name === 'desktop' ? [1440, 1024, 768, 375] : [375]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      expect(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath(`package-${width}.png`) });
+    }
+    await page.keyboard.press('Escape');
+    for (const width of testInfo.project.name === 'desktop' ? [1440, 1024, 768, 375] : [375]) {
+      await page.setViewportSize({ width, height: 900 });
+      await panel.scrollIntoViewIfNeeded();
+      expect(await panel.getByRole('checkbox').evaluate((el) => el.getBoundingClientRect().width)).toBe(18);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath(`package-panel-${width}.png`) });
+    }
+    if (riskLevel === 'EMERGENCY') {
+      await page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name: '대화', exact: true }).click();
+      await expect(page.locator('.board-answer-box')).toHaveClass(/is-locked/);
+    }
+  });
+}
+
+for (const riskLevel of ['LOW', 'MEDIUM'] as const) {
+  test(`RAG ${riskLevel} 참고자료는 실제 초안 응답을 표시하고 편집·저장·재생성 흐름을 유지한다`, async ({ page }, testInfo) => {
+    const source = '학교민원처리매뉴얼_출처파일명이길어도모바일에서잘리지않는참고자료.pdf';
+    const passage = '<script>검색된 문장은 HTML로 실행하지 않습니다.</script>\n' + '교사는 관련 학생의 설명과 기록을 확인한 뒤 안내합니다.\n'.repeat(35);
+    let generations = 0;
+    let savedContent = '';
+    let sentContent = '';
+    await setup(page, 'TEACHER', async (route, key) => {
+      let json = teacherComplaintJson(key, review);
+      if (key === 'GET /teacher/complaints/12') json = { ...json as object, title: '상담 일정 문의', riskLevel };
+      if (key === 'GET /teacher/complaints/12/risk') json = { ...json as object, riskLevel, currentRiskLevel: riskLevel, safetyLock: false };
+      if (key === 'GET /teacher/complaints/12/response-draft') {
+        await route.fulfill(savedContent
+          ? { json: { responseDraftId: 31, complaintId: 12, content: savedContent, createdAt: '2026-11-21T17:00:00', updatedAt: '2026-11-21T17:00:00' } }
+          : { status: 404, json: { code: 'RESPONSE_DRAFT_NOT_FOUND' } });
+        return true;
+      }
+      if (key === 'POST /teacher/complaints/12/response/ai-draft') {
+        generations += 1;
+        json = {
+          complaintId: 12, content: `서버 AI 초안 ${generations}`, modelName: 'test', generatedAt: '2026-11-21T17:00:00', legalCitationWarning: riskLevel === 'MEDIUM' && generations === 1,
+          // Both empty and omitted references must remove the old sources without mock fallback.
+          ...(generations === 1 ? { references: [{ source, page: 3, content: passage }, { source, page: null, content: '페이지가 없는 두 번째 문단' }] }
+            : generations === 2 ? { references: [] } : {}),
+        };
+      }
+      if (key === 'PUT /teacher/complaints/12/response-draft') {
+        expect(route.request().postDataJSON()).toEqual({ content: '교사가 검토한 답변입니다.' });
+        savedContent = route.request().postDataJSON().content;
+        json = { responseDraftId: 31, complaintId: 12, content: savedContent, createdAt: '2026-11-21T17:00:00', updatedAt: '2026-11-21T17:00:00' };
+      }
+      if (key === 'POST /teacher/complaints/12/responses') {
+        expect(route.request().postDataJSON()).toEqual({ content: savedContent });
+        sentContent = route.request().postDataJSON().content;
+        json = { responseId: 55, complaintId: 12, content: sentContent, complaintStatus: 'ANSWERED', waitingFor: 'PARENT', sentAt: '2026-11-21T17:00:00' };
+      }
+      if (json === undefined) return false;
+      await route.fulfill({ json });
+      return true;
+    });
+    await page.goto('/teacher/messages/12');
+    await page.getByRole('button', { name: '답변 작성', exact: true }).click();
+    const editor = page.getByLabel('선생님 답변', { exact: true });
+    await expect(editor).toHaveValue('서버 AI 초안 1');
+    const citationNotice = page.getByText('AI 초안의 법령 인용을 확인해 주세요.', { exact: false });
+    await expect(citationNotice).toHaveCount(riskLevel === 'MEDIUM' ? 1 : 0);
+    await editor.fill('교사가 검토한 답변입니다.');
+    const panel = page.locator('.board-reply-check-panel');
+    await panel.getByRole('button', { name: '자세히 보기', exact: true }).click();
+    await expect(panel.locator('.board-rag-source')).toHaveCount(2);
+    await expect(panel).toContainText(`${source} · 3페이지`);
+    await expect(panel).toContainText(`${source} · 페이지 정보 없음`);
+    await expect(panel).not.toContainText('예시 문서');
+    const details = panel.getByRole('button', { name: `${source} 자세히 보기`, exact: true }).first();
+    for (const width of testInfo.project.name === 'desktop' ? [1440, 1024, 768, 375] : [375]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await panel.screenshot({ path: testInfo.outputPath(`rag-list-${width}.png`) });
+      await details.click();
+      const dialog = page.getByRole('dialog', { name: '참고자료 내용', exact: true });
+      await expect(dialog).toBeVisible();
+      await expect(dialog).toContainText('문서 전체 원문은 제공되지 않습니다.');
+      await expect(dialog.locator('section p')).toHaveText(passage);
+      await expect(dialog.locator('script')).toHaveCount(0);
+      expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath(`rag-${width}.png`) });
+      await dialog.getByRole('button', { name: '확인', exact: true }).scrollIntoViewIfNeeded();
+      await page.keyboard.press('Escape');
+      await expect(details).toBeFocused();
+    }
+    expect(generations).toBe(1);
+    await expect(editor).toHaveValue('교사가 검토한 답변입니다.');
+    await page.getByRole('tab', { name: '직접 작성', exact: true }).click();
+    await expect(editor).toHaveValue('');
+    await expect(citationNotice).toHaveCount(0);
+    await expect(panel.locator('.board-rag-source')).toHaveCount(2);
+    await page.getByRole('tab', { name: 'AI 초안 활용', exact: true }).click();
+    await page.getByRole('button', { name: '임시저장', exact: true }).click();
+    await expect.poll(() => savedContent).toBe('교사가 검토한 답변입니다.');
+    await expect(page.getByRole('button', { name: '임시저장', exact: true })).toBeEnabled();
+    await page.getByRole('button', { name: '답변 작성 닫기', exact: true }).click();
+    await page.getByRole('button', { name: '답변 이어서 작성하기', exact: true }).click();
+    await expect(editor).toHaveValue(savedContent);
+    if (await panel.getByRole('button', { name: '자세히 보기', exact: true }).count()) await panel.getByRole('button', { name: '자세히 보기', exact: true }).click();
+    await expect(panel.locator('.board-rag-source')).toHaveCount(2);
+    expect(generations).toBe(1);
+    await expect(citationNotice).toHaveCount(riskLevel === 'MEDIUM' ? 1 : 0);
+    for (const generation of [2, 3]) {
+      await page.getByRole('button', { name: '초기화', exact: true }).click();
+      await expect(panel.locator('.board-rag-source')).toHaveCount(0);
+      await expect(citationNotice).toHaveCount(0);
+      await page.getByRole('button', { name: 'AI 초안 생성', exact: true }).click();
+      await expect(editor).toHaveValue(`서버 AI 초안 ${generation}`);
+      await expect(panel).toContainText('관련 참고자료가 없습니다.');
+      await expect(panel).not.toContainText('학부모 상담 운영 안내');
+      await expect(page.getByRole('button', { name: '검토 후 전송', exact: true })).toBeEnabled();
+    }
+    await page.reload();
+    await expect(page.getByRole('tab', { name: '직접 작성', exact: true })).toHaveAttribute('aria-selected', 'true');
+    await expect(editor).toHaveValue(savedContent);
+    await panel.getByRole('button', { name: '자세히 보기', exact: true }).click();
+    await expect(panel).toContainText('관련 참고자료가 없습니다.');
+    expect(generations).toBe(3);
+    await page.getByRole('button', { name: '검토 후 전송', exact: true }).click();
+    const confirm = page.getByRole('dialog', { name: '답변 전 확인', exact: true });
+    await expect(confirm).toContainText(savedContent);
+    await expect(confirm.getByRole('button', { name: '최종 전송', exact: true })).toBeDisabled();
+    expect(sentContent).toBe('');
+    await confirm.getByRole('checkbox').check();
+    await confirm.getByRole('button', { name: '최종 전송', exact: true }).click();
+    await expect.poll(() => sentContent).toBe(savedContent);
+  });
 }
 
 for (const applied of [true, false, null] as const) {
@@ -298,6 +522,11 @@ for (const canCreateEvidence of [true, false]) {
     let completeShare: () => void = () => {};
     const shareGate = new Promise<void>((resolve) => { completeShare = resolve; });
     await setup(page, 'TEACHER', async (route, key) => {
+      if (key === 'POST /teacher/complaints/12/mediation-packages') {
+        expect(route.request().postDataJSON()).toEqual({ includeOriginalMessages: false });
+        await route.fulfill({ status: 201, json: mediationPackage() });
+        return true;
+      }
       if (key === 'POST /teacher/complaints/12/escalation') {
         submissions.push(route.request().postDataJSON());
         if (submissions.length === 1) await route.fulfill({ status: 503, json: { message: '일시적인 공유 오류' } });

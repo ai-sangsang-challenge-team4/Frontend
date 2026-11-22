@@ -274,8 +274,47 @@
   line-height: 18px;
 }
 
+/* The dialog provides the complete retrieved passage without crowding the reference list. */
+.board-rag-source .board-rag-source-preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
 .board-rag-source button {
   justify-self: start;
+}
+
+.board-mediation-panel {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.board-mediation-panel > p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.board-mediation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.board-mediation-original {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.board-mediation-original input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  margin: 0;
+  accent-color: var(--color-primary);
 }
 
 .board-regulation-source-modal {

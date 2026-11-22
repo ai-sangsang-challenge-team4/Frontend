@@ -139,6 +139,8 @@ export function applyServerSubmission(
   return {
     ...thread,
     aiDraftGenerated: false,
+    aiDraftReferences: undefined,
+    aiDraftLegalCitationWarning: undefined,
     appliedTemplate: undefined,
     draftSavedAt: undefined,
     draftText: '',

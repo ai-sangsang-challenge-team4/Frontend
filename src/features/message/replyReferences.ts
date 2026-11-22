@@ -1,14 +1,17 @@
 import type { BoardThread } from './types';
+import { getReplyDraftTab } from './replyDrafts';
 
 export type RegulationSource = {
   id: string;
-  article: string;
+  article?: string;
+  kind?: 'rag';
+  page?: number | null;
   isExample?: boolean;
   isOutdated?: boolean;
-  organization: string;
+  organization?: string;
   title: string;
   url?: string;
-  version: string;
+  version?: string;
   sections: { heading: string; text: string }[];
 };
 
@@ -52,8 +55,26 @@ const mockCorpus: { keywords: string[]; source: RegulationSource }[] = [
   },
 ];
 
-// Mock until the RAG API is connected. Keyword matching stands in for clause retrieval.
+// Server references belong to the AI tab, including while the teacher writes on the manual tab.
+// Missing references (including a restored text-only server draft) never fall back to mock rules.
 export function searchRegulations(thread: BoardThread): RegulationSearchResult {
+  if (thread.serverComplaintId !== undefined) {
+    const references = getReplyDraftTab(thread) === 'ai'
+      ? thread.aiDraftReferences : thread.replyDrafts?.ai?.aiDraftReferences;
+    const sources: RegulationSource[] = (references ?? []).flatMap((reference, index) => {
+      if (!reference?.source?.trim() || !reference.content?.trim()) return [];
+      return [{
+        id: `rag:${thread.serverComplaintId}:${index}`,
+        kind: 'rag',
+        title: reference.source,
+        page: reference.page ?? null,
+        sections: [{ heading: '검색된 관련 내용', text: reference.content }],
+      }];
+    });
+    return sources.length ? { status: 'found', sources } : { status: 'not_found' };
+  }
+
+  // Keyword matching and example documents are confined to the local mock mode.
   if (thread.ragSearchFailed) {
     return { status: 'error' };
   }
@@ -67,5 +88,6 @@ export function searchRegulations(thread: BoardThread): RegulationSearchResult {
 }
 
 export function formatRegulationSource(source: RegulationSource) {
+  if (source.kind === 'rag') return `${source.title} · ${source.page == null ? '페이지 정보 없음' : `${source.page}페이지`}`;
   return `${source.title} ${source.version} · ${source.organization} · ${source.article}`;
 }

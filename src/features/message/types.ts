@@ -1,4 +1,5 @@
 import type { ThreadActivityLog } from '../parent-message/parentMessageTypes';
+import type { MediationPackageMetadata, TeacherRagReference } from './api/teacherInboxTypes';
 import type { ReplyTemplate, ReplyTemplateDraft } from './replyTemplates';
 import type { RiskClassification } from '../risk-analysis';
 import type { ComplaintStatus, MessageSummaryStatus, RiskReviewStatus, WaitingFor } from '../../shared/types';
@@ -17,6 +18,8 @@ export type ReplyDraftState = {
   draftText: string;
   draftSavedAt?: string;
   aiDraftGenerated?: boolean;
+  aiDraftReferences?: TeacherRagReference[];
+  aiDraftLegalCitationWarning?: boolean;
   officialTemplateApplied?: boolean;
   appliedTemplate?: ReplyTemplateDraft;
 };
@@ -127,12 +130,15 @@ export type BoardThread = {
   // Used only when there is no analysis, e.g. threads loaded from parent messages.
   activityLogs?: ActivityLog[];
   aiDraftGenerated?: boolean;
+  aiDraftReferences?: TeacherRagReference[];
+  aiDraftLegalCitationWarning?: boolean;
   className: string;
   draftSavedAt?: string;
   draftText: string;
   replyDraftTab?: ReplyDraftTab;
   replyDrafts?: Partial<Record<ReplyDraftTab, ReplyDraftState>>;
   evidencePackageGenerated?: boolean;
+  mediationPackage?: MediationPackageMetadata;
   id: string;
   isPinned: boolean;
   latestAt: string;

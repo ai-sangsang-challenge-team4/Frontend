@@ -11,6 +11,7 @@ export type ApiRequestOptions = {
   // Set to false for public endpoints such as login and signup.
   auth?: boolean;
   timeoutMs?: number;
+  responseType?: 'json' | 'blob';
 };
 
 type ApiClientConfig = {
@@ -84,7 +85,7 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
       signal: controller.signal,
     });
     // Keep the timeout and caller abort active until the body is fully read.
-    payload = await readPayload(response);
+    payload = response.ok && options.responseType === 'blob' ? await response.blob() : await readPayload(response);
   } catch (error) {
     if (timedOut) throw new ApiError({ kind: 'TIMEOUT', status: 0 });
     // Caller-initiated aborts are not failures; let callers ignore them with isAbortError.

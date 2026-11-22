@@ -11,15 +11,38 @@ import type {
   TeacherOriginalViewResponse,
   TeacherResponseDraftResponse,
   TeacherResponseSubmissionResponse,
+  MediationPackageResponse,
 } from './teacherInboxTypes';
 
 // POST /responses requires an Idempotency-Key. A send that got no answer (timeout, network, 5xx) may have been
 // stored, so retrying the same reply reuses its key and the server returns the stored reply instead of a second one.
 // The server rejects a key reused for different content, so the key belongs to one complaint and content.
 const pendingReplyKeys = new Map<string, string>();
+const pendingPackageKeys = new Map<string, string>();
 
 // Paths follow the backend TeacherComplaintController and TeacherResponseTemplateController.
 export const httpTeacherInboxApi: TeacherInboxApi = {
+  createMediationPackage: async (complaintId, includeOriginalMessages) => {
+    const attempt = `${complaintId}:${includeOriginalMessages}`;
+    const key = pendingPackageKeys.get(attempt) ?? crypto.randomUUID();
+    pendingPackageKeys.set(attempt, key);
+    try {
+      const response = await apiClient.post<MediationPackageResponse>(
+        `/teacher/complaints/${complaintId}/mediation-packages`,
+        { includeOriginalMessages },
+        { headers: { 'Idempotency-Key': key } },
+      );
+      pendingPackageKeys.delete(attempt);
+      return response;
+    } catch (error) {
+      if (isApiError(error) && error.status >= 400 && error.status < 500) pendingPackageKeys.delete(attempt);
+      throw error;
+    }
+  },
+  getMediationPackage: (complaintId, packageId) =>
+    apiClient.get<MediationPackageResponse>(`/teacher/complaints/${complaintId}/mediation-packages/${encodeURIComponent(packageId)}`),
+  downloadMediationPackage: (complaintId, packageId) =>
+    apiClient.get<Blob>(`/teacher/complaints/${complaintId}/mediation-packages/${encodeURIComponent(packageId)}/download`, { responseType: 'blob' }),
   listComplaints: (query = {}, signal) =>
     apiClient.get<ComplaintPageResponse>('/teacher/complaints', {
       query: {

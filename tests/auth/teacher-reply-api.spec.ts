@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { mediationPackage } from '../fixtures/mediationPackage';
 import { configureApiClient } from '../../src/shared/api/apiClient';
 import { getApiErrorMessage, toApiError } from '../../src/shared/api/apiError';
 import { httpTeacherInboxApi } from '../../src/features/message/api/httpTeacherInboxApi';
@@ -8,6 +9,7 @@ import type {
   TeacherResponseSubmissionResponse,
 } from '../../src/features/message/api/teacherInboxTypes';
 import { getReplyDraftTab, selectReplyDraft } from '../../src/features/message/replyDrafts';
+import { searchRegulations } from '../../src/features/message/replyReferences';
 import {
   changeReplyTemplateDraft,
   createReplyTemplateDraft,
@@ -106,6 +108,63 @@ test('교사 답변 API는 백엔드 경로와 content 본문을 사용한다', 
     JSON.stringify({ content: '임시저장 답변' }),
     JSON.stringify({ content: '최종 답변' }),
   ]);
+});
+
+test('패키지 생성은 원문 선택과 멱등 키를 보내고 응답 유실 시 같은 키로 재시도한다', async () => {
+  mockFetch(() => json(503, {}));
+  await expect(httpTeacherInboxApi.createMediationPackage(12, false)).rejects.toBeTruthy();
+  mockFetch(() => json(201, mediationPackage()));
+  await httpTeacherInboxApi.createMediationPackage(12, false);
+  await httpTeacherInboxApi.createMediationPackage(12, true);
+  const keys = calls.map((call) => new Headers(call.init.headers).get('Idempotency-Key'));
+  expect(keys[0]).toBeTruthy();
+  expect(keys[1]).toBe(keys[0]);
+  expect(keys[2]).not.toBe(keys[0]);
+  expect(calls.map((call) => JSON.parse(String(call.init.body)))).toEqual([
+    { includeOriginalMessages: false }, { includeOriginalMessages: false }, { includeOriginalMessages: true },
+  ]);
+  expect(calls.every((call) => call.url === 'https://api.test/teacher/complaints/12/mediation-packages')).toBe(true);
+});
+
+test('패키지 조회·다운로드는 인증을 유지하고 원본 바이트와 JSON 오류를 구분한다', async () => {
+  mockFetch(() => json(200, mediationPackage()));
+  expect((await httpTeacherInboxApi.getMediationPackage(12, 'package-masked')).packageId).toBe('package-masked');
+  const payload = '{\n  "한글": "원본 바이트 보존"\n}\n';
+  mockFetch(() => new Response(payload, { headers: { 'Content-Type': 'application/json' } }));
+  expect(await (await httpTeacherInboxApi.downloadMediationPackage(12, 'package-masked')).text()).toBe(payload);
+  expect(calls[1].url).toBe('https://api.test/teacher/complaints/12/mediation-packages/package-masked/download');
+  expect(new Headers(calls[1].init.headers).get('Authorization')).toBe('Bearer jwt');
+  mockFetch(() => json(403, { code: 'COMPLAINT_ACCESS_DENIED', message: '권한이 없습니다.' }));
+  await expect(httpTeacherInboxApi.downloadMediationPackage(12, 'package-masked')).rejects.toMatchObject({ status: 403, code: 'COMPLAINT_ACCESS_DENIED' });
+});
+
+test('RAG 참고자료와 nullable 페이지를 API에서 받고 탭 전환·저장 동안 보존한다', async () => {
+  const references = [
+    { source: '민원처리매뉴얼.pdf', page: 3, content: '검색된 문단' },
+    { source: '민원처리매뉴얼.pdf', page: null, content: '페이지 없는 다른 문단' },
+  ];
+  mockFetch(() => json(201, { complaintId: 7, content: '초안', modelName: 'test', generatedAt: '2026-11-21T17:00:00', legalCitationWarning: true, references }));
+  const response = await httpTeacherInboxApi.generateAiDraft(7);
+  expect(response.references).toEqual(references);
+  expect(response.legalCitationWarning).toBe(true);
+  const ai = setReplyDraftTabState(thread(), 'ai', { draftText: response.content, aiDraftGenerated: true, aiDraftReferences: response.references ?? [] });
+  const manual = selectReplyDraft(ai, 'manual');
+  expect(searchRegulations(manual)).toEqual(searchRegulations(ai));
+  const saved = markServerDraftSaved(selectReplyDraft(manual, 'ai'), { ...serverDraft, content: '초안' });
+  expect(saved.aiDraftReferences).toEqual(references);
+  const result = searchRegulations(saved);
+  expect(result.status).toBe('found');
+  if (result.status !== 'found') throw new Error('Expected retrieved references');
+  expect(new Set(result.sources.map((source) => source.id)).size).toBe(2);
+  expect(result.sources.map((source) => source.page)).toEqual([3, null]);
+});
+
+test('서버 참고자료가 없거나 텍스트 초안을 복원해도 예시 규정을 표시하지 않는다', () => {
+  // 상담 is a mock corpus keyword, but it cannot be used as a server fallback.
+  for (const aiDraftReferences of [undefined, [], [{ source: ' ', page: null, content: '' }]]) {
+    expect(searchRegulations(thread({ aiDraftReferences }))).toEqual({ status: 'not_found' });
+  }
+  expect(searchRegulations(restoreServerDraft(thread(), serverDraft))).toEqual({ status: 'not_found' });
 });
 
 test('답변 전송은 Idempotency-Key를 보내고, 응답을 못 받은 재전송만 같은 키를 쓴다', async () => {

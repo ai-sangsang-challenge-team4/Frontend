@@ -14,6 +14,8 @@ export function getReplyDraftState(thread: BoardThread): ReplyDraftState {
     draftText: thread.draftText,
     draftSavedAt: thread.draftSavedAt,
     aiDraftGenerated: thread.aiDraftGenerated,
+    aiDraftReferences: thread.aiDraftReferences,
+    aiDraftLegalCitationWarning: thread.aiDraftLegalCitationWarning,
     officialTemplateApplied: thread.officialTemplateApplied,
     appliedTemplate: thread.appliedTemplate,
   };
@@ -33,6 +35,8 @@ export function selectReplyDraft(thread: BoardThread, tab: ReplyDraftTab): Board
     draftText: selected.draftText,
     draftSavedAt: selected.draftSavedAt,
     aiDraftGenerated: selected.aiDraftGenerated,
+    aiDraftReferences: selected.aiDraftReferences,
+    aiDraftLegalCitationWarning: selected.aiDraftLegalCitationWarning,
     officialTemplateApplied: selected.officialTemplateApplied,
     appliedTemplate: isReplyTemplateDraft(selected.appliedTemplate) ? selected.appliedTemplate : undefined,
     replyDraftTab: tab,
