@@ -44,6 +44,8 @@ export type MessageReview = {
   analysis: ParentMessageAnalysis;
   source: MessageSource;
   aiText: string;
+  // Separate the user's editor text from the latest server-generated baseline.
+  aiTextEdited?: boolean;
   originalEdit: string | null;
 };
 

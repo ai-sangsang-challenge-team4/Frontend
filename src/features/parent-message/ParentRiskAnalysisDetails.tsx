@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Check, CircleAlert, Info, LoaderCircle, Sparkles, TriangleAlert } from 'lucide-react';
+import { Check, CircleAlert, Info, Sparkles, TriangleAlert } from 'lucide-react';
 import { getApiErrorMessage, useApiRequest } from '../../shared/api';
 import { Accordion, Badge, Button, type BadgeVariant } from '../../shared/components/ui';
 import type { RiskFactorStatus } from '../../shared/types';
@@ -78,18 +78,18 @@ export function ParentRiskAnalysisDetails({ analysis, analysisId }: { analysis: 
       .filter((key) => !signals.some((signal) => signal.code === signalCodes[key as keyof typeof signalCodes]))
       .map((key) => safetyLabels[key]),
   ])];
-  const failed = analysis.status === 'failed' || (!skipped && Boolean(provisional));
-  const pending = !failed && !skipped && analysis.revisionStatus === 'PENDING';
-  const complete = !failed && !pending && !skipped &&
+  // Findings/revision retrieval is independent of the completed risk analysis.
+  const failed = (!summary && analysis.status === 'failed') || (!skipped && Boolean(provisional));
+  const complete = !failed && !skipped &&
     (!summary?.aiAnalysisStatus || summary.aiAnalysisStatus === 'COMPLETED' || summary.aiAnalysisStatus === 'REUSED');
-  const statusLabel = failed ? '분석 실패' : pending ? '분석 중' : complete ? '분석 완료'
+  const statusLabel = failed ? '분석 실패' : complete ? '분석 완료'
     : skipped ? '분석 횟수 제한' : '분석 상태 확인 필요';
-  const StatusIcon = failed ? CircleAlert : pending ? LoaderCircle : complete ? Check : Info;
+  const StatusIcon = failed ? CircleAlert : complete ? Check : Info;
   return <section aria-label="위험 분석 결과" className="parent-review-analysis-details">
     <header className="parent-review-analysis-header">
       <h2><Sparkles aria-hidden="true" size={20} />AI 분석 결과</h2>
       <span className={`parent-review-analysis-status${failed ? ' is-failed' : ''}`} role="status">
-        <StatusIcon aria-hidden="true" className={pending ? 'parent-review-analysis-spinner' : undefined} size={16} />
+        <StatusIcon aria-hidden="true" size={16} />
         {statusLabel}
       </span>
     </header>
