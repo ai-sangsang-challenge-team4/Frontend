@@ -16,7 +16,6 @@ import { ApiErrorFallback, LoadingState } from '../../shared/components/feedback
 import { parentComplaintApi } from './api/parentComplaintApi';
 import './ParentMessageHistory.css';
 import './ParentMessageReceipt.css';
-import { RiskAnalysisNotice } from '../risk-analysis/RiskAnalysisNotice';
 
 export function ParentMessageReceipt({ userId, messageId }: { userId: number; messageId: string }) {
   const navigate = useNavigate();
@@ -98,9 +97,6 @@ export function ParentMessageReceipt({ userId, messageId }: { userId: number; me
     <ParentMessageHeader backLabel="문의 내역으로 돌아가기" onBack={() => navigate('/parent/messages')}
       title={justSent ? '전송 완료' : '문의 내역'} breadcrumbLabel="문의 내역" />
     <main className="layout-main parent-conversation-main">
-      {message?.submissionAnalysis ? <RiskAnalysisNotice metadata={message.submissionAnalysis} /> : null}
-      {message?.submissionAnalysis?.riskScore != null && message.submissionAnalysis.aiAnalysisStatus !== 'SKIPPED_LIMIT'
-        ? <p>최종 전송 내용의 시스템 위험 점수: {message.submissionAnalysis.riskScore}/100</p> : null}
       {message && justSent ? <div className="parent-receipt-success" role="status">
         <img alt="" aria-hidden="true" src={completeIllustration} />
         <h2>문의가 전송되었습니다.</h2>

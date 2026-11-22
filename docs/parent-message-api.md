@@ -44,7 +44,7 @@
 시스템 위험 점수는 서버가 반환한 **0~100점**을 그대로 보존하되 학부모 검토 화면에서는 숨깁니다. 등급과 행동 정책은 서버의 `riskLevel`·`currentRiskLevel`을 따르며, 교사 검토는 별도의 **1~7단계**를 유지합니다.
 
 - `aiAnalysisStatus=COMPLETED`·`REUSED`는 정상 완료·기존 결과 재사용으로 구분합니다. `REUSED_RULE_ONLY`·`RULE_ONLY_AI_UNAVAILABLE`·`RULE_ONLY_INVALID_RESPONSE` 또는 `analysisMode=RULE_ONLY`이면 잠정 분석 배지와 직접 검토 안내를 표시합니다. `manualReviewRequired=true`를 별도로 강조합니다. `analysisMessage`는 상태 판정에 사용하지 않으며 학부모 검토 카드에는 표시하지 않습니다.
-- 최종 전송의 `aiAnalysisStatus`와 현재 백엔드의 별칭 `submissionAnalysisStatus`를 모두 지원합니다. 전송 완료 안내에는 **해당 send 응답의** `riskAnalysis`만 사용합니다. `SKIPPED_LIMIT`이면 점수와 이전 분석을 표시하지 않습니다. 응답을 놓친 재시도에서도 이전 검토 결과를 최종 분석처럼 복사하지 않습니다.
+- 최종 전송의 `aiAnalysisStatus`와 현재 백엔드의 별칭 `submissionAnalysisStatus`를 모두 지원합니다. **해당 send 응답의** `riskAnalysis`는 전송 메타데이터에 보존하되, 학부모 전송 완료·문의 상세 화면에는 분석 상태 안내와 시스템 위험 점수를 표시하지 않습니다. `SKIPPED_LIMIT`이면 점수와 이전 분석을 저장하지 않습니다. 응답을 놓친 재시도에서도 이전 검토 결과를 최종 분석처럼 복사하지 않습니다.
 - 전송 메타데이터(`submissionAnalysis`)는 해당 학부모 메시지에만 속합니다. 서버 대화 동기화에서 최신 학부모 메시지의 ID 또는 본문이 바뀌면 지우고, 교사 답변만 추가된 경우에는 유지합니다. 다른 기기의 새 추가 문의에 이전 전송의 분석을 붙이지 않습니다.
 - HTTP 500의 `PRIVACY_MASKING_FAILED`·`RISK_RULE_PROCESSING_FAILED`·`RISK_SCORE_CALCULATION_FAILED`·`RISK_ANALYSIS_SAVE_FAILED`는 코드별 안내를 표시하고 입력·초안을 유지합니다. 안전 처리 오류를 AI 폴백이나 전송 성공으로 처리하지 않습니다.
 - 상세 탐지의 **LLM 결과**에서 `severity`를 해당 없음(0)·경미(1)·보통(2)·심각(3)으로 표시합니다. null/누락은 상태에 따라 경계 사례·판단 정보 부족·심각도 정보 없음으로 구분합니다. Rule의 심각도·반복 횟수는 사용하지 않습니다.
