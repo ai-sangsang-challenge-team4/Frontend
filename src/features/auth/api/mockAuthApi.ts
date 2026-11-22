@@ -135,10 +135,6 @@ async function signup(input: SignupInput): Promise<User> {
   const email = normalizeEmail(input.email);
   const accounts = readAccounts();
   assertUniqueEmail(email, accounts);
-  const verification = readVerification(SIGNUP_VERIFICATION_STORAGE_KEY);
-  if (!verification || verification.email !== email || !verification.verified) {
-    throw new AuthApiError({ code: 'EMAIL_NOT_VERIFIED', message: '이메일 인증을 완료해 주세요.' });
-  }
 
   const { schoolId, schoolClassId, studentId, studentName, employeeNo } = request;
   const account: AuthAccount = {
@@ -163,7 +159,6 @@ async function signup(input: SignupInput): Promise<User> {
     removeStoredValue(consentKey);
     throw error;
   }
-  removeStoredValue(SIGNUP_VERIFICATION_STORAGE_KEY);
   return toUser(account);
 }
 

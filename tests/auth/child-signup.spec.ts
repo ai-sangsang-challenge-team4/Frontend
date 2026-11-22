@@ -126,13 +126,9 @@ test('학교 검색의 빈 결과와 키보드 선택을 지원하고 선택 전
   await expect(page.getByRole('listbox')).toHaveCount(0);
 });
 
-test('자녀 정보 누락과 공백 이름을 차단하고 회원가입 실패 후에도 입력값과 이메일 인증을 유지한다', async ({ page }) => {
+test('자녀 정보 누락과 공백 이름을 차단하고 회원가입 실패 후에도 입력값을 유지한다', async ({ page }) => {
   await page.goto('/signup');
   await page.getByLabel('아이디').fill('child-validation@example.com');
-  await page.getByRole('button', { name: '인증번호 받기', exact: true }).click();
-  await page.getByLabel('인증 *', { exact: true }).fill('123456');
-  await page.getByRole('button', { name: '인증하기', exact: true }).click();
-  await expect(page.getByRole('button', { name: '인증 완료' })).toBeVisible();
   await page.getByLabel('비밀번호 *', { exact: true }).fill('password123');
   await page.getByLabel('비밀번호 확인').fill('password123');
   await page.getByRole('button', { name: '회원가입', exact: true }).click();
@@ -156,7 +152,7 @@ test('자녀 정보 누락과 공백 이름을 차단하고 회원가입 실패 
   await expect(page.getByRole('alert')).toContainText('인증 서비스를 이용할 수 없습니다.');
   await expect(page.getByLabel('학년', { exact: true })).toHaveValue('6');
   await expect(page.getByLabel('번호', { exact: true })).toHaveValue(String(MOCK_CHILD.studentId));
-  await expect(page.getByRole('button', { name: '인증 완료' })).toBeVisible();
+  await expect(page.getByLabel('아이디')).toHaveValue('child-validation@example.com');
   await page.evaluate(() => localStorage.removeItem('teacher-hub.auth-mock-settings'));
   await page.getByRole('button', { name: '회원가입', exact: true }).click();
   await expect(page).toHaveURL(/\/login\?role=PARENT$/);
@@ -172,10 +168,6 @@ test('교사로 전환해 가입하면 입력했던 자녀 정보를 저장하�
   await page.getByRole('option', { name: '상상중학교 예시 학교' }).click();
   await page.getByLabel('교번', { exact: true }).fill('00123');
   await page.getByLabel('아이디').fill('teacher-switch@example.com');
-  await page.getByRole('button', { name: '인증번호 받기', exact: true }).click();
-  await page.getByLabel('인증 *', { exact: true }).fill('123456');
-  await page.getByRole('button', { name: '인증하기', exact: true }).click();
-  await expect(page.getByRole('button', { name: '인증 완료' })).toBeVisible();
   await page.getByLabel('비밀번호 *', { exact: true }).fill('password123');
   await page.getByLabel('비밀번호 확인').fill('password123');
   await page.getByRole('checkbox', { name: /서비스 이용약관/ }).check();
