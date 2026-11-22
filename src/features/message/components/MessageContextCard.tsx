@@ -8,15 +8,16 @@ import { AiRiskLabel } from '../../risk-analysis/AiRiskLabel';
 
 type MessageContextCardProps = {
   thread: BoardThread;
+  compact?: boolean;
 };
 
-export function MessageContextCard({ thread }: MessageContextCardProps) {
+export function MessageContextCard({ thread, compact = false }: MessageContextCardProps) {
   const analysisStatus = getAnalysisStatus(thread);
   const analysis = thread.analysis;
   const summary = thread.conversationSummary?.text ??
     (thread.serverComplaintId === undefined ? 'AI 요약을 준비하고 있습니다.' : '');
   return (
-    <div className="board-parent-card">
+    <div className={`board-parent-card${compact ? ' board-parent-card--detail' : ''}`}>
       <div className="board-card-profile">
         <ProfileAvatar />
         <span>
@@ -25,8 +26,8 @@ export function MessageContextCard({ thread }: MessageContextCardProps) {
         </span>
       </div>
       <div className="board-card-topic">
-        <strong>{thread.conversationSummary?.topic ?? thread.title}</strong>
-        {summary ? <span>{summary}</span> : null}
+        <strong>{compact ? thread.title : thread.conversationSummary?.topic ?? thread.title}</strong>
+        {!compact && summary ? <span>{summary}</span> : null}
       </div>
       <div className="board-card-meta-group">
         <div className="board-card-meta">
@@ -40,10 +41,10 @@ export function MessageContextCard({ thread }: MessageContextCardProps) {
         {analysis?.teacherReviewedRiskLevel && analysisStatus === 'ready' ? (
           <div className="board-card-meta"><span>교사 검토 위험도</span><RiskBadge level={systemRiskTone[analysis.teacherReviewedRiskLevel]} /></div>
         ) : null}
-        <div className="board-card-meta">
+        {!compact ? <div className="board-card-meta">
           <span>최근 수신</span>
           <time dateTime={thread.latestAt}>{thread.latestAtLabel}</time>
-        </div>
+        </div> : null}
       </div>
       {analysisStatus === 'ready' && analysis ? <RiskAnalysisNotice metadata={analysis} /> : null}
     </div>

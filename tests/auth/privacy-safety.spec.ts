@@ -135,7 +135,7 @@ test('실제 재검토 요청 하나와 대기 상태를 표시하고 중복 요
   await expect(page.getByText('긴급 단계에서는 답변 생성과 전송이 제한돼요.', { exact: true })).toBeVisible();
   await expect(page.locator('.board-answer-box')).toHaveClass(/is-locked/);
   await page.locator('.board-answer-box').screenshot({ path: testInfo.outputPath('safety-lock.png') });
-  await expect(page.getByRole('button', { name: /답변 (작성하러 가기|이어서 작성하기)/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^답변 (작성|이어서 작성하기)$/ })).toHaveCount(0);
 });
 
 test('잠금이 없으면 위험도 검토만 저장하고 가짜 재검토 접수는 표시하지 않는다', async ({ page }) => {
@@ -154,7 +154,7 @@ test('잠금이 없으면 위험도 검토만 저장하고 가짜 재검토 접�
   await expect(page.locator('.board-risk-lock-review')).toHaveCount(0);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('teacher-hub.emergency-reviews.v2') ?? '[]').length)).toBe(0);
   await conversationTab(page).click();
-  await expect(page.getByRole('button', { name: /답변 (작성하러 가기|이어서 작성하기)/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^답변 (작성|이어서 작성하기)$/ })).toBeVisible();
 });
 
 test('학생 안전 신호의 없음·추가 확인·긴급 확인을 구분한다', async ({ page }, testInfo) => {
@@ -197,5 +197,5 @@ test('긴급 이하의 safetyLock과 권한 제한을 안내하고 가짜 재검
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('teacher-hub.emergency-reviews.v2') ?? '[]').length)).toBe(0);
   await conversationTab(page).click();
   await expect(page.getByText('안전 확인을 위해 답변 작성이 제한됩니다.', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: /답변 (작성하러 가기|이어서 작성하기)/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^답변 (작성|이어서 작성하기)$/ })).toHaveCount(0);
 });

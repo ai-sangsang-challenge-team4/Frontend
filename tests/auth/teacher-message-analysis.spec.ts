@@ -257,9 +257,11 @@ test('완충 요약 실패 시 이전 요약과 원문으로 자동 대체하지
   await expect(page.locator('.board-moderation-card')).toContainText('완충 요약을 확인할 수 없습니다');
   await expect(page.locator('.board-moderation-card')).not.toContainText('친구와의 갈등 이후 학생 정서');
   await expect(page.locator('.board-reply-parent')).toHaveCount(0);
-  await page.getByRole('button', { name: /답변 (작성하러 가기|이어서 작성하기)/ }).click();
-  await expect(page.locator('.board-reply-context-panel')).toContainText('완충 요약을 확인할 수 없습니다');
-  await expect(page.locator('.board-reply-context-panel')).not.toContainText('어제 쉬는 시간에 있었던 일');
+  await page.getByRole('button', { name: /^답변 (작성|이어서 작성하기)$/ }).click();
+  await expect(page.locator('.board-inline-reply-composer .board-reply-compose-panel')).toBeVisible();
+  await expect(page.locator('.board-moderation-card')).toContainText('완충 요약을 확인할 수 없습니다');
+  await expect(page.locator('.board-reply-parent')).toHaveCount(0);
+  await expect(page.locator('.board-conversation')).not.toContainText('어제 쉬는 시간에 있었던 일');
 });
 
 test('분석 실패·로딩·잘못된 응답을 구분하며 답변을 차단하고 정상 결과로 복구한다', async ({ page }) => {
@@ -270,20 +272,28 @@ test('분석 실패·로딩·잘못된 응답을 구분하며 답변을 차단�
   await expect(page.getByRole('button', { name: 'AI 위험도 설명', exact: true })).toHaveCount(0);
   await expect(page.locator('.board-risk-guide')).toHaveCount(0);
   await openTab(page, '대화');
-  await expect(page.getByRole('button', { name: /답변 (작성하러 가기|이어서 작성하기)/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'AI 분석 근거', exact: true })).toBeDisabled();
+  await expect(page.locator('.board-answer-box')).toContainText('AI 분석을 완료하지 못했습니다.');
+  await expect(page.getByRole('button', { name: /^답변 (작성|이어서 작성하기)$/ })).toHaveCount(0);
   await expect(page.locator('.board-reply-parent')).toHaveCount(0);
 
   await changeAnalysis(page, { status: 'loading' });
   await openTab(page, '위험 요소');
   await expect(page.getByRole('status')).toContainText('AI 분석 결과를 불러오고 있어요');
   await expect(page.getByRole('button', { name: 'AI 위험도 설명', exact: true })).toHaveCount(0);
+  await openTab(page, '대화');
+  await expect(page.getByRole('button', { name: 'AI 분석 근거', exact: true })).toBeDisabled();
+  await expect(page.locator('.board-answer-box')).not.toContainText('AI 분석이 아직 완료되지 않았습니다.');
+  await expect(page.locator('.board-answer-box')).not.toContainText('AI 분석을 완료하지 못했습니다.');
+  await expect(page.locator('.board-answer-box')).toContainText('답변 생성과 전송이 제한됩니다.');
   await changeAnalysis(page, { status: 'ready', systemRiskLevel: 'INVALID' });
   await openTab(page, '대화');
   await openTab(page, '위험 요소');
   await expect(page.getByRole('alert')).toContainText('AI 분석 결과를 확인하지 못했습니다');
   await changeAnalysis(page, { systemRiskLevel: 'medium' });
   await openTab(page, '대화');
-  await expect(page.getByRole('button', { name: /답변 (작성하러 가기|이어서 작성하기)/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^답변 (작성|이어서 작성하기)$/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'AI 분석 근거', exact: true })).toBeEnabled();
 });
 
 test('Rule-only 잠정 배지와 검토 안내를 표시하고 100점과 교사 7단계를 구분한다', async ({ page }) => {
@@ -316,7 +326,7 @@ test('결과 로딩 중에는 미확인 원문 권한을 제한으로 단정하�
   await expect(notice.getByRole('button', { name: '원문 보기', exact: true })).toHaveCount(0);
   await openTab(page, '대화');
   await expect(page.locator('.board-answer-box')).toHaveClass(/is-locked/);
-  await expect(page.getByRole('button', { name: /답변 (작성하러 가기|이어서 작성하기)/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^답변 (작성|이어서 작성하기)$/ })).toHaveCount(0);
 });
 
 for (const score of [0, undefined]) {

@@ -91,11 +91,16 @@ export function useServerReply({ setThreads, reloadDetail, onMessage }: UseServe
       // The server records AI_DRAFT_GENERATED in the history.
       refresh(thread.id);
     } catch (error) {
-      fail(thread.id, error, 'AI 초안을 만들지 못했습니다. 직접 작성하거나 잠시 후 다시 시도해 주세요.');
+      // Keep permission/conflict guidance; a generation outage is not evidence of a RAG miss.
+      if (!isApiError(error) || ['SERVER', 'NETWORK', 'TIMEOUT', 'UNKNOWN'].includes(error.kind)) {
+        onMessage('AI 초안을 생성하지 못했습니다. 직접 작성해 주세요.');
+      } else {
+        fail(thread.id, error, 'AI 초안을 생성하지 못했습니다. 직접 작성해 주세요.');
+      }
     } finally {
       endPending(request);
     }
-  }, [endPending, fail, refresh, startPending, updateThread]);
+  }, [endPending, fail, onMessage, refresh, startPending, updateThread]);
 
   // GET /response-templates for a High thread, once per session. The templates decide whether the manual
   // tab is open, so they load before the server draft is restored. A failure leaves no templates, and the
@@ -107,7 +112,7 @@ export function useServerReply({ setThreads, reloadDetail, onMessage }: UseServe
     try {
       serverTemplates = (await teacherInboxApi.getResponseTemplates(thread.serverComplaintId!)).map(toServerReplyTemplate);
     } catch (error) {
-      onMessage(getApiErrorMessage(error, '답장 예시를 불러오지 못했습니다. 직접 작성해 주세요.'));
+      onMessage(getApiErrorMessage(error, '답장 예시를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'));
     } finally {
       endPending(request);
     }

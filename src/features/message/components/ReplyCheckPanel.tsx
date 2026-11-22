@@ -7,7 +7,6 @@ import type { RegulationSearchResult, RegulationSource } from '../replyReference
 import { RagReferenceNotice } from './RagReferenceNotice';
 
 type ReplyCheckPanelProps = {
-  isAiDraftFromServer?: boolean;
   isOpen: boolean;
   onOpenReference: (source: RegulationSource) => void;
   onToggle: () => void;
@@ -15,7 +14,6 @@ type ReplyCheckPanelProps = {
 };
 
 export function ReplyCheckPanel({
-  isAiDraftFromServer,
   isOpen,
   onOpenReference,
   onToggle,
@@ -26,7 +24,7 @@ export function ReplyCheckPanel({
       <div className="board-reply-check-heading">
         <div className="board-reply-check-alert">
           <ReplyCheckAlertIcon />
-          <p>답변 전 확인이 필요한 내용을 확인해 주세요.</p>
+          <h2>답변 작성 참고사항</h2>
         </div>
         <button
           aria-expanded={isOpen}
@@ -73,7 +71,7 @@ export function ReplyCheckPanel({
               <span>상담 가능한 일정(시간)을 제안하세요.</span>
             </p>
           </article>
-          <RagReferenceNotice isAiDraftFromServer={isAiDraftFromServer} onOpenReference={onOpenReference} result={regulationResult} />
+          <RagReferenceNotice onOpenReference={onOpenReference} result={regulationResult} />
         </div>
       ) : null}
     </section>

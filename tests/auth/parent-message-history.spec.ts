@@ -143,7 +143,7 @@ test('완료된 문의를 추가 질문으로 재개하고 교사 답변 뒤 학
   await expect(page.getByRole('button', { name: /확인했어요/ })).toHaveCount(0);
   await expect(controls.getByText('재확인 필요', { exact: true })).toHaveCount(0);
   await expect(page.locator('.board-detail-page .ui-status-chip, .board-consultation-controls .ui-status-chip')).toHaveCount(0);
-  await page.getByRole('button', { name: '답변 작성하러 가기', exact: true }).click();
+  await page.getByRole('button', { name: '답변 작성', exact: true }).click();
   await page.getByLabel('선생님 답변', { exact: true }).fill('학교 출결 규정에 따라 안내드리겠습니다.');
   await page.getByRole('button', { name: '검토 후 전송', exact: true }).click();
   const confirm = page.getByRole('dialog', { name: '답변 전 확인', exact: true });
@@ -177,7 +177,7 @@ test('완료된 문의를 추가 질문으로 재개하고 교사 답변 뒤 학
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
-test('교사 화면에는 확인했어요와 상담 시작이 없고 카드에는 대화 요약을 표시한다', async ({ page }) => {
+test('교사 화면에는 확인했어요와 상담 시작이 없고 카드에는 원래 문의 제목을 표시한다', async ({ page }) => {
   await login(page, 'TEACHER');
   await seed(page);
   await page.evaluate((key) => {
@@ -202,8 +202,11 @@ test('교사 화면에는 확인했어요와 상담 시작이 없고 카드에�
   await page.goto('/teacher/messages/active');
   await expect(page.getByRole('button', { name: '상담 시작', exact: true })).toHaveCount(0);
   const topic = page.locator('.board-card-topic');
-  await expect(topic.locator('strong')).toHaveText('상담 일정 요청');
-  await expect(topic.locator('span')).toHaveText('상담 일정 조율을 요청함.');
+  const originalTitle = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!)
+    .find((entry: { messageId: string }) => entry.messageId === 'active').title, sentKey);
+  await expect(topic.locator('strong')).toHaveText(originalTitle);
+  await expect(topic.locator('span')).toHaveCount(0);
+  await expect(page.locator('.board-parent-card').getByText('최근 수신', { exact: true })).toHaveCount(0);
   await expect(topic).not.toContainText('확인 후 안내드리겠습니다.');
 });
 
@@ -339,7 +342,7 @@ test('교사 화면이 후속 문의를 반영하기 전에 초안을 수정해�
   await login(page, 'TEACHER');
   await seed(page);
   await page.goto('/teacher/messages/done');
-  await page.getByRole('button', { name: '답변 작성하러 가기', exact: true }).click();
+  await page.getByRole('button', { name: '답변 작성', exact: true }).click();
   // Simulates a follow-up from another tab: a same-tab write fires no storage event, so this teacher view stays stale.
   await page.evaluate((key) => {
     const messages = JSON.parse(localStorage.getItem(key)!);

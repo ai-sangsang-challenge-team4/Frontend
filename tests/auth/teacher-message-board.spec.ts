@@ -165,14 +165,17 @@ test('사이드바 메시지 개수는 진행 중 상담 수를 따라간다', a
   await expect(badge).toHaveText('4');
 });
 
-test('답변 작성 화면의 원문 보기는 원문 열람 화면을 열고 답변 작성으로 돌아온다', async ({ page }) => {
+test('인라인 답변 중 원문을 열람하고 돌아와도 작성한 내용이 유지된다', async ({ page }) => {
   await page.goto('/teacher/messages/thread-002/response');
+  const editor = page.getByLabel('선생님 답변', { exact: true });
+  await editor.fill('원문 확인 후 안내드리겠습니다.');
   await page.getByRole('button', { name: '원문 보기', exact: true }).click();
   await page.getByRole('button', { name: '원문 확인', exact: true }).click();
 
-  await expect(page).toHaveURL(/\/teacher\/messages\/thread-002$/);
+  await expect(page).toHaveURL(/\/teacher\/messages\/thread-002\/response$/);
   await expect(page.getByText('원문 열람', { exact: true })).toBeVisible();
 
-  await page.getByRole('button', { name: '답변 작성하기', exact: true }).click();
+  await page.getByRole('button', { name: '이전 화면으로 돌아가기', exact: true }).click();
   await expect(page).toHaveURL(/\/teacher\/messages\/thread-002\/response$/);
+  await expect(editor).toHaveValue('원문 확인 후 안내드리겠습니다.');
 });

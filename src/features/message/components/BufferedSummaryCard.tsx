@@ -11,6 +11,8 @@ type BufferedSummaryCardProps = {
   unavailable?: boolean;
   // Server inbox: one card per summarized parent message, each with its own time.
   sentAt?: string;
+  continuation?: boolean;
+  authorName?: string;
   thread: BoardThread;
 };
 
@@ -38,15 +40,17 @@ export function BufferedSummaryCard({
   summaryText,
   unavailable = false,
   sentAt,
+  continuation = false,
+  authorName,
   thread,
 }: BufferedSummaryCardProps) {
   return (
-    <article className={`board-moderation-message${unavailable ? ' board-moderation-message--unavailable' : ''}`}
+    <article className={`board-moderation-message${unavailable ? ' board-moderation-message--unavailable' : ''}${continuation ? ' is-continuation' : ''}`}
       role={unavailable ? 'status' : undefined}>
-      <div className="board-reply-author">
+      {!continuation ? <div className="board-reply-author">
         <ProfileAvatar className="board-mini-avatar" />
-        <strong>{thread.parentName}</strong>
-      </div>
+        <strong>{authorName ?? thread.parentName}</strong>
+      </div> : null}
       <div className="board-moderation-row">
         <div className="board-moderation-card">
           <div>

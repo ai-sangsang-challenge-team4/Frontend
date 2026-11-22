@@ -266,11 +266,22 @@ test('교사 답변을 전송하면 ANSWERED로 표시하고 미처리 목록을
   await page.getByLabel('선생님 답변', { exact: true }).fill(replyContent);
   await page.getByRole('button', { name: '검토 후 전송', exact: true }).click();
   const confirm = page.getByRole('dialog', { name: '답변 전 확인', exact: true });
-  await confirm.getByRole('checkbox').check();
+  await expect(confirm).toContainText('전송할 답변을 최종 확인해 주세요.');
+  await expect(confirm).toContainText(replyContent);
+  await expect(confirm.getByRole('button', { name: '최종 전송', exact: true })).toBeDisabled();
+  expect(answered).toBe(false);
+  await confirm.getByRole('checkbox', { name: '답변 내용을 확인했으며, 전송에 동의합니다.' }).check();
+  expect(answered).toBe(false);
   await confirm.getByRole('button', { name: '최종 전송', exact: true }).click();
   await page.getByRole('dialog', { name: '답변 전송 완료', exact: true }).getByRole('button', { name: '확인', exact: true }).click();
   await expect(page.getByText(replyContent, { exact: true })).toBeVisible();
   await expect(page.getByText(/학부모의 답장을 기다리는 중/)).toBeVisible();
+  const evidence = page.getByRole('button', { name: 'AI 분석 근거', exact: true });
+  await expect(evidence).toHaveCount(1);
+  await evidence.click();
+  await expect(page.locator('.board-support-drawer')).toBeVisible();
+  await page.getByRole('button', { name: '상세 정보 닫기', exact: true }).click();
+  await expect(page.getByRole('button', { name: /^답변 (작성|이어서 작성하기)$/ })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /상담 완료 처리|상담 완료됨/ })).toHaveCount(0);
   await expect.poll(() => openRequestsAfterReply).toBeGreaterThan(1);
   await page.getByRole('button', { name: '목록으로 돌아가기', exact: true }).click();
@@ -339,15 +350,57 @@ for (const canCreateEvidence of [true, false]) {
   });
 }
 
+test('AI 초안 생성 중이거나 실패하면 생성된 초안 안내를 표시하지 않는다', async ({ page }) => {
+  let finishGeneration!: () => void;
+  const generationHeld = new Promise<void>((resolve) => { finishGeneration = resolve; });
+  await setup(page, 'TEACHER', async (route, key) => {
+    let json = teacherComplaintJson(key, review);
+    if (key === 'GET /teacher/complaints/12') json = { ...json as object, riskLevel: 'LOW' };
+    if (key === 'GET /teacher/complaints/12/risk') json = {
+      ...json as object, riskLevel: 'LOW', currentRiskLevel: 'LOW', safetyLock: false,
+    };
+    if (key === 'GET /teacher/complaints/12/response-draft') {
+      await route.fulfill({ status: 404, json: { code: 'RESPONSE_DRAFT_NOT_FOUND' } });
+      return true;
+    }
+    if (key === 'POST /teacher/complaints/12/response/ai-draft') {
+      await generationHeld;
+      await route.fulfill({ status: 503, json: { code: 'AI_DRAFT_UNAVAILABLE' } });
+      return true;
+    }
+    if (json === undefined) return false;
+    await route.fulfill({ json });
+    return true;
+  });
+  await page.goto('/teacher/messages/12/response');
+  const editor = page.getByLabel('선생님 답변', { exact: true });
+  const notice = page.locator('.ai-judgment-notice--inline');
+  await expect(editor).toBeDisabled();
+  await expect(notice).toHaveCount(0);
+  finishGeneration();
+  await expect(page.getByText('AI 초안을 생성하지 못했습니다. 직접 작성해 주세요.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'AI 초안 생성', exact: true })).toBeEnabled();
+  await expect(editor).toHaveValue('');
+  await expect(notice).toHaveCount(0);
+  await page.getByRole('tab', { name: '직접 작성', exact: true }).click();
+  await editor.fill('직접 확인한 내용으로 안내하겠습니다.');
+  await expect(notice).toHaveCount(0);
+});
+
 for (const riskLevel of ['LOW', 'MEDIUM'] as const) {
-  test(`교사 ${riskLevel} 민원은 summaryStatus null의 원문을 대화와 답변 작성에 표시한다`, async ({ page }) => {
+  test(`교사 ${riskLevel} 민원은 summaryStatus null의 원문을 대화와 답변 작성에 표시한다`, async ({ page }, testInfo) => {
     const original = '상담 가능한 시간을 알려주세요.';
+    const replyRequests: string[] = [];
+    const requests: string[] = [];
     await setup(page, 'TEACHER', async (route, key) => {
+      requests.push(key);
+      if (key.includes('/response')) replyRequests.push(key);
       let json = teacherComplaintJson(key, review);
       switch (key) {
         case 'GET /teacher/complaints/12': json = { ...json as object, riskLevel }; break;
         case 'GET /teacher/complaints/12/risk': json = {
           ...json as object, riskLevel, currentRiskLevel: riskLevel, safetyLock: false,
+          detectedFactors: riskLevel === 'MEDIUM' ? [{ code: 'REPEAT', name: '반복성', state: 'BOUNDARY', reason: '이전 문의와 함께 확인이 필요합니다.', evidence: original }] : [],
         }; break;
         case 'GET /teacher/complaints/12/messages': json = {
           complaintId: 12, allowedActions: [], messages: [
@@ -370,17 +423,78 @@ for (const riskLevel of ['LOW', 'MEDIUM'] as const) {
     });
     await page.goto('/teacher/messages/12');
     await expect(page.locator('.board-reply-parent').getByText(original, { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: '이전 대화 2개', exact: true })).toHaveCount(0);
     await expect(page.locator('.board-reply-teacher').getByText('확인하고 있습니다.', { exact: true })).toBeVisible();
+    await expect(page.getByText('처음 문의입니다.', { exact: true })).toBeVisible();
     await expect(page.locator('.board-moderation-card')).toHaveCount(0);
     await expect(page.getByRole('button', { name: '원문 보기', exact: true })).toHaveCount(0);
     await expect(page.getByText('AI 요약을 준비하고 있습니다.', { exact: true })).toHaveCount(0);
-    await expect(page.locator('.board-info-box')).not.toContainText('완충 요약');
+    await expect(page.locator('.board-info-box')).toHaveCount(0);
+    await expect(page.getByRole('region', { name: '주요 위험 요소' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '메시지 표시 안내', exact: true })).toHaveCount(0);
+    await expect(page.getByText('이전 문의와 함께 확인이 필요합니다.', { exact: true })).toHaveCount(0);
+    expect(replyRequests).toEqual([]);
 
-    await page.getByRole('button', { name: /답변 (작성하러 가기|이어서 작성하기)/ }).click();
-    const context = page.locator('.board-reply-context-panel');
-    await expect(context.getByRole('heading', { name: '학부모 메시지', exact: true })).toBeVisible();
-    await expect(context).toContainText(original);
-    await expect(context.getByRole('button', { name: '원문 보기', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: /^답변 (작성|이어서 작성하기)$/ }).click();
+    await expect(page.locator('.board-inline-reply-composer .board-reply-compose-panel')).toBeVisible();
+    await expect(page.locator('.board-reply-parent').last()).toContainText(original);
+    await expect(page.locator('.board-reply-context-panel')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '원문 보기', exact: true })).toHaveCount(0);
+    const editor = page.getByLabel('선생님 답변', { exact: true });
+    await expect(editor).toHaveValue('생성된 초안입니다.');
+    await editor.fill('대화 내용을 확인하고 안내드리겠습니다.');
+    if (testInfo.project.name === 'desktop') await page.setViewportSize({ width: 1800, height: 1000 });
+    const evidence = page.getByRole('button', { name: 'AI 분석 근거', exact: true });
+    await expect(evidence).toHaveCount(1);
+    await expect(page.locator('.board-reply-header-actions').getByRole('button', { name: 'AI 분석 근거', exact: true })).toBeVisible();
+    await expect(page.locator('.board-conversation .board-analysis-evidence-button')).toHaveCount(0);
+    await evidence.scrollIntoViewIfNeeded();
+    await evidence.focus();
+    const beforeScroll = await page.evaluate(() => window.scrollY);
+    const beforeRequests = [...requests];
+    await evidence.click();
+    const drawer = page.getByRole(testInfo.project.name === 'desktop' ? 'region' : 'dialog', { name: 'AI 위험 분석 근거', exact: true });
+    await expect(drawer).toBeVisible();
+    await expect(drawer.getByRole('region', { name: '8개 위험 요소 분류' })).toBeVisible();
+    if (riskLevel === 'MEDIUM') {
+      await drawer.getByRole('button', { name: '반복성 경계', exact: true }).click();
+      await expect(drawer).toContainText('이전 문의와 함께 확인이 필요합니다.');
+    }
+    expect(requests).toEqual(beforeRequests);
+    if (testInfo.project.name === 'desktop') {
+      await expect(editor).toBeEditable();
+      const detailBox = (await page.locator('.board-detail').boundingBox())!;
+      const drawerBox = (await drawer.boundingBox())!;
+      expect(detailBox.x + detailBox.width).toBeLessThanOrEqual(drawerBox.x);
+    } else {
+      await page.keyboard.press('Tab');
+      expect(await drawer.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.keyboard.press('Escape');
+    await expect(drawer).toHaveCount(0);
+    await expect(evidence).toBeFocused();
+    await expect(editor).toHaveValue('대화 내용을 확인하고 안내드리겠습니다.');
+    expect(Math.abs(await page.evaluate(() => window.scrollY) - beforeScroll)).toBeLessThanOrEqual(2);
+    // All previous messages stay visible after closing supplementary information.
+    await evidence.click();
+    await page.screenshot({ path: testInfo.outputPath(`${riskLevel}-evidence-drawer.png`) });
+    await page.getByRole('button', { name: '상세 정보 닫기', exact: true }).click();
+    for (const width of [393, 980, 1280, 1800]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), { message: `${width}px detail layout` }).toBe(true);
+    }
+    await page.setViewportSize(testInfo.project.name === 'mobile' ? { width: 393, height: 851 } : { width: 1280, height: 900 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({ path: testInfo.outputPath(`${riskLevel}-main-composer.png`), fullPage: true });
+    const detailTabs = page.getByRole('navigation', { name: '메시지 상세 탭' });
+    await detailTabs.getByRole('button', { name: '처리 기록', exact: true }).click();
+    await detailTabs.getByRole('button', { name: '대화', exact: true }).click();
+    await expect(editor).toHaveValue('대화 내용을 확인하고 안내드리겠습니다.');
+    expect(replyRequests).toEqual([
+      'GET /teacher/complaints/12/response-draft',
+      'POST /teacher/complaints/12/response/ai-draft',
+    ]);
   });
 }
 
@@ -420,6 +534,9 @@ test('교사 대화는 메시지별 summaryStatus로 분기하고 요약 카드�
   await expect(unavailableCard).not.toContainText('위험 메시지 완충 요약');
   await expect(unavailableCard.locator('.board-moderation-title svg')).toHaveCount(0);
   await expect(page.locator('.board-reply-parent')).toContainText('요약 미적용 문의 원문');
+  await expect(page.locator('.board-conversation .board-reply-author')).toHaveCount(1);
+  await expect(page.locator('.board-conversation .is-continuation')).toHaveCount(2);
+  await expect(page.locator('.board-conversation time')).toHaveCount(3);
   expect(originalViews).toEqual([]);
 
   for (const [card, messageId] of [[generatedCard, 1], [unavailableCard, 3]] as const) {
