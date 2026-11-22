@@ -18,7 +18,7 @@ for (const role of ['PARENT', 'TEACHER']) {
       const dialog = page.getByRole('dialog', { name: document.title, exact: true });
       await expect(dialog).toBeVisible();
       await expect(dialog.getByRole('heading', { level: 3 })).toHaveCount(document.sections);
-      await expect(dialog).toContainText('시행일 2026. 11. 17 (화)');
+      await expect(dialog).toContainText('시행일 2026.11.22');
       await expect(dialog.getByRole('checkbox')).toHaveCount(0);
       await expect(page.locator('body')).toHaveCSS('overflow', 'hidden');
       const article = dialog.getByRole('article', { name: `${document.title} 전문`, exact: true });

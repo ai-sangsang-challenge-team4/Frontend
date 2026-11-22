@@ -20,7 +20,7 @@ export function PolicyDocumentLinks({ documents }: { documents: readonly PolicyD
 function PolicyDocumentModal({ documentId, onClose }: { documentId: PolicyDocumentId; onClose: () => void }) {
   const headingPrefix = useId();
   const document = policyDocuments[documentId];
-  return <Modal className="policy-document-modal" description="시행일 2026. 11. 17 (화)"
+  return <Modal className="policy-document-modal" description="시행일 2026.11.22"
     footer={<Button onClick={onClose} variant="outline">닫기</Button>}
     onOpenChange={(open) => { if (!open) onClose(); }} open size="lg" title={document.title}>
     <article aria-label={`${document.title} 전문`} className="policy-document-content" tabIndex={0}>
