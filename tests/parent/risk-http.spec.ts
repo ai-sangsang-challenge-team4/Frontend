@@ -345,7 +345,7 @@ test('이름 없이 저장된 초안도 조회 실패를 재시도해 학생 ID�
     server: { complaintId: 42, studentId: 11, teacherId: 20, teacherName: 'Demo Teacher',
       title: '기존 초안', content: '작성한 문의입니다.', analysisId: null },
   })));
-  await page.reload();
+  await page.goto('/parent/messages/new?draft=legacy-child-draft');
   const child = page.getByLabel('자녀', { exact: true });
   await expect(child).toBeDisabled();
   const retry = page.locator('#parent-message-studentId-helper').getByRole('button', { name: '다시 시도', exact: true });
@@ -427,8 +427,22 @@ test('서버 초안 생성 중 다시 연 작성 화면에서도 선생님 목�
       if (rejectRecipients) await route.fulfill({ status: 503, json: { code: 'INTERNAL_SERVER_ERROR' } });
       else await route.fallback();
     });
-    // SPA navigation remounts the composer without clearing its pending creation registry.
+    const draftId = await page.evaluate(() => JSON.parse(localStorage.getItem('teacher-hub.parent-message-draft.101')!).messageId);
+    // New inquiry navigation is empty; explicitly resume the pending draft through history.
     await page.getByRole('navigation', { name: '현재 위치' }).getByRole('link', { name: '홈', exact: true }).click();
+    await expect(page.getByLabel('문의 내용', { exact: true })).toHaveValue('');
+    if (page.viewportSize()!.width <= 980) {
+      await page.getByRole('button', { name: '학부모 메뉴 더보기', exact: true }).click();
+      await page.getByRole('dialog', { name: 'Teacher Hub 학부모 메뉴', exact: true })
+        .getByRole('link', { name: '문의 내역', exact: true }).click();
+    } else {
+      await page.getByRole('link', { name: '문의 내역', exact: true }).click();
+    }
+    await page.getByRole('tab', { name: '임시저장', exact: true }).click();
+    await page.getByRole('button', { name: /HTTP 분석 확인/ }).click();
+    await page.getByRole('dialog', { name: '작성 중인 문의가 있어요.', exact: true })
+      .getByRole('button', { name: '이어서 작성', exact: true }).click();
+    await expect(page).toHaveURL(`/parent/messages/new?draft=${draftId}`);
     await expect(page.getByLabel('문의 제목', { exact: true })).toHaveAttribute('readonly', '');
     await expect(page.getByLabel('문의 대상', { exact: true })).toBeDisabled();
     const helper = page.locator('#parent-message-teacherId-helper');

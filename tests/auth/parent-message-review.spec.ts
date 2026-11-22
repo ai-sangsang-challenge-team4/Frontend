@@ -78,7 +78,7 @@ test('AI 수정본을 복원하고 개인정보를 재검사한 최종 문장을
   await page.reload();
   await expect(page.getByLabel('AI 초안 내용', { exact: true })).toHaveValue(edited);
   await page.getByRole('button', { name: '문의 작성으로 돌아가기', exact: true }).click();
-  await expect(page).toHaveURL(/\/parent\/messages\/new$/);
+  await expect(page).toHaveURL(/\/parent\/messages\/new\?draft=/);
   await page.getByRole('button', { name: 'AI 분석 시작', exact: true }).click();
   await expect(page.getByLabel('AI 초안 내용', { exact: true })).toHaveValue(edited);
 

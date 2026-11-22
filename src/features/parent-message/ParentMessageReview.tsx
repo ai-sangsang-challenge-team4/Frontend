@@ -265,7 +265,7 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
           state: { followUpOpen: true, followUpDraftId: draft.messageId },
         });
       } else {
-        navigate(draft.threadId ? getDraftPath(draft) : '/parent/messages/new');
+        navigate(getDraftPath(draft));
       }
     } catch {
       setNotice('작성한 내용을 저장하지 못했습니다. 임시저장 후 다시 시도해 주세요.');
