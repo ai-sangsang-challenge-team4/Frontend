@@ -50,6 +50,14 @@ npx.cmd playwright test tests/auth/teacher-message-layout.spec.ts tests/auth/tea
 npx.cmd playwright test tests/auth/workspace-density.spec.ts tests/auth/teacher-message-layout.spec.ts tests/auth/parent-message-history.spec.ts --grep 'px 업무|1440px에서 짧고|완료된 문의를 추가 질문' --workers 1
 ```
 
+## PR #100 리뷰 반영
+
+CodeRabbit이 지적한 학부모 문의 목록의 검색창·동기화 오류 안내 겹침을 수정했다. 데스크톱 검색창 아래 간격이 24px로 줄어든 상태에서 오류 안내의 기존 `margin-top: -30px`이 남아 실제로 6px 겹쳤다. 981px 이상에서 오류 안내의 위 여백만 0으로 덮어썼으며, 모바일과 상세 화면의 기존 여백은 유지한다.
+
+- 일회성 HTTP 응답 대체 검증으로 수정 전 6px 겹침을 재현했다. 수정 후 1440/1024/981px에서는 간격 24px, 980/768px에서는 기존 24px, 375px에서는 기존 2px을 확인했다.
+- 데스크톱·모바일 2개 검증에서 오류 안내 표시, 가로 넘침 없음, 재시도 후 오류 해제와 저장된 문의 표시를 확인했다.
+- 기존 업무 화면 검증 4개 폭을 다시 실행했다. build, lint, Playwright TypeScript 검사도 다시 통과했다. 기존 번들 크기 경고는 남아 있다.
+
 ## 변경 파일과 범위
 
 제품 변경은 CSS 5개다: `teacher-prototype.css`, `MessagesPage.responsive.css`, `TeacherGuide.css`, `ParentMessageHistory.css`, `ParentMessageComposer.css`. 신규 테스트는 `workspace-density.spec.ts`다. `zoom`, `transform: scale()`과 전역 글자 축소는 사용하지 않았다.

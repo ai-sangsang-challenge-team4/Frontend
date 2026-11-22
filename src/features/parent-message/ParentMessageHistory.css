@@ -140,6 +140,7 @@
   .parent-history-main,
   .parent-conversation-main { margin-top: var(--space-8); }
   .parent-history-toolbar { margin-block: var(--space-6); }
+  .parent-history-sync-error { margin-top: 0; }
   .parent-inquiry-link { min-height: 68px; padding-block: var(--space-2); gap: var(--space-4); }
   .parent-inquiry-avatar { width: 40px; height: 40px; }
   .parent-inquiry-teacher { gap: var(--space-3); padding-right: var(--space-3); }
