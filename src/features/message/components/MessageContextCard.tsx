@@ -27,12 +27,12 @@ export function MessageContextCard({ thread, compact = false }: MessageContextCa
       </div>
       <div className="board-card-topic">
         <strong>{compact ? thread.title : thread.conversationSummary?.topic ?? thread.title}</strong>
-        {!compact && summary ? <span>{summary}</span> : null}
+        {summary ? <span>{summary}</span> : null}
       </div>
       <div className="board-card-meta-group">
         <div className="board-card-meta">
           {analysisStatus === 'ready' && analysis
-            ? <AiRiskLabel metadata={analysis} score={analysis.systemRiskScore} />
+            ? <AiRiskLabel audience="teacher" metadata={analysis} score={analysis.systemRiskScore} />
             : <span>위험도 분석 상태</span>}
           {analysisStatus === 'ready' && analysis ? <RiskBadge level={systemRiskTone[analysis.systemRiskLevel]} /> : (
             <Badge size="sm">{analysisStatus === 'failed' ? '분석 확인 필요' : analysisStatus === 'loading' ? '분석 중' : '분석 대기'}</Badge>
@@ -46,7 +46,7 @@ export function MessageContextCard({ thread, compact = false }: MessageContextCa
           <time dateTime={thread.latestAt}>{thread.latestAtLabel}</time>
         </div> : null}
       </div>
-      {analysisStatus === 'ready' && analysis ? <RiskAnalysisNotice metadata={analysis} /> : null}
+      {analysisStatus === 'ready' && analysis ? <RiskAnalysisNotice audience="teacher" metadata={analysis} /> : null}
     </div>
   );
 }
