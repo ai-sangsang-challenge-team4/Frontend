@@ -1296,56 +1296,58 @@ function RiskAnalysisPanel({
 
   return (
     <div className="board-risk-tab">
-      <section
-        className={`board-risk-guide board-risk-guide--${currentTone}${
-          isProcedureOpen ? ' is-expanded' : ''
-        }`}
-      >
-        <div className="board-risk-guide-copy">
-          <RiskGuideIcon className="board-risk-guide-icon" />
-          <strong>{currentGuide.headline}</strong>
-          {hasGuideAction ? (
-            <button
-              className="board-outline-button board-risk-action-button board-risk-guide-button"
-              disabled={!canUseGuideAction}
-              onClick={handleGuideAction}
-              aria-expanded={
-                isProcedureGuide && !isEmergencyGuide
-                  ? isProcedureOpen
-                  : undefined
-              }
-              type="button"
-            >
-              <span>{currentGuide.actionLabel}</span>
-              <ExternalLinkIcon />
-            </button>
-          ) : null}
-          <span className="board-risk-guide-description">
-            {currentGuide.description}
-            {currentGuide.note ? (
-              <>
-                <br />
-                {currentGuide.note}
-              </>
+      {effectiveRiskLevel !== 'low' ? (
+        <section
+          className={`board-risk-guide board-risk-guide--${currentTone}${
+            isProcedureOpen ? ' is-expanded' : ''
+          }`}
+        >
+          <div className="board-risk-guide-copy">
+            <RiskGuideIcon className="board-risk-guide-icon" />
+            <strong>{currentGuide.headline}</strong>
+            {hasGuideAction ? (
+              <button
+                className="board-outline-button board-risk-action-button board-risk-guide-button"
+                disabled={!canUseGuideAction}
+                onClick={handleGuideAction}
+                aria-expanded={
+                  isProcedureGuide && !isEmergencyGuide
+                    ? isProcedureOpen
+                    : undefined
+                }
+                type="button"
+              >
+                <span>{currentGuide.actionLabel}</span>
+                <ExternalLinkIcon />
+              </button>
             ) : null}
-          </span>
-          {isProcedureGuide && isProcedureOpen ? (
-            <div className="board-risk-guide-procedure">
-              <strong>{currentGuide.procedureTitle}</strong>
-              <ol>
-                {currentGuide.procedureItems?.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ol>
-              {thread.officialTemplates?.length ? (
-                <p>
-                  사용 가능 템플릿: {thread.officialTemplates.join(', ')}
-                </p>
+            <span className="board-risk-guide-description">
+              {currentGuide.description}
+              {currentGuide.note ? (
+                <>
+                  <br />
+                  {currentGuide.note}
+                </>
               ) : null}
-            </div>
-          ) : null}
-        </div>
-      </section>
+            </span>
+            {isProcedureGuide && isProcedureOpen ? (
+              <div className="board-risk-guide-procedure">
+                <strong>{currentGuide.procedureTitle}</strong>
+                <ol>
+                  {currentGuide.procedureItems?.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ol>
+                {thread.officialTemplates?.length ? (
+                  <p>
+                    사용 가능 템플릿: {thread.officialTemplates.join(', ')}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
       <EmergencySafetySignals emergencyOverride={analysis.emergencyOverride} />
 
