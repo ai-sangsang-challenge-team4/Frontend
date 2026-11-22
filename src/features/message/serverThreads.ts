@@ -1,6 +1,6 @@
 import { toServerInstant } from '../../shared/api';
 import type { ComplaintStatus, RiskLevel as ApiRiskLevel, WaitingFor } from '../../shared/types';
-import type { DetectedFactorCode, HistoryEvent, TeacherRiskResponse } from '../escalation/escalationTypes';
+import type { DetectedFactorCode, HistoryEvent, TeacherHistoryResponse, TeacherRiskResponse } from '../escalation/escalationTypes';
 import { getDetectedFactorEvidence, getDetectedFactorState, historyEventLabel } from '../escalation/escalationRules';
 import { formatMessageDate } from '../parent-message/conversation';
 import { riskCategories, type RiskClassification } from '../risk-analysis';
@@ -113,6 +113,7 @@ export type ServerThreadDetail = {
   risk: TeacherRiskResponse | null;
   // null when the history request failed; the last loaded logs are kept instead of an empty history.
   history: HistoryEvent[] | null;
+  historyMetadata?: Pick<TeacherHistoryResponse, 'logComplete' | 'missingLogs'>;
 };
 
 // UNAVAILABLE has a fixed server notice. Keep unexpected payloads out of the unconfirmed view.
@@ -176,15 +177,14 @@ function toClassifications(risk: TeacherRiskResponse): RiskClassification[] {
   const detected = new Map(risk.detectedFactors.map((factor) => [classificationCodeByTag[factor.code], factor]));
   return riskCategories.map(({ code }) => {
     const factor = detected.get(code);
-    // The original viewer highlights evidence by exact text match, so only one span can be carried.
     return factor
-      ? { code, status: getDetectedFactorState(factor), evidenceSpan: getDetectedFactorEvidence(factor)[0] ?? '', rationale: factor.reason }
+      ? { code, status: getDetectedFactorState(factor), evidenceSpans: getDetectedFactorEvidence(factor), rationale: factor.reason }
       : { code, status: 'ABSENT' };
   });
 }
 
 function toAnalysis(
-  { conversation, detail, history, risk }: ServerThreadDetail,
+  { conversation, detail, history, historyMetadata, risk }: ServerThreadDetail,
   local: ThreadAnalysis | undefined,
   latestParent: BoardReply | undefined,
 ): ThreadAnalysis {
@@ -201,6 +201,10 @@ function toAnalysis(
     emergencyReview: local?.emergencyReview,
     activityLogs: history ? toActivityLogs(history) : local?.activityLogs ?? [],
     activityLogsUnavailable: history === null,
+    activityLogsIncomplete: history === null ? local?.activityLogsIncomplete
+      : historyMetadata?.logComplete === false || Boolean(historyMetadata?.missingLogs?.length),
+    missingActivityLogs: history === null ? local?.missingActivityLogs
+      : historyMetadata?.missingLogs?.map((log) => log.description) ?? [],
     canReviewRisk: detail.status === 'OPEN' && detail.waitingFor === 'TEACHER',
     canViewActivityLog: true,
     canViewOriginal: true,
@@ -327,7 +331,8 @@ export type ServerInboxFilters = {
 };
 
 const statusQuery: Record<FilterValue, ComplaintStatus | undefined> = {
-  active: 'OPEN',
+  // The API accepts one status at a time. Active rows are selected from the ordered, unfiltered pages.
+  active: undefined,
   complete: 'CLOSED',
   all: undefined,
 };

@@ -11,6 +11,7 @@ export type RiskClassification = {
   status: RiskFactorStatus;
   rationale?: string;
   evidenceSpan?: string | null;
+  evidenceSpans?: string[];
 };
 
 export const riskCategories = [
@@ -42,6 +43,8 @@ export function getRiskClassifications(results?: RiskClassification[]) {
       code, label, status,
       rationale: typeof result?.rationale === 'string' ? result.rationale : undefined,
       evidenceSpan: typeof result?.evidenceSpan === 'string' ? result.evidenceSpan : undefined,
+      evidenceSpans: (result?.evidenceSpans ?? (typeof result?.evidenceSpan === 'string' ? [result.evidenceSpan] : []))
+        .filter((text) => typeof text === 'string' && text.trim()),
     };
   });
 }

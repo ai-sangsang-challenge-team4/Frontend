@@ -45,11 +45,11 @@ export function RiskClassificationPanel({
                 : result.rationale || (result.status === 'ABSENT' ? '이 위험 요소는 탐지되지 않았습니다.' : '판단 이유가 제공되지 않았습니다.')}</p>
               {result.status === 'PRESENT' || result.status === 'BOUNDARY' ? (
                 canInspectOriginal ? (
-                  result.evidenceSpan?.trim() ? (
-                    <>
-                      <blockquote className="board-factor-evidence"><strong>근거 구간</strong><p>“{result.evidenceSpan}”</p></blockquote>
-                      <button className="board-outline-button" onClick={() => onOriginalOpen(result.evidenceSpan ?? undefined)} type="button">원문에서 근거 확인</button>
-                    </>
+                  result.evidenceSpans.length > 0 ? (
+                    result.evidenceSpans.map((evidence, index) => <div key={index}>
+                      <blockquote className="board-factor-evidence"><strong>근거 구간{result.evidenceSpans.length > 1 ? ` ${index + 1}` : ''}</strong><p>“{evidence}”</p></blockquote>
+                      <button className="board-outline-button" onClick={() => onOriginalOpen(evidence)} type="button">원문에서 근거 확인</button>
+                    </div>)
                   ) : <p>제공된 근거 구간이 없습니다.</p>
                 ) : <p>원문 열람 권한이 없거나 원문이 제공되지 않아 근거 구간을 표시할 수 없습니다.</p>
               ) : null}

@@ -1525,6 +1525,13 @@ type ActivityLogPanelProps = {
 
 function ActivityLogPanel({ onReload, thread }: ActivityLogPanelProps) {
   const logs = getActivityLogs(thread);
+  const incompleteNotice = thread.analysis?.activityLogsIncomplete ? (
+    <div className="board-admin-share-error" role="status">
+      <p>일부 처리 기록이 누락되어 있습니다. 조회된 기록만 표시합니다.</p>
+      {thread.analysis.missingActivityLogs?.map((description, index) => <p key={index}>{description}</p>)}
+      {onReload ? <button className="board-admin-share-retry" onClick={onReload} type="button">기록 다시 불러오기</button> : null}
+    </div>
+  ) : null;
   // A failed GET /history keeps the last loaded logs rather than claiming there are none.
   const unavailableNotice = thread.analysis?.activityLogsUnavailable ? (
     <p className="board-admin-share-error" role="alert">
@@ -1533,8 +1540,8 @@ function ActivityLogPanel({ onReload, thread }: ActivityLogPanelProps) {
     </p>
   ) : null;
 
-  if (logs.length === 0 && unavailableNotice) {
-    return <section className="board-activity-panel" aria-label="처리 기록">{unavailableNotice}</section>;
+  if (logs.length === 0 && (unavailableNotice || incompleteNotice)) {
+    return <section className="board-activity-panel" aria-label="처리 기록">{unavailableNotice}{incompleteNotice}</section>;
   }
 
   if (logs.length === 0) {
@@ -1556,6 +1563,7 @@ function ActivityLogPanel({ onReload, thread }: ActivityLogPanelProps) {
         </div>
       </div>
       {unavailableNotice}
+      {incompleteNotice}
       <ol className="board-activity-list">
         {logs.map((log) => (
           <li key={log.id}>

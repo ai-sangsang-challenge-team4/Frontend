@@ -8,7 +8,7 @@
 - `aiAnalysisStatus`·`analysisMode`로 잠정 분석을 구분하고 `manualReviewRequired=true`이면 직접 검토 안내를 표시합니다. `analysisMessage`는 설명이며 상태 판정에 사용하지 않습니다. 이전 응답에서 새 필드가 생략되면 상태를 임의로 채우지 않습니다.
 - HTTP 대화의 각 메시지는 `summaryStatus`에 따라 원문(`null`), 완충 요약(`GENERATED`), 생성 실패 안내(`UNAVAILABLE`)를 표시합니다. 답변 작성 화면은 최신 학부모 메시지의 상태를 따릅니다. 요약 카드의 원문은 기존 열람 권한·확인창·열람 기록을 거쳐 확인합니다.
 - `확인된 위험 요소와 판단 근거`는 기본 접힘 상태이며, 분류별 개수는 접힌 상태에도 표시합니다. 제목 옆 Information 아이콘에서 8개 분류와 미확인의 의미를 설명하고, 펼침 화살표는 우측 끝에 배치합니다. 펼치면 8개 표준 분류와 추가 판단 근거를 확인할 수 있고, 원문 보기·AI 이의 제기 버튼은 펼친 영역의 우측 하단에 표시합니다. `PRESENT`는 탐지, `ABSENT`는 미탐지, `BOUNDARY`는 경계, `UNKNOWN`은 미확인입니다. 누락·중복·잘못된 분류 상태는 미확인으로 표시합니다.
-- 분류 항목을 펼치면 판단 이유와 근거 구간을 확인합니다. 원문 열람 권한이 있을 때만 근거 구간과 원문 이동 버튼을 표시합니다. 기존 추가 판단 근거도 유지합니다.
+- 분류 항목을 펼치면 판단 이유와 서버가 반환한 모든 근거 구간(`evidenceSpans`)을 확인합니다. 각 구간에서 원문으로 이동할 수 있으며, 이전 단일 `evidenceSpan`도 지원합니다. 원문 열람 권한이 있을 때만 근거 구간과 원문 이동 버튼을 표시합니다. 기존 추가 판단 근거도 유지합니다.
 - `GET /teacher/complaints/{complaintId}/risk`의 `emergencyOverride.applied`가 true이면 분류 목록 위에 **긴급 안전 신호**를 표시합니다(#85). 일반 위험 태그가 모두 미탐지여도 `safetySignals`의 항목을 `code`로 구분하고, 서버가 반환한 제목과 설명을 표시합니다. 학부모 위험 분석도 같은 표시 영역을 사용합니다.
 - 학생 안전 신호의 `NONE`, `POSSIBLE`, `URGENT_REVIEW`와 High 공식 템플릿·Emergency 안전 잠금은 기존 동작을 유지합니다.
 - `analysis.status`의 `loading`·`failed`, 잘못된 필수 분석 값, 분석 결과 없음은 각각 안내합니다. 실패·로딩 중에는 답변 생성과 전송을 제한합니다. 기존 분석 없는 Mock 학부모 문의의 답변 흐름은 유지합니다.
@@ -25,7 +25,8 @@ analysis.riskClassifications?: {
   code: RiskTagCode; // src/shared/types/risk.ts의 8개 코드
   status: 'PRESENT' | 'ABSENT' | 'BOUNDARY' | 'UNKNOWN';
   rationale?: string;
-  evidenceSpan?: string | null; // 원문에서 인용한 문자열
+  evidenceSpan?: string | null; // 이전 단일 근거 호환
+  evidenceSpans?: string[]; // 원문에서 인용한 모든 근거 구간
 }[];
 ```
 
