@@ -2,13 +2,8 @@
   margin-top: 100px;
 }
 
-.parent-review-main > .ai-judgment-notice {
-  margin-top: 24px;
-}
-
 .parent-review-editor {
-  min-height: 660px;
-  padding: 42px 56px 64px;
+  padding: 32px 48px 40px;
   border-radius: var(--radius-sm);
   background: var(--color-bg-surface);
   box-shadow: var(--shadow-sm);
@@ -45,9 +40,9 @@
 
 .parent-review-field .ui-textarea-control,
 .parent-review-original {
-  height: 420px;
-  min-height: 420px;
-  padding: 32px 38px;
+  height: 340px;
+  min-height: 280px;
+  padding: 24px 32px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: var(--color-bg-surface);
@@ -88,7 +83,8 @@
 }
 
 .parent-review-editor-meta {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   min-height: 36px;
   align-items: center;
   gap: 16px;
@@ -99,13 +95,24 @@
   line-height: 24px;
 }
 
-.parent-review-editor-meta > span:first-child {
-  flex: 0 0 auto;
+.parent-review-character-count {
+  justify-self: end;
+  white-space: nowrap;
 }
 
 .parent-review-hint {
-  margin-left: auto;
-  text-align: right;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.parent-review-hint .ui-tooltip { flex: 0 0 auto; }
+
+.parent-review-editor-meta > button {
+  grid-column: 1 / -1;
+  justify-self: end;
 }
 
 .parent-review-editor-meta .is-invalid {
@@ -146,8 +153,8 @@
 }
 
 .parent-review-risks {
-  margin-top: 60px;
-  padding: 42px 32px;
+  margin-top: 32px;
+  padding: 28px 24px;
   border-radius: var(--radius-sm);
   background: var(--color-bg-canvas);
 }
@@ -155,8 +162,8 @@
 .parent-review-risks-heading {
   display: flex;
   align-items: center;
-  gap: 20px;
-  margin: 0 24px 32px;
+  gap: 12px;
+  margin: 0 8px 20px;
   color: var(--color-bg-icon);
 }
 
@@ -166,7 +173,7 @@
 
 .parent-review-risks-heading h2 {
   color: var(--color-text-secondary);
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 600;
   line-height: 34px;
 }
@@ -177,7 +184,7 @@
 }
 
 .parent-review-risk-accordion.ui-accordion {
-  gap: 32px;
+  gap: 16px;
   border-top: 0;
 }
 
@@ -189,49 +196,45 @@
 }
 
 .parent-review-risk-accordion .ui-accordion-trigger {
-  min-height: 137px;
+  min-height: 0;
   align-items: flex-start;
   gap: 20px;
-  padding: 30px 36px;
+  padding: 20px 24px;
 }
 
 .parent-review-risk-accordion .ui-accordion-trigger > span {
   display: grid;
-  gap: 20px;
+  min-width: 0;
+  gap: 12px;
 }
 
 .parent-review-risk-accordion .ui-accordion-icon {
-  margin-top: 10px;
+  margin-top: 2px;
 }
 
 .parent-review-risk-label {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 20px;
-  font-weight: 500;
-  line-height: 28px;
-}
-
-.parent-review-risk-label svg {
-  flex: 0 0 auto;
-  color: var(--color-bg-icon);
+  justify-self: start;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .parent-review-risk-excerpt {
   padding-left: 12px;
-  border-left: 8px solid #ffe400;
+  border-left: 3px solid var(--color-highlight);
   color: var(--color-text-secondary);
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 400;
-  line-height: 32px;
+  line-height: 28px;
   overflow-wrap: anywhere;
 }
 
 .parent-review-risk-accordion .ui-accordion-panel {
-  padding: 0 36px 30px;
-  font-size: 18px;
-  line-height: 30px;
+  padding: 0 24px 20px;
+  color: var(--color-text-secondary);
+  font-size: 16px;
+  line-height: 26px;
+  overflow-wrap: anywhere;
 }
 
 .parent-review-risk-suggestion {
@@ -241,22 +244,86 @@
 }
 
 .parent-review-analysis-details {
-  display: grid;
-  gap: 16px;
-  margin-top: 32px;
-  padding: 24px;
+  margin-top: 24px;
   border: var(--divider-default);
   border-radius: var(--radius-panel);
+  background: var(--color-bg-surface);
   color: var(--color-text-secondary);
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
 
 .parent-review-analysis-details p { margin: 0; }
-.parent-review-analysis-details summary { cursor: pointer; font-weight: 600; }
-.parent-review-analysis-details details > p,
-.parent-review-analysis-details details > .ui-accordion { margin-top: 16px; }
-.parent-detector-title { display: flex; align-items: center; gap: 12px; }
+.parent-review-analysis-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 24px;
+  border-bottom: var(--divider-default);
+}
+.parent-review-analysis-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-title-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-title-sm);
+}
+.parent-review-analysis-header h2 > svg { flex: 0 0 auto; color: var(--color-primary); }
+.parent-review-analysis-status {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-text-muted-readable);
+  font-size: var(--font-size-helper);
+  font-weight: var(--font-weight-regular);
+}
+.parent-review-analysis-status.is-failed { color: var(--color-text-danger); }
+.parent-review-analysis-spinner { animation: ui-spin 700ms linear infinite; }
+.parent-review-analysis-body { display: grid; gap: 12px; padding: 24px; }
+.parent-review-analysis-context { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: var(--font-size-helper); }
+.parent-review-analysis-error { color: var(--color-text-danger); font-size: var(--font-size-helper); }
+.parent-review-risk-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--radius-sm);
+  background: var(--risk-low-bg);
+  color: var(--risk-low-fg);
+}
+.parent-review-risk-notice > svg { flex: 0 0 auto; margin-top: 2px; }
+.parent-review-risk-notice > div { min-width: 0; }
+.parent-review-risk-notice p { font-size: var(--font-size-helper); }
+.parent-review-risk-notice-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 4px; }
+.parent-review-risk-notice--MEDIUM { background: var(--risk-medium-bg); color: var(--risk-medium-fg); }
+.parent-review-risk-notice--HIGH,
+.parent-review-risk-notice--EMERGENCY { background: var(--risk-high-bg); color: var(--risk-high-fg); }
+.parent-review-safety-summary { font-weight: var(--font-weight-semibold); }
+.parent-review-analysis-accordion > .ui-accordion-item { border-bottom: 0; }
+.parent-review-analysis-accordion > .ui-accordion-item > .ui-accordion-heading > .ui-accordion-trigger {
+  padding: 16px 24px;
+  border-radius: 0 0 var(--radius-panel) var(--radius-panel);
+  font-size: var(--font-size-body);
+}
+.parent-review-analysis-accordion > .ui-accordion-item > .ui-accordion-heading > .ui-accordion-trigger > span {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.parent-review-details-action { flex: 0 0 auto; color: var(--color-text-muted-readable); font-size: var(--font-size-helper); font-weight: var(--font-weight-regular); }
+.parent-review-analysis-accordion > .ui-accordion-item > .ui-accordion-panel { padding: 0 24px 20px; }
+.parent-review-detectors { margin-top: 16px; }
+/* The outer open item must not rotate a collapsed inner item's chevron. */
+.parent-review-detectors .ui-accordion-item:not(.is-open) > .ui-accordion-heading .ui-accordion-icon { transform: none; }
+.parent-review-detectors .ui-accordion-trigger > span { min-width: 0; }
+.parent-detector-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .parent-detector-result + .parent-detector-result { margin-top: 20px; }
 .parent-detector-result blockquote {
   margin: 8px 0 0;
@@ -305,7 +372,7 @@
 
 @media (max-width: 1240px) {
   .parent-review-editor { padding: 32px; }
-  .parent-review-risks { padding: 32px 24px; }
+  .parent-review-risks { padding: 28px 24px; }
   .parent-review-actions .ui-button { min-width: 180px; }
 }
 
@@ -314,16 +381,14 @@
   .parent-review-editor { min-height: 0; padding: 24px; }
   .parent-review-field .ui-textarea-control,
   .parent-review-original { padding: 24px; font-size: 16px; line-height: 28px; }
-  .parent-review-editor-meta { flex-wrap: wrap; padding: 0; font-size: 14px; gap: 8px 12px; }
-  .parent-review-hint { flex: 1 1 180px; }
-  .parent-review-risks { margin-top: 36px; padding: 24px 16px; }
+  .parent-review-editor-meta { padding: 0; font-size: 14px; gap: 8px 12px; }
+  .parent-review-risks { margin-top: 24px; padding: 24px 16px; }
   .parent-review-risks-heading { gap: 12px; margin: 0 0 24px; }
   .parent-review-risks-heading h2 { font-size: 18px; line-height: 28px; }
-  .parent-review-risk-accordion.ui-accordion { gap: 20px; }
-  .parent-review-risk-accordion .ui-accordion-trigger { min-height: 120px; padding: 24px; gap: 12px; }
-  .parent-review-risk-label,
+  .parent-review-risk-accordion.ui-accordion { gap: 12px; }
+  .parent-review-risk-accordion .ui-accordion-trigger { padding: 20px; gap: 12px; }
   .parent-review-risk-excerpt { font-size: 16px; line-height: 26px; }
-  .parent-review-risk-accordion .ui-accordion-panel { padding: 0 24px 24px; font-size: 16px; line-height: 26px; }
+  .parent-review-risk-accordion .ui-accordion-panel { padding: 0 20px 20px; }
   .parent-review-actions { margin-top: 48px; }
   .parent-review-actions .ui-button { min-width: 0; }
 }
@@ -333,17 +398,24 @@
   .parent-review-tabs .ui-tabs-trigger { font-size: 18px; }
   .parent-review-tabs .ui-tabs-panel { margin-top: 24px; }
   .parent-review-field .ui-textarea-control,
-  .parent-review-original { height: 420px; padding: 20px 16px; }
-  .parent-review-editor-meta > span:first-child { flex-basis: 100%; }
-  .parent-review-hint { margin-left: 0; text-align: left; }
+  .parent-review-original { height: 320px; padding: 20px 16px; }
+  .parent-review-analysis-header { padding: 16px; gap: 8px; }
+  .parent-review-analysis-header h2 { font-size: var(--font-size-body); }
+  .parent-review-analysis-body { padding: 16px; }
+  .parent-review-analysis-accordion > .ui-accordion-item > .ui-accordion-heading > .ui-accordion-trigger { padding: 16px; }
+  .parent-review-analysis-accordion > .ui-accordion-item > .ui-accordion-panel { padding: 0 16px 16px; }
   .parent-review-risks { padding: 24px 12px; }
   .parent-review-risks-heading > svg { width: 20px; height: 20px; }
   .parent-review-risk-accordion .ui-accordion-trigger { padding: 20px 16px; }
   .parent-review-risk-accordion .ui-accordion-panel { padding: 0 16px 20px; }
-  .parent-review-risk-excerpt { border-left-width: 6px; padding-left: 10px; }
+  .parent-review-risk-excerpt { padding-left: 10px; }
   .parent-review-actions { flex-wrap: wrap; gap: 16px; }
   .parent-review-actions > .ui-button { flex: 0 0 auto; }
   .parent-review-send-actions { width: 100%; gap: 12px; }
   .parent-review-send-actions .ui-button { flex: 1; }
   .parent-review-preview-meta { grid-template-columns: 72px minmax(0, 1fr); gap: 10px 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .parent-review-analysis-spinner { animation: none; }
 }

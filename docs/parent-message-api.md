@@ -13,7 +13,7 @@
 | 서버 마스킹 | POST | `/complaints/{id}/mask` | 최초 민원 초안의 분석 전 호출. `maskedContent`와 `contentVersion`을 검토 결과에 반영 |
 | 분석 | POST | `/complaints/{id}/risk-analysis` | 점수·등급·AI 분석 상태·모드·수동 검토 필요 여부 반환. 같은 내용이면 기존 분석을 다시 돌려줌 |
 | 근거·수정안 | GET | `/risk-analyses/{analysisId}/findings` | 태그별 근거와 수정 제안, 최종 수정안(AI 초안 탭) |
-| 상세 탐지 | GET | `/risk-analyses/{analysisId}/detector-results` | 검토 화면의 규칙·AI 분석 상태, 신뢰도, 복수 근거, 모델 정보. 실패하면 조회만 재시도 가능 |
+| 상세 탐지 | GET | `/risk-analyses/{analysisId}/detector-results` | 검토 화면의 규칙·AI 분석 상태, 신뢰도, 복수 근거. 모델 정보는 응답에 유지하되 화면에서 숨김. 실패하면 조회만 재시도 가능 |
 | 추가 문의 초안 | GET / PUT | `/complaints/{id}/message-draft` | 교사 답변 후 학부모 작성 차례에 저장·복원. 반환된 숫자 `messageId` 사용. 기존 초안 수정 시 `expectedContentVersion` 필수(최초 저장은 생략) |
 | 추가 문의 분석 | POST | `/complaints/{id}/messages/{messageId}/risk-analysis` | 최초 민원의 `/mask` 대신 메시지별 분석 내부에서 마스킹 |
 | 추가 문의 전송 | POST | `/complaints/{id}/messages/{messageId}/send` | `{ expectedContentVersion }` 필수. 전송 완료 후 기존 로컬 대화에 한 번만 추가 |
@@ -28,10 +28,10 @@
 1. **작성**: 자녀 → 문의 대상 → 제목·내용. 임시저장은 지금처럼 브라우저에만 저장합니다(서버 초안은 분석을 시작할 때 생김).
 2. **AI 분석 시작**: 서버 초안이 없으면 `POST /complaints`, 있으면 본문이 바뀐 경우에만 `PATCH` → 서버 마스킹 → 분석 → findings. 단계마다 서버 초안 ID를 로컬 초안에 저장해, 중간에 실패해도 다시 시도할 때 같은 서버 초안을 씁니다. 마스킹이 실패하면 분석을 시작하지 않습니다. 분석 중 "문의 작성으로 돌아가기"를 눌러도 초안 생성 요청은 끊지 않고 끝까지 받아 연결합니다(삭제 API가 없어 끊으면 연결 없는 초안이 서버에 남음). 생성이 끝나기 전에 다시 분석하면(다른 화면에 갔다가 같은 초안을 다시 열어도) 같은 생성 요청을 기다립니다. 분석 중 `COMPLAINT_NOT_FOUND`가 오면 저장된 서버 초안 연결도 지웁니다. mock 모드에서 만든 검토 결과(서버 초안 없음)는 http 모드에서 작성 화면으로 돌려보내 다시 분석합니다.
 3. **잠금**: 서버 초안이 생기면(생성 요청이 진행 중일 때도) 자녀·문의 대상·제목은 바꿀 수 없습니다. `PATCH`가 본문만 받기 때문이며, 화면에 안내 문구를 표시합니다.
-4. **검토**: findings를 기존 검토 화면 모델로 바꿉니다. `GET /risk-tags`의 `code`·`name`으로 태그 명칭을 조회하고 로컬 아이콘을 붙입니다. 명칭 조회 실패 시 기존 표시명을 사용하며 분석·전송을 중단하지 않습니다. 이후, 근거 줄마다 항목 하나를 만들고 수정 제안이 있으면 "수정 제안: …"을 표시합니다. 서버 근거는 가린 문장 기준이라 원문 탭 강조도 가린 본문(`[전화번호]` 등)에 표시합니다. `LEGAL`이 있으면 기존 "공식 절차 의사 완화" 경고를 띄웁니다. 최종 수정안이 분석한 본문과 같거나 없으면 AI 초안 탭은 비활성입니다.
+4. **검토**: findings를 기존 검토 화면 모델로 바꿉니다. `GET /risk-tags`의 `code`·`name`으로 태그 명칭을 조회하고 위험 표현 목록에 작은 배지로 표시합니다. 명칭 조회 실패 시 기존 표시명을 사용하며 분석·전송을 중단하지 않습니다. 이후, 근거 줄마다 항목 하나를 만들고 수정 제안이 있으면 "수정 제안: …"을 표시합니다. 서버 근거는 가린 문장 기준이라 원문 탭 강조도 가린 본문(`[전화번호]` 등)에 표시합니다. `LEGAL`이 있으면 기존 "공식 절차 의사 완화" 경고를 띄웁니다. 최종 수정안이 분석한 본문과 같거나 없으면 AI 초안 탭은 비활성입니다.
 5. **전송**: 선택한 문장(AI 초안·원문·직접 수정)이 서버 내용과 다르면 `PATCH` 후 `send`합니다. 이때 확인 창에 "전송할 때 한 번 더 분석합니다" 안내가 나옵니다. 전송 뒤에는 접수 화면과 문의 내역이 아직 브라우저 저장소를 읽으므로 로컬 사본(`serverComplaintId` 포함)을 남깁니다.
 
-검토 화면은 서버의 `riskScore`·`riskLevel`과 `finalRevision.reason`을 표시합니다. 상세 탐지는 `finalState`·`state`·`evidenceSpans`를 읽고, 이전 boolean·문자열 근거 응답도 지원합니다. 재분석이 제출 시점으로 미뤄진 경우 이전 본문의 상세 분석을 새 결과처럼 표시하지 않습니다.
+검토 화면은 분석 상태·서버의 `riskLevel`에 따른 위험 안내·상세 탐지를 하나의 **AI 분석 결과** 카드에 표시합니다. 상세 탐지는 기본 접힘 아코디언에서 `finalRevision.reason`과 `finalState`·`state`·`evidenceSpans`를 보여 주며, 이전 boolean·문자열 근거 응답도 지원합니다. `riskScore`·모델명·생성 다양성과 내부 긴급 상향 설명은 화면에서 숨깁니다. 일반 AI 참고 안내는 입력창 하단 Info 툴팁에서, 개인정보 안내와 원문의 위험 표현 목록은 독립 영역에서 확인합니다. 분석 실패·수정안 준비 중에는 완료 상태를 표시하지 않으며, 이미 확인된 위험 정보는 유지합니다. 재분석이 제출 시점으로 미뤄진 경우 이전 본문의 상세 분석을 새 결과처럼 표시하지 않습니다.
 
 ### 비동기 AI 수정안
 
@@ -41,16 +41,16 @@
 
 ### AI 장애·예외 및 Severity 연동 (#77)
 
-시스템 위험 점수는 서버가 반환한 **0~100점**을 그대로 표시합니다. 등급과 행동 정책은 서버의 `riskLevel`·`currentRiskLevel`을 따르며, 교사 검토는 별도의 **1~7단계**를 유지합니다.
+시스템 위험 점수는 서버가 반환한 **0~100점**을 그대로 보존하되 학부모 검토 화면에서는 숨깁니다. 등급과 행동 정책은 서버의 `riskLevel`·`currentRiskLevel`을 따르며, 교사 검토는 별도의 **1~7단계**를 유지합니다.
 
-- `aiAnalysisStatus=COMPLETED`·`REUSED`는 정상 완료·기존 결과 재사용으로 구분합니다. `REUSED_RULE_ONLY`·`RULE_ONLY_AI_UNAVAILABLE`·`RULE_ONLY_INVALID_RESPONSE` 또는 `analysisMode=RULE_ONLY`이면 잠정 분석 배지와 직접 검토 안내를 표시합니다. `manualReviewRequired=true`를 별도로 강조합니다. `analysisMessage`는 설명으로만 사용합니다.
+- `aiAnalysisStatus=COMPLETED`·`REUSED`는 정상 완료·기존 결과 재사용으로 구분합니다. `REUSED_RULE_ONLY`·`RULE_ONLY_AI_UNAVAILABLE`·`RULE_ONLY_INVALID_RESPONSE` 또는 `analysisMode=RULE_ONLY`이면 잠정 분석 배지와 직접 검토 안내를 표시합니다. `manualReviewRequired=true`를 별도로 강조합니다. `analysisMessage`는 상태 판정에 사용하지 않으며 학부모 검토 카드에는 표시하지 않습니다.
 - 최종 전송의 `aiAnalysisStatus`와 현재 백엔드의 별칭 `submissionAnalysisStatus`를 모두 지원합니다. 전송 완료 안내에는 **해당 send 응답의** `riskAnalysis`만 사용합니다. `SKIPPED_LIMIT`이면 점수와 이전 분석을 표시하지 않습니다. 응답을 놓친 재시도에서도 이전 검토 결과를 최종 분석처럼 복사하지 않습니다.
 - 전송 메타데이터(`submissionAnalysis`)는 해당 학부모 메시지에만 속합니다. 서버 대화 동기화에서 최신 학부모 메시지의 ID 또는 본문이 바뀌면 지우고, 교사 답변만 추가된 경우에는 유지합니다. 다른 기기의 새 추가 문의에 이전 전송의 분석을 붙이지 않습니다.
 - HTTP 500의 `PRIVACY_MASKING_FAILED`·`RISK_RULE_PROCESSING_FAILED`·`RISK_SCORE_CALCULATION_FAILED`·`RISK_ANALYSIS_SAVE_FAILED`는 코드별 안내를 표시하고 입력·초안을 유지합니다. 안전 처리 오류를 AI 폴백이나 전송 성공으로 처리하지 않습니다.
 - 상세 탐지의 **LLM 결과**에서 `severity`를 해당 없음(0)·경미(1)·보통(2)·심각(3)으로 표시합니다. null/누락은 상태에 따라 경계 사례·판단 정보 부족·심각도 정보 없음으로 구분합니다. Rule의 심각도·반복 횟수는 사용하지 않습니다.
 - `repeatCount`는 현재 민원에서 감지된 횟수이며 null/누락은 정보 없음입니다. 횟수로 위험 점수를 다시 계산하지 않습니다.
-- `safetyFlags`의 `credibleThreat`·`studentSafetyConcern`·`privacyExposure`가 각각 true이면 감지된 신호를 표시하고, false이면 경고하지 않습니다. null/누락은 판단 불가로 안내합니다. 긴급 승격 정보가 생략된 이전 응답은 true 신호에 기존 '긴급 안전 신호' 배지를 사용합니다. 안전 신호로 프론트에서 점수나 등급을 덮어쓰지 않습니다.
-- 분석 상태·모드·수동 검토 필드는 이전 응답과 호환되도록 선택 필드로 받습니다. 필드가 없다는 이유로 정상 완료나 잠정 분석 상태를 만들어 넣지 않습니다.
+- `safetyFlags`의 `credibleThreat`·`studentSafetyConcern`·`privacyExposure`가 각각 true이면 통합 카드의 위험 안내에 표시하고, false이면 경고하지 않습니다. null/누락은 상세 탐지에서 미확인으로 안내합니다. 긴급 승격 정보가 생략된 이전 응답에서도 true 신호의 경고를 유지합니다. 위험도 배지는 서버의 등급을 사용하며, 안전 신호로 프론트에서 점수나 등급을 덮어쓰지 않습니다.
+- 분석 상태·모드·수동 검토 필드는 이전 응답과 호환되도록 선택 필드로 받으며, 생략된 서버 메타데이터를 임의로 채우지 않습니다. 카드 헤더는 실패·잠정 분석·수정안 준비 중·횟수 제한이 아닌 기존 응답에도 분석 완료를 표시합니다.
 
 2026-11-17 #77 구현 단계의 검증은 인증·UI 494건, 학부모 HTTP 88건, 관리자 HTTP 14건, HTTP 통합 8건으로 **총 604건 통과**했습니다. build·lint·앱/테스트 TypeScript·diff 검사도 통과했습니다. 후속 #79의 Swagger 정렬과 최종 652건 검증은 [API 계약 점검](api-contract-audit.md)에 기록했습니다. HTTP 검증은 백엔드 계약에 따른 fixture 응답 interception 기반이며, 실제 배포 AI 연결 테스트는 실행하지 않았습니다. 아래의 2026-10-29·30 수동 확인은 당시 결과로 구분합니다.
 
@@ -58,7 +58,7 @@
 
 위험 분석 POST와 `GET /risk-analyses/{analysisId}/findings`의 `emergencyOverride`를 읽습니다. findings에 이 필드가 있으면 최신 값으로 사용하고, 생략하면 이전 응답의 값을 유지합니다. 수정안이 준비 중인 findings도 긴급 승격 사유를 표시합니다.
 
-`applied=true`일 때 일반 위험 태그의 탐지 건수와 별도로 **긴급 안전 신호**를 태그 목록 위에 표시합니다. `safetySignals`의 각 `code`로 항목을 구분하고 서버의 `title`과 `description`을 표시합니다. `applied=false` 또는 `null`이면 이 영역을 숨깁니다.
+`applied=true`일 때 일반 위험 태그의 탐지 건수와 관계없이 **AI 분석 결과** 카드 안의 위험 안내를 강조합니다. `safetySignals`의 `code`로 구체적인 위해 위협을 구분하고, 그 밖의 신호는 서버의 `title`로 표시하며 `safetyFlags`와 중복되는 항목은 한 번만 안내합니다. 내부 상향 설명인 `description`은 화면에서 숨깁니다. `applied=false` 또는 `null`이면 승격 신호를 표시하지 않지만, 서버 위험도와 별도로 확인된 `safetyFlags` 경고는 유지합니다.
 
 ### 추가 문의
 
