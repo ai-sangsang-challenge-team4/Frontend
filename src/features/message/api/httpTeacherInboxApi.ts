@@ -18,24 +18,43 @@ import type {
 // stored, so retrying the same reply reuses its key and the server returns the stored reply instead of a second one.
 // The server rejects a key reused for different content, so the key belongs to one complaint and content.
 const pendingReplyKeys = new Map<string, string>();
-const pendingPackageKeys = new Map<string, string>();
+const pendingPackageKeys = new Map<string, { key: string; uncertain: boolean }>();
+// Keep mismatched success responses blocked across both creation entry points and component remounts.
+const unconfirmedPackages = new Set<number>();
+
+export class MediationPackageUnconfirmedError extends Error {
+  constructor() {
+    super('생성 응답을 확인할 수 없습니다. 패키지가 이미 생성됐을 수 있어 이 문의의 추가 생성을 중단했습니다. 관리자에게 생성 여부 확인을 요청해 주세요.');
+    this.name = 'MediationPackageUnconfirmedError';
+  }
+}
 
 // Paths follow the backend TeacherComplaintController and TeacherResponseTemplateController.
 export const httpTeacherInboxApi: TeacherInboxApi = {
   createMediationPackage: async (complaintId, includeOriginalMessages) => {
+    if (unconfirmedPackages.has(complaintId)) throw new MediationPackageUnconfirmedError();
     const attempt = `${complaintId}:${includeOriginalMessages}`;
-    const key = pendingPackageKeys.get(attempt) ?? crypto.randomUUID();
-    pendingPackageKeys.set(attempt, key);
+    const pending = pendingPackageKeys.get(attempt) ?? { key: crypto.randomUUID(), uncertain: false };
+    pendingPackageKeys.set(attempt, pending);
     try {
       const response = await apiClient.post<MediationPackageResponse>(
         `/teacher/complaints/${complaintId}/mediation-packages`,
         { includeOriginalMessages },
-        { headers: { 'Idempotency-Key': key } },
+        { headers: { 'Idempotency-Key': pending.key } },
       );
+      // Validate before retiring the key: HTTP success alone does not confirm which package was created.
+      if (response?.complaintId !== complaintId || typeof response.packageId !== 'string' || !response.packageId.trim() ||
+          response.originalMessagesIncluded !== includeOriginalMessages) {
+        unconfirmedPackages.add(complaintId);
+        throw new MediationPackageUnconfirmedError();
+      }
       pendingPackageKeys.delete(attempt);
       return response;
     } catch (error) {
-      if (isApiError(error) && error.status >= 400 && error.status < 500) pendingPackageKeys.delete(attempt);
+      if (isApiError(error) && error.status >= 400 && error.status < 500) {
+        // A later rejection cannot establish whether an earlier, unanswered attempt was stored.
+        if (!pending.uncertain) pendingPackageKeys.delete(attempt);
+      } else pending.uncertain = true;
       throw error;
     }
   },

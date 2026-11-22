@@ -3,17 +3,18 @@ import { getApiErrorMessage } from '../../../shared/api';
 import { Accordion, Button, Modal } from '../../../shared/components/ui';
 import { formatEscalationTime, historyEventLabel } from '../../escalation/escalationRules';
 import type { HistoryEventType } from '../../../shared/types';
-import { teacherInboxApi, type MediationPackageResponse } from '../api/teacherInboxApi';
-import type { BoardThread } from '../types';
+import { MediationPackageUnconfirmedError, teacherInboxApi, type MediationPackageResponse } from '../api/teacherInboxApi';
+import type { BoardThread, EvidencePackageCreateResult } from '../types';
 
 export function MediationPackagePanel({ thread, onCreate }: {
   thread: BoardThread;
-  onCreate: (threadId: string, includeOriginalMessages?: boolean) => Promise<boolean>;
+  onCreate: (threadId: string, includeOriginalMessages?: boolean) => Promise<EvidencePackageCreateResult>;
 }) {
   const [includeOriginal, setIncludeOriginal] = useState(false);
   const [pending, setPending] = useState<'create' | 'view' | 'download' | null>(null);
   const pendingRef = useRef(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [detail, setDetail] = useState<MediationPackageResponse | null>(null);
   const saved = thread.mediationPackage;
   const canIncludeOriginal = Boolean(thread.analysis?.canViewOriginal && thread.analysis.originalMessageAvailable);
@@ -27,9 +28,12 @@ export function MediationPackagePanel({ thread, onCreate }: {
     pendingRef.current = true;
     setPending(action);
     setError('');
+    setNotice('');
     try {
       if (action === 'create') {
-        if (!await onCreate(thread.id, includeOriginal && canIncludeOriginal)) throw new Error('패키지를 생성할 수 없습니다.');
+        const result = await onCreate(thread.id, includeOriginal && canIncludeOriginal);
+        if (result === 'pending') setNotice('증빙 패키지 생성 요청이 이미 진행 중입니다. 잠시 후 결과를 확인해 주세요.');
+        else if (result === 'unavailable') setError('현재 이 문의의 패키지를 생성할 수 없습니다.');
       } else if (action === 'view') {
         const result = await teacherInboxApi.getMediationPackage(thread.serverComplaintId, saved!.packageId);
         if (result.complaintId !== thread.serverComplaintId || result.packageId !== saved!.packageId) throw new Error('패키지 정보가 일치하지 않습니다.');
@@ -45,7 +49,8 @@ export function MediationPackagePanel({ thread, onCreate }: {
         window.setTimeout(() => URL.revokeObjectURL(url), 1000);
       }
     } catch (cause) {
-      setError(getApiErrorMessage(cause, '패키지를 처리하지 못했습니다. 다시 시도해 주세요.'));
+      setError(cause instanceof MediationPackageUnconfirmedError ? cause.message
+        : getApiErrorMessage(cause, '패키지를 처리하지 못했습니다. 다시 시도해 주세요.'));
     } finally {
       pendingRef.current = false;
       setPending(null);
@@ -73,6 +78,7 @@ export function MediationPackagePanel({ thread, onCreate }: {
       </> : null}
     </div>
     {error ? <p role="alert" className="board-admin-share-error">{error}</p> : null}
+    {notice && thread.mediationPackageCreationPending ? <p role="status">{notice}</p> : null}
     <Modal open={Boolean(detail)} onOpenChange={(open) => { if (!open) setDetail(null); }} title="증빙 패키지 내용" size="lg"
       className="board-regulation-source-modal" description="생성 시점에 저장된 기록입니다. 이후 변경된 내용은 포함되지 않습니다."
       footer={<Button onClick={() => setDetail(null)}>닫기</Button>}>

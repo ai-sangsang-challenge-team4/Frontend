@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { mediationPackage } from '../fixtures/mediationPackage';
 import { configureApiClient } from '../../src/shared/api/apiClient';
 import { getApiErrorMessage, toApiError } from '../../src/shared/api/apiError';
-import { httpTeacherInboxApi } from '../../src/features/message/api/httpTeacherInboxApi';
+import { httpTeacherInboxApi, MediationPackageUnconfirmedError } from '../../src/features/message/api/httpTeacherInboxApi';
 import type {
   ResponseTemplateResponse,
   TeacherResponseDraftResponse,
@@ -113,18 +113,52 @@ test('교사 답변 API는 백엔드 경로와 content 본문을 사용한다', 
 test('패키지 생성은 원문 선택과 멱등 키를 보내고 응답 유실 시 같은 키로 재시도한다', async () => {
   mockFetch(() => json(503, {}));
   await expect(httpTeacherInboxApi.createMediationPackage(12, false)).rejects.toBeTruthy();
+  mockFetch(() => json(429, {}));
+  await expect(httpTeacherInboxApi.createMediationPackage(12, false)).rejects.toBeTruthy();
   mockFetch(() => json(201, mediationPackage()));
   await httpTeacherInboxApi.createMediationPackage(12, false);
+  mockFetch(() => json(201, mediationPackage(true)));
   await httpTeacherInboxApi.createMediationPackage(12, true);
   const keys = calls.map((call) => new Headers(call.init.headers).get('Idempotency-Key'));
   expect(keys[0]).toBeTruthy();
   expect(keys[1]).toBe(keys[0]);
-  expect(keys[2]).not.toBe(keys[0]);
+  expect(keys[2]).toBe(keys[0]);
+  expect(keys[3]).not.toBe(keys[0]);
   expect(calls.map((call) => JSON.parse(String(call.init.body)))).toEqual([
-    { includeOriginalMessages: false }, { includeOriginalMessages: false }, { includeOriginalMessages: true },
+    { includeOriginalMessages: false }, { includeOriginalMessages: false }, { includeOriginalMessages: false }, { includeOriginalMessages: true },
   ]);
   expect(calls.every((call) => call.url === 'https://api.test/teacher/complaints/12/mediation-packages')).toBe(true);
 });
+
+test('확정된 최초 4xx 거절 뒤에는 새 생성 키를 사용한다', async () => {
+  mockFetch(() => json(400, {}));
+  await expect(httpTeacherInboxApi.createMediationPackage(13, false)).rejects.toBeTruthy();
+  mockFetch(() => json(201, { ...mediationPackage(), complaintId: 13 }));
+  await httpTeacherInboxApi.createMediationPackage(13, false);
+  expect(new Headers(calls[1].init.headers).get('Idempotency-Key'))
+    .not.toBe(new Headers(calls[0].init.headers).get('Idempotency-Key'));
+});
+
+for (const [index, invalid] of [
+  { ...mediationPackage(), complaintId: -1 },
+  { ...mediationPackage(), complaintId: 101, originalMessagesIncluded: true },
+  { ...mediationPackage(), complaintId: 102, packageId: ' ' },
+  null,
+].entries()) {
+  test(`불일치 생성 응답 ${index}은 기존 생성 가능성을 알리고 원문 옵션 변경 후에도 재생성을 차단한다`, async () => {
+    const complaintId = 100 + index;
+    mockFetch(() => json(201, invalid));
+    await expect(httpTeacherInboxApi.createMediationPackage(complaintId, false)).rejects.toBeInstanceOf(MediationPackageUnconfirmedError);
+    mockFetch(() => json(201, { ...mediationPackage(), complaintId }));
+    await expect(httpTeacherInboxApi.createMediationPackage(complaintId, false)).rejects.toThrow('패키지가 이미 생성됐을 수 있어');
+    await expect(httpTeacherInboxApi.createMediationPackage(complaintId, true)).rejects.toBeInstanceOf(MediationPackageUnconfirmedError);
+    expect(calls).toHaveLength(1);
+    // A different complaint is not blocked by this uncertain result.
+    mockFetch(() => json(201, { ...mediationPackage(), complaintId: complaintId + 1000 }));
+    await httpTeacherInboxApi.createMediationPackage(complaintId + 1000, false);
+    expect(calls).toHaveLength(2);
+  });
+}
 
 test('패키지 조회·다운로드는 인증을 유지하고 원본 바이트와 JSON 오류를 구분한다', async () => {
   mockFetch(() => json(200, mediationPackage()));

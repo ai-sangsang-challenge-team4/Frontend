@@ -14,7 +14,8 @@ import {
 import type { EscalationStateResponse } from '../../escalation/escalationTypes';
 import { createEscalationSnapshot } from '../escalationSnapshot';
 import { getThreadRiskLevel, hasOriginalMessage, riskLabel } from '../messageRules';
-import type { BoardThread } from '../types';
+import type { BoardThread, EvidencePackageCreateResult } from '../types';
+import { MediationPackageUnconfirmedError } from '../api/teacherInboxApi';
 import { BoardConfirmDialog } from './BoardConfirmDialog';
 import { ExternalLinkIcon } from './MessageIcons';
 
@@ -28,7 +29,7 @@ export type EscalationStateRequest = {
 
 type AdminShareSectionProps = {
   escalation: EscalationStateRequest;
-  onEvidencePackageCreate: (threadId: string, includeOriginalMessages?: boolean) => Promise<boolean>;
+  onEvidencePackageCreate: (threadId: string, includeOriginalMessages?: boolean) => Promise<EvidencePackageCreateResult>;
   onShared: (threadId: string, escalation: { reason: string }) => void;
   thread: BoardThread;
 };
@@ -143,6 +144,7 @@ function AdminShareDialog({ onClose, onEvidencePackageCreate, onShared, open, th
   const [attachEvidence, setAttachEvidence] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCreatingEvidence, setIsCreatingEvidence] = useState(false);
+  const [evidenceNotice, setEvidenceNotice] = useState('');
   const evidencePendingRef = useRef(false);
   const isBusy = isSubmitting || isCreatingEvidence;
   const hasEvidence = thread.serverComplaintId !== undefined
@@ -159,12 +161,16 @@ function AdminShareDialog({ onClose, onEvidencePackageCreate, onShared, open, th
     evidencePendingRef.current = true;
     setIsCreatingEvidence(true);
     setErrorMessage(null);
+    setEvidenceNotice('');
     try {
       // Sharing scopes have no package ID field. Prepare a masked package independently of original sharing.
-      if (await onEvidencePackageCreate(thread.id, false)) setAttachEvidence(true);
+      const result = await onEvidencePackageCreate(thread.id, false);
+      if (result === 'created') setAttachEvidence(true);
+      else if (result === 'pending') setEvidenceNotice('증빙 패키지 생성 요청이 이미 진행 중입니다. 잠시 후 결과를 확인해 주세요.');
       else setErrorMessage('증빙 패키지를 준비하지 못했습니다. 다시 시도하거나 증빙 없이 공유해 주세요.');
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error, '증빙 패키지를 생성하지 못했습니다. 다시 시도해 주세요.'));
+      setErrorMessage(error instanceof MediationPackageUnconfirmedError ? error.message
+        : getApiErrorMessage(error, '증빙 패키지를 생성하지 못했습니다. 다시 시도해 주세요.'));
     } finally {
       evidencePendingRef.current = false;
       setIsCreatingEvidence(false);
@@ -172,6 +178,7 @@ function AdminShareDialog({ onClose, onEvidencePackageCreate, onShared, open, th
   };
 
   const close = () => {
+    setEvidenceNotice('');
     setReason('');
     setShareOriginal(false);
     setAttachEvidence(false);
@@ -282,6 +289,7 @@ function AdminShareDialog({ onClose, onEvidencePackageCreate, onShared, open, th
             <p id={evidenceDescriptionId}>개인정보가 가려진 메시지, 위험 분석과 처리 기록을 묶습니다. 원문은 패키지에 포함하지 않습니다. 증빙 없이도 공유할 수 있습니다.</p>
             {!hasEvidence && !canCreateEvidence ? <p>현재 이 메시지의 증빙 패키지를 생성할 수 없습니다.</p> : null}
             {attachEvidence ? <p role="status">증빙 패키지를 공유할 자료로 선택했습니다.</p> : null}
+            {evidenceNotice && thread.mediationPackageCreationPending ? <p role="status">{evidenceNotice}</p> : null}
           </div>
         </fieldset>
         {errorMessage ? <p className="board-admin-share-error" role="alert">{errorMessage}</p> : null}

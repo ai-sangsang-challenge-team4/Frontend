@@ -253,6 +253,75 @@ for (const riskLevel of ['HIGH', 'EMERGENCY'] as const) {
   });
 }
 
+for (const origin of ['panel', 'share'] as const) {
+  for (const mismatch of [false, true]) {
+    test(`패키지 ${origin} 시작 요청의 ${mismatch ? '불일치 응답은 두 진입점의 재생성을 차단한다' : '진행 상태를 다른 진입점에서 실패로 표시하지 않는다'}`, async ({ page }) => {
+      let creates = 0;
+      let finish!: () => void;
+      const held = new Promise<void>((resolve) => { finish = resolve; });
+      await setup(page, 'TEACHER', async (route, key) => {
+        if (key === 'POST /teacher/complaints/12/mediation-packages') {
+          creates += 1;
+          await held;
+          await route.fulfill({ status: 201, json: { ...mediationPackage(), complaintId: mismatch ? 999 : 12 } });
+          return true;
+        }
+        if (key === 'GET /teacher/complaints/12/emergency-review/current') {
+          await route.fulfill({ status: 404, json: { code: 'EMERGENCY_REVIEW_NOT_FOUND' } }); return true;
+        }
+        let json = teacherComplaintJson(key, review);
+        if (json === undefined) return false;
+        if (key === 'GET /teacher/complaints/12/messages') json = { ...json as object, allowedActions: ['CREATE_EVIDENCE_PACKAGE'] };
+        if (key === 'GET /teacher/complaints/12/escalation') json = { ...json as object, emergencyReviewRequestId: null, riskReviewStatus: null };
+        await route.fulfill({ json }); return true;
+      });
+      await page.goto('/teacher/messages/12');
+      await page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name: '위험 요소', exact: true }).click();
+      const panel = page.getByRole('region', { name: '증빙 패키지', exact: true });
+      const create = panel.getByRole('button', { name: '증빙 패키지 생성', exact: true });
+      const share = page.getByRole('region', { name: '관리자 공유' }).getByRole('button', { name: '관리자에게 공유', exact: true });
+      const dialog = page.getByRole('dialog', { name: '관리자에게 공유할까요?' });
+      const attach = dialog.getByRole('button', { name: '증빙 패키지 생성 후 첨부', exact: true });
+      if (origin === 'panel') await create.click();
+      await share.click();
+      await attach.click();
+      if (origin === 'share') {
+        // Exercise the other entry point while the modal owns pointer/focus interaction.
+        await create.evaluate((el) => (el as HTMLButtonElement).click());
+      }
+      const second = origin === 'panel' ? dialog : panel;
+      await expect(second.getByRole('status')).toContainText('생성 요청이 이미 진행 중입니다.');
+      await expect(second.getByRole('alert')).toHaveCount(0);
+      await expect.poll(() => creates).toBe(1);
+      finish();
+      if (mismatch) {
+        const first = origin === 'panel' ? panel : dialog;
+        await expect(first.getByRole('alert')).toContainText('패키지가 이미 생성됐을 수 있어');
+        await expect(second.getByText('증빙 패키지 생성 요청이 이미 진행 중입니다. 잠시 후 결과를 확인해 주세요.', { exact: true })).toHaveCount(0);
+        await attach.click();
+        await expect(dialog.getByRole('alert')).toContainText('추가 생성을 중단했습니다.');
+        await expect(dialog.getByRole('checkbox', { name: '증빙 패키지', exact: true })).toHaveCount(0);
+        await dialog.getByRole('button', { name: '취소', exact: true }).click();
+        await create.click();
+        await expect(panel.getByRole('alert')).toContainText('추가 생성을 중단했습니다.');
+        await panel.getByRole('checkbox').check();
+        await create.click();
+        await expect(panel.getByRole('alert')).toContainText('추가 생성을 중단했습니다.');
+        await expect(panel.getByRole('button', { name: '패키지 내용 보기' })).toHaveCount(0);
+        expect(creates).toBe(1);
+      } else {
+        await expect(dialog.getByRole('checkbox', { name: '증빙 패키지', exact: true })).toBeVisible();
+        await expect(second.getByText('증빙 패키지 생성 요청이 이미 진행 중입니다. 잠시 후 결과를 확인해 주세요.', { exact: true })).toHaveCount(0);
+        await expect(dialog.getByRole('alert')).toHaveCount(0);
+        await dialog.getByRole('button', { name: '취소', exact: true }).click();
+        await expect(panel.getByRole('button', { name: '패키지 내용 보기' })).toBeVisible();
+        await expect(panel.getByRole('alert')).toHaveCount(0);
+        expect(creates).toBe(1);
+      }
+    });
+  }
+}
+
 for (const riskLevel of ['LOW', 'MEDIUM'] as const) {
   test(`RAG ${riskLevel} 참고자료는 실제 초안 응답을 표시하고 편집·저장·재생성 흐름을 유지한다`, async ({ page }, testInfo) => {
     const source = '학교민원처리매뉴얼_출처파일명이길어도모바일에서잘리지않는참고자료.pdf';

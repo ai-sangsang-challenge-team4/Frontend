@@ -112,6 +112,7 @@ import type {
   AiObjectionType,
   BoardThread,
   DetailTab,
+  EvidencePackageCreateResult,
   FilterValue,
   MessagesRouteView,
   OriginalMessageRequest,
@@ -1116,7 +1117,7 @@ function RiskReviewPanel({
 type RiskAnalysisPanelProps = {
   onAdminShared: (threadId: string, escalation: { reason: string }) => void;
   onAiObjection: (threadId: string, objection: Pick<AiObjection, 'reason' | 'type'>) => void;
-  onEvidencePackageCreate: (threadId: string, includeOriginalMessages?: boolean) => Promise<boolean>;
+  onEvidencePackageCreate: (threadId: string, includeOriginalMessages?: boolean) => Promise<EvidencePackageCreateResult>;
   // Rejects with the API error so the panel can show it.
   onReviewComplete: (threadId: string, review: RiskReviewSubmission) => Promise<void>;
   onOriginalOpen: (evidence?: string) => void;
@@ -1585,7 +1586,7 @@ type DetailProps = {
   initialOriginalViewer?: OriginalMessageRequest;
   initialTab?: DetailTab;
   onBack: () => void;
-  onEvidencePackageCreate: (threadId: string, includeOriginalMessages?: boolean) => Promise<boolean>;
+  onEvidencePackageCreate: (threadId: string, includeOriginalMessages?: boolean) => Promise<EvidencePackageCreateResult>;
   onOpenReplyComposer: (threadId: string) => void;
   // Resolves once the original can be shown; a server thread fetches it first
   // (POST /messages/{messageId}/original-views).
@@ -2871,18 +2872,17 @@ export function TeacherMessages({
   };
 
   const packageRequestsRef = useRef(new Set<string>());
-  const handleEvidencePackageCreate = async (threadId: string, includeOriginalMessages = false) => {
+  const handleEvidencePackageCreate = async (threadId: string, includeOriginalMessages = false): Promise<EvidencePackageCreateResult> => {
     const target = threads.find((thread) => thread.id === threadId);
-    if (!target?.analysis?.packageAvailable || !['high', 'emergency'].includes(getThreadRiskLevel(target))) return false;
-    if (includeOriginalMessages && !(target.analysis.canViewOriginal && target.analysis.originalMessageAvailable)) return false;
+    if (!target?.analysis?.packageAvailable || !['high', 'emergency'].includes(getThreadRiskLevel(target))) return 'unavailable';
+    if (includeOriginalMessages && !(target.analysis.canViewOriginal && target.analysis.originalMessageAvailable)) return 'unavailable';
     if (target.serverComplaintId !== undefined) {
-      if (packageRequestsRef.current.has(threadId)) return false;
+      if (packageRequestsRef.current.has(threadId)) return 'pending';
       packageRequestsRef.current.add(threadId);
+      setThreads((current) => current.map((item) => item.id === threadId
+        ? { ...item, mediationPackageCreationPending: true } : item));
       try {
         const result = await teacherInboxApi.createMediationPackage(target.serverComplaintId, includeOriginalMessages);
-        if (result.complaintId !== target.serverComplaintId || !result.packageId || result.originalMessagesIncluded !== includeOriginalMessages) {
-          throw new Error('생성된 패키지 정보가 요청과 일치하지 않습니다.');
-        }
         const metadata = {
           packageId: result.packageId, complaintId: result.complaintId, schemaVersion: result.schemaVersion,
           originalMessagesIncluded: result.originalMessagesIncluded, checksumSha256: result.checksumSha256, createdAt: result.createdAt,
@@ -2890,15 +2890,17 @@ export function TeacherMessages({
         setThreads((current) => current.map((item) => item.id === threadId
           ? { ...item, mediationPackage: metadata, evidencePackageGenerated: true } : item));
         refreshServerThread(threadId);
-        return true;
+        return 'created';
       } finally {
         packageRequestsRef.current.delete(threadId);
+        setThreads((current) => current.map((item) => item.id === threadId
+          ? { ...item, mediationPackageCreationPending: false } : item));
       }
     }
-    if (target.evidencePackageGenerated) return true;
+    if (target.evidencePackageGenerated) return 'created';
 
     // Local demo threads keep their existing preparation without contacting the server.
-    return updateThread(threadId, (thread) => {
+    const updated = updateThread(threadId, (thread) => {
       if (!thread.analysis) return thread;
       return {
         ...thread,
@@ -2921,6 +2923,7 @@ export function TeacherMessages({
         },
       };
     });
+    return updated ? 'created' : 'unavailable';
   };
 
   const handleAdminShared = (threadId: string, escalation: { reason: string }) => {

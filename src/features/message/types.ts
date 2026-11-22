@@ -14,6 +14,7 @@ export type SummaryStatus = 'ready' | 'failed';
 export type ThreadTab = 'all' | 'starred' | 'drafts';
 export type DetailTab = 'conversation' | 'risk' | 'activity';
 export type ReplyDraftTab = 'ai' | 'manual';
+export type EvidencePackageCreateResult = 'created' | 'pending' | 'unavailable';
 export type ReplyDraftState = {
   draftText: string;
   draftSavedAt?: string;
@@ -139,6 +140,7 @@ export type BoardThread = {
   replyDrafts?: Partial<Record<ReplyDraftTab, ReplyDraftState>>;
   evidencePackageGenerated?: boolean;
   mediationPackage?: MediationPackageMetadata;
+  mediationPackageCreationPending?: boolean;
   id: string;
   isPinned: boolean;
   latestAt: string;
