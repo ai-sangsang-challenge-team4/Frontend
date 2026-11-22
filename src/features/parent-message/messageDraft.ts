@@ -59,6 +59,7 @@ function isMessageReview(value: unknown): value is MessageReview {
   const analysis = value.analysis;
   return (value.source === 'AI' || value.source === 'ORIGINAL') &&
     typeof value.aiText === 'string' &&
+    (value.aiTextEdited === undefined || typeof value.aiTextEdited === 'boolean') &&
     (value.originalEdit === null || typeof value.originalEdit === 'string') &&
     (analysis.status === 'ready' || analysis.status === 'failed') &&
     (analysis.revisedText === null || typeof analysis.revisedText === 'string') &&
@@ -76,7 +77,7 @@ function isMessageReview(value: unknown): value is MessageReview {
       typeof risk.title === 'string' && typeof risk.excerpt === 'string' &&
       typeof risk.explanation === 'string' &&
       (risk.suggestion === undefined || typeof risk.suggestion === 'string')
-    )) && !(value.source === 'AI' && analysis.revisedText === null);
+    )) && !(value.source === 'AI' && analysis.revisedText === null && value.aiTextEdited === undefined);
 }
 
 function isPositiveInteger(value: unknown): value is number {

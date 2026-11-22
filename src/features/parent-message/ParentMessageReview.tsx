@@ -123,7 +123,9 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
   const [notice, setNotice] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [maskingFailed, setMaskingFailed] = useState(false);
+  const [storageSyncFailed, setStorageSyncFailed] = useState(false);
   const sendPending = useRef(false);
+  const submissionComplete = useRef(false);
   const sendController = useRef<AbortController | null>(null);
   // Preserve acknowledged saves even if the following send fails; props retain the original analysis snapshot.
   const serverDraft = useRef(draft.server);
@@ -133,34 +135,42 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
   const privacyPreview = maskContactInfo(`제목: ${draft.title}\n\n내용: ${selected.text.trim()}`);
   const teacher = draft.server
     ? { label: `${draft.server.teacherName} 선생님` } : mockConnectedTeachers.find((item) => item.value === draft.teacherId);
-  const hasAiDraft = review.analysis.revisedText !== null && review.analysis.revisedText !== draft.body;
+  // A previously edited/selected AI draft remains the user's text even if generation is unavailable.
+  const hasAiDraft = review.aiText !== '' || review.aiTextEdited === true || review.source === 'AI';
   // The server analyzes the final text again on send when it differs from the reviewed content.
   const analyzedOnSend = isServer && (review.analysis.analyzeOnSubmit === true ||
     masked.text !== (review.analysis.maskedContent ?? draft.server?.content));
   const revision = useServerRevision(
     isServer ? draft.server?.analysisId ?? undefined : undefined,
     review.analysis.maskedContent ?? draft.body,
-    review.analysis.revisionStatus === 'PENDING' && !isSending,
+    // An analyze-on-submit snapshot belongs to earlier content and must not revive its suggestions.
+    isServer && !review.analysis.analyzeOnSubmit && !isSending,
   );
 
   useEffect(() => {
     if (!revision.analysis) return;
     const update = revision.analysis;
-    if (update.revisionStatus === 'PENDING') {
-      // The safety result can be ready before the text revision.
-      const { emergencyOverride } = update;
-      if (emergencyOverride !== undefined) setReview((previous) => ({
-        ...previous, analysis: { ...previous.analysis, emergencyOverride },
-      }));
-      return;
-    }
-    setReview((previous) => ({
-      ...previous,
-      analysis: { ...previous.analysis, ...update },
-      // Keep the selected source and any original-text edits when a late AI revision arrives.
-      aiText: update.revisedText ?? '',
-    }));
+    setReview((previous) => {
+      const aiTextEdited = previous.aiTextEdited ?? previous.aiText !== (previous.analysis.revisedText ?? '');
+      return {
+        ...previous,
+        analysis: { ...previous.analysis, ...update },
+        // Never replace edits, including an intentionally empty editor, or change the selected tab.
+        aiText: aiTextEdited ? previous.aiText : update.revisedText ?? previous.aiText,
+        aiTextEdited,
+      };
+    });
   }, [revision.analysis]);
+
+  useEffect(() => {
+    if (!isServer || isSending || sendPending.current || submissionComplete.current) return;
+    try {
+      saveMessageDraft(userId, { ...draft, server: serverDraft.current, status: 'PARENT_REVIEW', review });
+      setStorageSyncFailed(false);
+    } catch {
+      setStorageSyncFailed(true);
+    }
+  }, [draft, isServer, isSending, review, userId]);
 
   useEffect(() => () => sendController.current?.abort(), []);
 
@@ -174,6 +184,7 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
     if (validation) return;
     try {
       persistReview();
+      setStorageSyncFailed(false);
       setNotice('선택한 문의가 임시저장되었습니다.');
     } catch {
       setNotice('임시저장하지 못했습니다. 작성한 내용은 유지됩니다.');
@@ -215,6 +226,7 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
         })
         : await sendParentMessage(userId, draft, review, controller.signal, user?.name);
       if (controller.signal.aborted) return;
+      submissionComplete.current = true;
       let stored = true;
       try {
         stored = findSentMessage(userId, sent.messageId) !== null;
@@ -298,7 +310,7 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
             onChange={(event) => {
               const text = event.target.value;
               setReview((previous) => isOriginal
-                ? { ...previous, originalEdit: text } : { ...previous, aiText: text });
+                ? { ...previous, originalEdit: text } : { ...previous, aiText: text, aiTextEdited: true });
               setError(null);
               setMaskingFailed(false);
             }}
@@ -326,7 +338,7 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
             <button aria-label={isOriginal ? '원문 복원' : 'AI 초안 복원'} className="parent-review-reset"
               onClick={() => {
                 setReview((previous) => isOriginal
-                  ? { ...previous, originalEdit: null } : { ...previous, aiText: previous.analysis.revisedText ?? '' });
+                  ? { ...previous, originalEdit: null } : { ...previous, aiText: previous.analysis.revisedText ?? '', aiTextEdited: false });
                 if (isOriginal) setIsEditingOriginal(false);
                 setError(null);
               }} title={isOriginal ? '원문 복원' : 'AI 초안 복원'} type="button">
@@ -357,27 +369,47 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
             }}
             value={review.source}
           />
-          {!hasAiDraft ? (
-            <div className="parent-review-analysis-notice" role="status">
+          {isServer || !hasAiDraft ? (
+            <div aria-label="AI 수정안 상태" className="parent-review-analysis-notice" role="status">
+              <p>
               {review.analysis.analyzeOnSubmit
                 ? 'AI 검토는 문의마다 한 번만 받을 수 있어 수정한 내용에는 새 수정안이 없습니다. 전송할 때 수정한 내용을 한 번 더 분석합니다.'
                 : review.analysis.revisionStatus === 'PENDING'
-                  ? revision.needsRetry
-                    ? 'AI 수정안이 아직 준비되지 않았거나 조회하지 못했습니다. 원문을 확인하거나 잠시 후 다시 확인해 주세요.'
+                  ? revision.lookupStatus === 'exhausted' || revision.lookupStatus === 'error'
+                    ? '마지막 확인 시 AI 수정안을 생성 중이었습니다. 잠시 후 다시 확인해 주세요.'
                     : 'AI 수정안을 준비하고 있습니다. 원문을 확인하거나 직접 수정하면서 기다릴 수 있습니다.'
                 : review.analysis.revisionStatus === 'UNAVAILABLE'
                   ? 'AI 수정안을 제공하지 못했습니다. 원문을 확인하거나 직접 수정해 전송할 수 있습니다.'
                 : review.analysis.revisionStatus === 'NOT_REQUESTED'
                   ? '이번 분석에서는 AI 수정안을 생성하지 않았습니다. 원문을 확인해 주세요.'
+                : review.analysis.revisionStatus === 'COMPLETED'
+                  ? review.analysis.status === 'failed'
+                    ? 'AI 수정안 생성은 완료되었지만 수정안 내용을 불러오지 못했습니다.'
+                    : review.analysis.revisedText !== null ? 'AI 수정안이 준비되었습니다.' : '원문과 다른 AI 수정안이 없습니다. 원문을 확인해 주세요.'
                 : review.analysis.status === 'failed'
                   ? 'AI 수정안을 불러오지 못했습니다. 원문을 확인하거나 직접 수정해 전송할 수 있습니다.'
-                  : '원문과 다른 AI 수정안이 없습니다. 원문을 확인해 주세요.'}
-              {review.analysis.revisionStatus === 'PENDING' && revision.needsRetry
-                ? <Button onClick={revision.retry} size="sm" variant="outline">수정안 다시 확인</Button> : null}
+                  : hasAiDraft ? 'AI 수정안이 준비되었습니다.' : '원문과 다른 AI 수정안이 없습니다. 원문을 확인해 주세요.'}
+              </p>
+              {!review.analysis.analyzeOnSubmit && revision.lookupStatus === 'loading'
+                ? <p>AI 수정안의 최신 상태를 확인하고 있습니다.</p> : null}
+              {!review.analysis.analyzeOnSubmit && revision.lookupStatus === 'error'
+                ? <p>AI 수정안의 현재 상태를 조회하지 못했습니다. 이전에 확인한 결과와 작성한 내용은 유지됩니다.</p> : null}
+              {revision.lookupStatus === 'exhausted' ? <p>자동 조회가 종료되었습니다. 수정안 생성 실패를 의미하지는 않습니다.</p> : null}
+              {hasAiDraft && review.analysis.revisionStatus && review.analysis.revisionStatus !== 'COMPLETED'
+                ? <p>편집기에 남아 있는 문장은 이전에 확인하거나 수정한 내용입니다.</p> : null}
+              {isServer && draft.server?.analysisId && !review.analysis.analyzeOnSubmit && (
+                revision.lookupStatus === 'error' || revision.lookupStatus === 'exhausted' ||
+                review.analysis.revisionStatus === 'UNAVAILABLE' || review.analysis.revisionStatus === 'NOT_REQUESTED'
+              ) ? <Button disabled={isSending || revision.lookupStatus === 'loading' || revision.lookupStatus === 'polling'}
+                onClick={revision.retry} size="sm" variant="outline">수정안 다시 확인</Button> : null}
             </div>
-          ) : review.source === 'AI' && review.analysis.meaningWarning ? (
+          ) : null}
+          {review.source === 'AI' && review.analysis.meaningWarning ? (
             <p className="parent-review-meaning-notice" role="note">{review.analysis.meaningWarning}</p>
           ) : null}
+          {storageSyncFailed ? <p className="parent-review-analysis-notice" role="alert">
+            최신 검토 내용을 이 기기에 저장하지 못했습니다. 작성한 내용은 화면에 유지됩니다. 새로고침 전에 임시저장을 다시 시도해 주세요.
+          </p> : null}
         </section>
 
         {isServer && draft.server?.analysisId && !review.analysis.analyzeOnSubmit

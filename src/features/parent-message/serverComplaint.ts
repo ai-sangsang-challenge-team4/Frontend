@@ -248,8 +248,8 @@ export async function analyzeServerDraft(
     // The analysis is stored, so the parent can still send; only the suggestions are missing.
     return { server, analysis: {
       ...failedAnalysis, ...metadata,
-      // A failed first findings request must not lose a known background revision job.
-      ...(summary.revisionStatus === 'PENDING' ? { revisionStatus: summary.revisionStatus } : {}),
+      // A lookup failure says nothing about generation; preserve the server's known status.
+      ...(summary.revisionStatus ? { revisionStatus: summary.revisionStatus } : {}),
     } };
   }
 }

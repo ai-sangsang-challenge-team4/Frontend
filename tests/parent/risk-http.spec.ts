@@ -296,11 +296,11 @@ test('긴 위험 표현과 여러 아코디언은 모바일에서도 줄바꿈�
   await page.screenshot({ path: testInfo.outputPath('review-long-expressions.png'), fullPage: true });
 });
 
-test('findings 실패와 준비 중에는 완료 표시를 숨기고 이미 받은 긴급 경고는 유지한다', async ({ page }) => {
+test('findings 조회 실패는 완료된 위험 분석과 긴급 경고를 변경하지 않는다', async ({ page }) => {
   await setup(page, { summary: { aiAnalysisStatus: 'COMPLETED', riskLevel: 'EMERGENCY' } });
   await page.route('**/risk-analyses/7/findings', (route) => route.fulfill({ status: 500, json: { code: 'INTERNAL_SERVER_ERROR' } }));
   await analyze(page);
-  await expect(page.locator('.parent-review-analysis-header').getByRole('status')).toHaveText('분석 실패');
+  await expect(page.locator('.parent-review-analysis-header').getByRole('status')).toHaveText('분석 완료');
   await expect(page.getByText('분석 결과 일부를 불러오지 못했습니다. 아래는 이미 확인된 위험 정보입니다.', { exact: true })).toBeVisible();
   await expect(page.getByText('AI 분석 완료', { exact: true })).toHaveCount(0);
   await expect(page.locator('.parent-review-risk-notice')).toContainText('긴급');
@@ -368,7 +368,7 @@ test('비동기 수정안이 도착해도 원문에서 작성한 내용과 선�
   } }));
   await analyze(page);
   await expect(page.getByText('AI 수정안을 준비하고 있습니다.', { exact: false })).toBeVisible();
-  await expect(page.locator('.parent-review-analysis-header').getByRole('status')).toHaveText('분석 중');
+  await expect(page.locator('.parent-review-analysis-header').getByRole('status')).toHaveText('분석 완료');
   await expect(page.getByRole('tab', { name: 'AI 초안', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: '직접 수정', exact: true }).click();
   const original = page.getByLabel('직접 수정한 문의 내용', { exact: true });
@@ -380,6 +380,218 @@ test('비동기 수정안이 도착해도 원문에서 작성한 내용과 선�
   await expect(original).toHaveValue('원문을 확인하며 직접 작성한 문장입니다.');
   await page.getByRole('tab', { name: 'AI 초안', exact: true }).click();
   await expect(page.getByLabel('AI 초안 내용', { exact: true })).toHaveValue('늦게 준비된 AI 수정안입니다.');
+  await page.reload();
+  await expect(page.getByRole('tab', { name: 'AI 초안', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByLabel('AI 초안 내용', { exact: true })).toHaveValue('늦게 준비된 AI 수정안입니다.');
+  await page.getByRole('tab', { name: '원문', exact: true }).click();
+  await expect(original).toHaveValue('원문을 확인하며 직접 작성한 문장입니다.');
+});
+
+for (const [status, message] of [
+  ['PENDING', 'AI 수정안을 준비하고 있습니다.'],
+  ['COMPLETED', 'AI 수정안이 준비되었습니다.'],
+  ['UNAVAILABLE', 'AI 수정안을 제공하지 못했습니다.'],
+  ['NOT_REQUESTED', '이번 분석에서는 AI 수정안을 생성하지 않았습니다.'],
+] as const) {
+  test(`수정안 상태 ${status}와 완료된 위험 분석을 별도로 표시한다`, async ({ page }) => {
+    const calls = await setup(page, { summary: { aiAnalysisStatus: 'COMPLETED' }, findingsResponse: {
+      revisionStatus: status,
+      // Non-completed responses must not revive stale output even if it is present in the payload.
+      finalRevision: { content: '서버 수정안입니다.', reason: '요청 정리' },
+    } });
+    await analyze(page);
+    await expect(page.getByRole('status', { name: 'AI 수정안 상태' })).toContainText(message);
+    await expect(page.locator('.parent-review-analysis-header').getByRole('status')).toHaveText('분석 완료');
+    await expect(page.getByRole('tab', { name: 'AI 초안', exact: true })).toBeEnabled({ enabled: status === 'COMPLETED' });
+    await expect.poll(() => calls.filter((call) => call === 'GET /risk-analyses/7/findings').length).toBeGreaterThanOrEqual(2);
+    expect(calls.filter((call) => call === 'POST /complaints/42/risk-analysis')).toHaveLength(1);
+  });
+}
+
+for (const initialStatus of ['PENDING', 'UNAVAILABLE', 'NOT_REQUESTED', 'COMPLETED', undefined] as const) {
+  test(`저장된 ${initialStatus ?? '상태 없음'} 수정안을 재진입 시 조회하고 원문 편집과 선택을 보존한다`, async ({ page }) => {
+    const findings: Partial<RiskRevisionResponse> = {
+      revisionStatus: initialStatus,
+      finalRevision: initialStatus === 'COMPLETED' ? { content: '이전에 받은 수정안입니다.', reason: '이전 이유' } : null,
+    };
+    const calls = await setup(page, { findingsResponse: findings, summary: { aiAnalysisStatus: 'COMPLETED' } });
+    await analyze(page);
+    const reviewUrl = page.url();
+    await expect.poll(() => calls.filter((call) => call === 'GET /risk-analyses/7/findings').length).toBeGreaterThanOrEqual(2);
+    await page.getByRole('tab', { name: '원문', exact: true }).click();
+    await page.getByRole('button', { name: '직접 수정', exact: true }).click();
+    await page.getByLabel('직접 수정한 문의 내용', { exact: true }).fill('사용자가 보존하려는 원문 편집입니다.');
+    await page.getByRole('button', { name: '문의 작성으로 돌아가기', exact: true }).click();
+    findings.revisionStatus = 'COMPLETED';
+    findings.finalRevision = { content: '재진입하여 받은 최신 수정안입니다.', reason: '최신 이유' };
+    await page.goto(reviewUrl);
+    await expect(page.getByRole('status', { name: 'AI 수정안 상태' })).toContainText('AI 수정안이 준비되었습니다.');
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('teacher-hub.parent-message-draft.101')!).review.analysis.revisedText))
+      .toBe(findings.finalRevision.content);
+    await expect(page.getByRole('tab', { name: '원문', exact: true })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByLabel('직접 수정한 문의 내용', { exact: true })).toHaveValue('사용자가 보존하려는 원문 편집입니다.');
+    await page.getByRole('tab', { name: 'AI 초안', exact: true }).click();
+    await expect(page.getByLabel('AI 초안 내용', { exact: true })).toHaveValue(findings.finalRevision.content);
+    expect(calls.filter((call) => call.includes('risk-analysis') && call.startsWith('POST'))).toHaveLength(1);
+  });
+}
+
+test('PENDING 자동 조회 15회 종료는 실패가 아니며 수동 확인은 같은 분석만 조회한다', async ({ page }) => {
+  const findings: Partial<RiskRevisionResponse> = { revisionStatus: 'PENDING', finalRevision: null };
+  const calls = await setup(page, { findingsResponse: findings, summary: { aiAnalysisStatus: 'COMPLETED' } });
+  await page.clock.install({ time: new Date('2026-11-23T00:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-11-23T00:00:01Z'));
+  await analyze(page);
+  const lookupCount = () => calls.filter((call) => call === 'GET /risk-analyses/7/findings').length;
+  await expect.poll(lookupCount).toBeGreaterThanOrEqual(2);
+  await expect(page.getByText('AI 수정안의 최신 상태를 확인하고 있습니다.', { exact: true })).toHaveCount(0);
+  // StrictMode may start and abort an extra entry lookup; count the 14 scheduled polls separately.
+  const entryLookups = lookupCount();
+  for (let poll = 0; poll < 14; poll += 1) {
+    const evidence = `자동 조회 ${poll + 1}의 위험 근거`;
+    findings.findings = [{ code: 'THREAT', evidences: [evidence], revisionSuggestions: [] }];
+    await page.clock.runFor(2100);
+    await expect.poll(lookupCount).toBe(entryLookups + poll + 1);
+    // Wait for JSON conversion/state persistence before advancing the next response-relative timer.
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('teacher-hub.parent-message-draft.101')!).review.analysis.risks[0]?.excerpt))
+      .toBe(evidence);
+  }
+  const notice = page.getByRole('status', { name: 'AI 수정안 상태' });
+  await expect(notice).toContainText('마지막 확인 시 AI 수정안을 생성 중이었습니다.');
+  await expect(notice).toContainText('자동 조회가 종료되었습니다.');
+  await expect(notice).not.toContainText('제공하지 못했습니다');
+  await expect(page.locator('.parent-review-analysis-header').getByRole('status')).toHaveText('분석 완료');
+  await page.clock.runFor(20_000);
+  expect(lookupCount()).toBe(entryLookups + 14);
+  findings.revisionStatus = 'COMPLETED';
+  findings.finalRevision = { content: '자동 조회 종료 후 완성된 수정안입니다.', reason: '완료' };
+  await page.getByRole('button', { name: '수정안 다시 확인', exact: true }).click();
+  await expect(notice).toContainText('AI 수정안이 준비되었습니다.');
+  await expect(notice).not.toContainText('자동 조회가 종료되었습니다.');
+  expect(lookupCount()).toBe(entryLookups + 15);
+  expect(calls.filter((call) => call.includes('risk-analysis') && call.startsWith('POST'))).toHaveLength(1);
+});
+
+test('COMPLETED 분석의 최초 findings 조회 실패도 재분석 없이 복구한다', async ({ page }) => {
+  const calls = await setup(page, { summary: { revisionStatus: 'COMPLETED', aiAnalysisStatus: 'COMPLETED' },
+    findingsResponse: { revisionStatus: 'COMPLETED' } });
+  let failing = true;
+  await page.route('**/risk-analyses/7/findings', (route) => failing
+    ? route.fulfill({ status: 503, json: { code: 'INTERNAL_SERVER_ERROR' } }) : route.fallback());
+  await analyze(page);
+  const notice = page.getByRole('status', { name: 'AI 수정안 상태' });
+  await expect(notice).toContainText('AI 수정안 생성은 완료되었지만 수정안 내용을 불러오지 못했습니다.');
+  await expect(notice).toContainText('현재 상태를 조회하지 못했습니다.');
+  await expect(page.locator('.parent-review-analysis-header').getByRole('status')).toHaveText('분석 완료');
+  failing = false;
+  await page.getByRole('button', { name: '수정안 다시 확인', exact: true }).click();
+  await expect(notice).toContainText('AI 수정안이 준비되었습니다.');
+  await expect(notice).not.toContainText('조회하지 못했습니다');
+  await expect(page.getByRole('tab', { name: 'AI 초안', exact: true })).toBeEnabled();
+  expect(calls.filter((call) => call.includes('risk-analysis') && call.startsWith('POST'))).toHaveLength(1);
+});
+
+for (const edited of ['직접 편집한 AI 문장입니다.', '']) {
+  test(`재조회 실패와 늦은 완료 후에도 AI 편집${edited ? ' 문장' : '기의 빈 내용'}과 선택을 보존한다`, async ({ page }) => {
+    const findings: Partial<RiskRevisionResponse> = { revisionStatus: 'COMPLETED' };
+    const calls = await setup(page, { finding: true, findingsResponse: findings, summary: { aiAnalysisStatus: 'COMPLETED' } });
+    await analyze(page);
+    const editor = page.getByLabel('AI 초안 내용', { exact: true });
+    await expect(editor).toBeVisible();
+    await editor.fill(edited);
+    await page.getByRole('tab', { name: '원문', exact: true }).click();
+    await expect(page.getByRole('tab', { name: 'AI 초안', exact: true })).toBeEnabled();
+    await page.getByRole('tab', { name: 'AI 초안', exact: true }).click();
+    await expect(editor).toHaveValue(edited);
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('teacher-hub.parent-message-draft.101')!).review.aiText)).toBe(edited);
+    let failing = true;
+    await page.route('**/risk-analyses/7/findings', (route) => failing ? route.abort('failed') : route.fallback());
+    await page.reload();
+    const notice = page.getByRole('status', { name: 'AI 수정안 상태' });
+    await expect(notice).toContainText('현재 상태를 조회하지 못했습니다.');
+    await expect(editor).toHaveValue(edited);
+    await expect(page.getByRole('tab', { name: 'AI 초안', exact: true })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('.parent-review-analysis-header').getByRole('status')).toHaveText('분석 완료');
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('teacher-hub.parent-message-draft.101')!).review.analysis.risks.length)).toBe(1);
+    failing = false;
+    findings.finalRevision = { content: '서버에서 새로 확인한 수정안입니다.', reason: '최신 이유' };
+    await page.getByRole('button', { name: '수정안 다시 확인', exact: true }).click();
+    await expect(notice).not.toContainText('조회하지 못했습니다');
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('teacher-hub.parent-message-draft.101')!).review.analysis.revisedText)).toBe(findings.finalRevision.content);
+    await expect(editor).toHaveValue(edited);
+    await page.reload();
+    await expect(editor).toHaveValue(edited);
+    await expect(page.getByRole('tab', { name: 'AI 초안', exact: true })).toHaveAttribute('aria-selected', 'true');
+    expect(calls.filter((call) => call.includes('risk-analysis') && call.startsWith('POST'))).toHaveLength(1);
+  });
+}
+
+test('재조회한 UNAVAILABLE을 숨기지 않고 기존 AI 편집 문장을 보존한다', async ({ page }) => {
+  const findings: Partial<RiskRevisionResponse> = { revisionStatus: 'COMPLETED' };
+  await setup(page, { findingsResponse: findings });
+  await analyze(page);
+  await page.getByLabel('AI 초안 내용', { exact: true }).fill('이미 편집한 문장입니다.');
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('teacher-hub.parent-message-draft.101')!).review.aiText)).toBe('이미 편집한 문장입니다.');
+  findings.revisionStatus = 'UNAVAILABLE';
+  findings.finalRevision = null;
+  await page.reload();
+  const notice = page.getByRole('status', { name: 'AI 수정안 상태' });
+  await expect(notice).toContainText('AI 수정안을 제공하지 못했습니다.');
+  await expect(notice).toContainText('이전에 확인하거나 수정한 내용입니다.');
+  await expect(page.getByLabel('AI 초안 내용', { exact: true })).toHaveValue('이미 편집한 문장입니다.');
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('teacher-hub.parent-message-draft.101')!).review.analysis.revisionStatus)).toBe('UNAVAILABLE');
+  await page.reload();
+  await expect(notice).toContainText('AI 수정안을 제공하지 못했습니다.');
+  await expect(page.getByLabel('AI 초안 내용', { exact: true })).toHaveValue('이미 편집한 문장입니다.');
+});
+
+test('진입 조회 응답을 기다리는 동안 입력한 AI 문장을 늦은 응답이 덮어쓰지 않는다', async ({ page }) => {
+  await setup(page, { findingsResponse: { revisionStatus: 'COMPLETED' } });
+  await analyze(page);
+  await expect(page.getByText('AI 수정안의 최신 상태를 확인하고 있습니다.', { exact: true })).toHaveCount(0);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route('**/risk-analyses/7/findings', async (route) => {
+    await gate;
+    await route.fulfill({ json: { revisionStatus: 'COMPLETED', findings: [],
+      finalRevision: { content: '늦게 조회된 서버 수정안입니다.', reason: '최신 결과' } } });
+  });
+  try {
+    await page.reload();
+    await expect(page.getByText('AI 수정안의 최신 상태를 확인하고 있습니다.', { exact: true })).toBeVisible();
+    const editor = page.getByLabel('AI 초안 내용', { exact: true });
+    await editor.fill('조회 응답을 기다리며 입력한 문장입니다.');
+    release();
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('teacher-hub.parent-message-draft.101')!).review.analysis.revisedText))
+      .toBe('늦게 조회된 서버 수정안입니다.');
+    await expect(editor).toHaveValue('조회 응답을 기다리며 입력한 문장입니다.');
+  } finally {
+    release();
+  }
+});
+
+test('수정안 자동 저장 실패를 알리고 화면의 편집 내용을 임시저장으로 복구한다', async ({ page }) => {
+  await setup(page, { findingsResponse: { revisionStatus: 'COMPLETED' } });
+  await analyze(page);
+  await page.evaluate(() => {
+    const original = Storage.prototype.setItem;
+    window.addEventListener('restore-draft-storage', () => { Storage.prototype.setItem = original; }, { once: true });
+    Storage.prototype.setItem = function (key, value) {
+      if (key.startsWith('teacher-hub.parent-message-draft.')) {
+        throw new DOMException('Synthetic quota failure', 'QuotaExceededError');
+      }
+      original.call(this, key, value);
+    };
+  });
+  const editor = page.getByLabel('AI 초안 내용', { exact: true });
+  await editor.fill('저장 실패 후에도 보존할 문장입니다.');
+  await expect(page.getByRole('alert')).toContainText('최신 검토 내용을 이 기기에 저장하지 못했습니다.');
+  await expect(editor).toHaveValue('저장 실패 후에도 보존할 문장입니다.');
+  await page.evaluate(() => window.dispatchEvent(new Event('restore-draft-storage')));
+  await page.getByRole('button', { name: '임시저장', exact: true }).click();
+  await expect(page.getByText('최신 검토 내용을 이 기기에 저장하지 못했습니다.', { exact: false })).toHaveCount(0);
+  await page.reload();
+  await expect(editor).toHaveValue('저장 실패 후에도 보존할 문장입니다.');
 });
 
 for (const firstLookupFails of [false, true]) {
