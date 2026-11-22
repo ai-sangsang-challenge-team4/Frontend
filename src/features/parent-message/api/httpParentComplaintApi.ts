@@ -16,6 +16,9 @@ import type {
   ParentConversationResponse,
 } from './parentComplaintTypes';
 
+// AI analysis can take longer than the shared API client's default timeout.
+const AI_ANALYSIS_TIMEOUT_MS = 60_000;
+
 // Paths follow the backend ParentComplaintController, RiskAnalysisController, and UserController (/users/me).
 export const httpParentComplaintApi: ParentComplaintApi = {
   listComplaints: (query = {}, signal) =>
@@ -49,7 +52,7 @@ export const httpParentComplaintApi: ParentComplaintApi = {
     apiClient.patch<ComplaintMessageResponse>(`/complaints/${complaintId}`, request, { signal }),
 
   analyze: (complaintId, signal) =>
-    apiClient.post<RiskSummaryResponse>(`/complaints/${complaintId}/risk-analysis`, undefined, { signal }),
+    apiClient.post<RiskSummaryResponse>(`/complaints/${complaintId}/risk-analysis`, undefined, { signal, timeoutMs: AI_ANALYSIS_TIMEOUT_MS }),
 
   getFindings: (analysisId, signal) =>
     apiClient.get<RiskRevisionResponse>(`/risk-analyses/${analysisId}/findings`, { signal }),
@@ -79,7 +82,7 @@ export const httpParentComplaintApi: ParentComplaintApi = {
   },
 
   analyzeFollowUp: (complaintId, messageId, signal) =>
-    apiClient.post<RiskSummaryResponse>(`/complaints/${complaintId}/messages/${messageId}/risk-analysis`, undefined, { signal }),
+    apiClient.post<RiskSummaryResponse>(`/complaints/${complaintId}/messages/${messageId}/risk-analysis`, undefined, { signal, timeoutMs: AI_ANALYSIS_TIMEOUT_MS }),
 
   submitFollowUp: (complaintId, messageId, request, signal) =>
     apiClient.post<ParentFollowUpResponse>(`/complaints/${complaintId}/messages/${messageId}/send`, request, { signal }),

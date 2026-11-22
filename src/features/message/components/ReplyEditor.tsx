@@ -39,6 +39,7 @@ type ReplyEditorProps = {
   showAssistButton: boolean;
   stageNotice: string;
   failureNotice?: string;
+  legalCitationWarning?: boolean;
   submitDisabled: boolean;
   templateEditor?: ReactNode;
 };
@@ -71,11 +72,13 @@ export function ReplyEditor({
   showAssistButton,
   stageNotice,
   failureNotice,
+  legalCitationWarning = false,
   submitDisabled,
   templateEditor,
 }: ReplyEditorProps) {
   const failureNoticeId = `${aiNoticeId}-failure`;
-  const replyTextareaDescription = [stageNotice ? aiNoticeId : undefined, failureNotice ? failureNoticeId : undefined]
+  const citationNoticeId = `${aiNoticeId}-citation`;
+  const replyTextareaDescription = [stageNotice ? aiNoticeId : undefined, failureNotice ? failureNoticeId : undefined, legalCitationWarning ? citationNoticeId : undefined]
     .filter(Boolean)
     .join(' ');
 
@@ -128,7 +131,11 @@ export function ReplyEditor({
         onValueChange={(value) => onDraftTabChange(value as ReplyDraftTab)}
         value={activeDraftTab}
       />
-      {stageNotice || failureNotice ? <div className="board-reply-notices">
+      {stageNotice || failureNotice || legalCitationWarning ? <div className="board-reply-notices">
+        {legalCitationWarning ? <p className="board-reply-ai-note" id={citationNoticeId} role="status">
+          <Info size={16} aria-hidden="true" />
+          <span>AI 초안의 법령 인용을 확인해 주세요. 참고자료와 대조하여 정확성을 검토한 후 전송해 주세요.</span>
+        </p> : null}
         {stageNotice ? <p className="board-reply-ai-note" id={aiNoticeId}>
           <Info size={16} aria-hidden="true" />
           <span>{stageNotice}</span>

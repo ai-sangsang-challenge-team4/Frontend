@@ -150,13 +150,46 @@ export type TeacherResponseRequest = {
 
 export const TEACHER_RESPONSE_MAX_LENGTH = 1500;
 
+// A passage retrieved for a generated AI draft; the source document may have no page metadata.
+export type TeacherRagReference = {
+  source: string;
+  page: number | null;
+  content: string;
+};
+
+// Backend MediationPackageResponse / MediationPackageContent (schema v1).
+export type MediationPackageContent = {
+  schemaVersion: number;
+  packageId: string;
+  generatedAt: string;
+  complaint: { complaintId: number; status: string };
+  originalMessagesIncluded: boolean;
+  messages: { messageId: number; senderRole: string; sentAt: string | null; maskedContent: string | null; originalContent: string | null }[];
+  analyses: { analysisId: number; riskScore: number; riskLevel: string; analyzedAt: string | null; riskTags: { code: string; name: string; state: string; evidence: string | null; reason: string | null }[] }[];
+  responseHistory: { logComplete: boolean; missingLogs: { description: string }[]; events: { eventId: string; type: string; occurredAt: string; reason: string | null }[] };
+};
+
+export type MediationPackageResponse = {
+  packageId: string;
+  complaintId: number;
+  schemaVersion: number;
+  originalMessagesIncluded: boolean;
+  checksumSha256: string;
+  createdAt: string;
+  content: MediationPackageContent;
+};
+
+export type MediationPackageMetadata = Omit<MediationPackageResponse, 'content'>;
+
 // POST /teacher/complaints/{complaintId}/response/ai-draft. Not stored as a draft; the server records
-// an AI_DRAFT_GENERATED event. The generator is still a mock.
+// an AI_DRAFT_GENERATED event.
 export type TeacherAiDraftResponse = {
   complaintId: number;
   content: string;
   modelName: string;
   generatedAt: string;
+  legalCitationWarning?: boolean;
+  references?: TeacherRagReference[] | null;
 };
 
 // GET and PUT /teacher/complaints/{complaintId}/response-draft. GET answers 404 RESPONSE_DRAFT_NOT_FOUND

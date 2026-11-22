@@ -8,6 +8,6 @@ export const messageApiMode: 'mock' | 'http' =
 
 export const teacherInboxApi = httpTeacherInboxApi;
 
-export { httpTeacherInboxApi } from './httpTeacherInboxApi';
+export { httpTeacherInboxApi, MediationPackageUnconfirmedError } from './httpTeacherInboxApi';
 export type { TeacherInboxApi } from './teacherInboxApiContract';
 export * from './teacherInboxTypes';

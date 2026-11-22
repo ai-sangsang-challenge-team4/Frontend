@@ -17,6 +17,7 @@ export type EscalationScope = 'MASKING_MESSAGES' | 'ORIGINAL_MESSAGES' | 'MEDIAT
 
 // HistoryEvent.type. ESCALATION_RISK_CHANGE_* are deprecated on the backend but kept for past events.
 export type HistoryEventType =
+  | 'MEDIATION_PACKAGE_CREATED'
   | 'STATUS_CHANGED'
   | 'RISK_ANALYZED'
   | 'AI_ANALYSIS_SKIPPED'

@@ -26,7 +26,7 @@ import type {
 } from './types';
 
 // Converts the backend teacher complaint responses into the inbox's BoardThread model.
-// Fields the backend has no data for (student safety signal, AI objections, evidence package, pin, per-tab
+// Fields the backend has no data for (student safety signal, AI objections, pin, per-tab
 // reply drafts) keep their local defaults and stay browser-local. The single server draft is in serverReplies.ts.
 
 // Backend tag codes and the inbox's classification codes describe the same eight risks.

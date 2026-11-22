@@ -12,11 +12,15 @@ import type {
   TeacherResponseDraftResponse,
   TeacherResponseRequest,
   TeacherResponseSubmissionResponse,
+  MediationPackageResponse,
 } from './teacherInboxTypes';
 
 // The teacher inbox (list, detail, conversation, risk, history, original), the teacher's reply and High
 // templates.
 export type TeacherInboxApi = {
+  createMediationPackage: (complaintId: number, includeOriginalMessages: boolean) => Promise<MediationPackageResponse>;
+  getMediationPackage: (complaintId: number, packageId: string) => Promise<MediationPackageResponse>;
+  downloadMediationPackage: (complaintId: number, packageId: string) => Promise<Blob>;
   listComplaints: (query?: ComplaintListQuery, signal?: AbortSignal) => Promise<ComplaintPageResponse>;
   getComplaint: (complaintId: number, signal?: AbortSignal) => Promise<TeacherComplaintDetailResponse>;
   getConversation: (complaintId: number, signal?: AbortSignal) => Promise<TeacherConversationResponse>;

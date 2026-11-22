@@ -53,6 +53,7 @@ export const riskReviewStatusChip: Record<RiskReviewStatus, StatusChipStatus> = 
 };
 
 export const historyEventLabel: Record<HistoryEventType, string> = {
+  MEDIATION_PACKAGE_CREATED: '증빙 패키지 생성',
   STATUS_CHANGED: '민원 상태 변경',
   RISK_ANALYZED: '위험 분석',
   AI_ANALYSIS_SKIPPED: 'AI 분석 생략',
