@@ -1,16 +1,18 @@
-import { CalendarDays, Info, Pencil } from 'lucide-react';
-import { useCallback, useRef, useState } from 'react';
+import { CalendarDays, ChevronUp, Info, Pencil } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import completeIllustration from '../../shared/assets/parent/message-analysis.svg';
 import { ProfileAvatar } from '../message/components/ProfileAvatar';
 import { mockConnectedTeachers, updateSentMessage } from './messageDraft';
 import { Button, EmptyState, MessageText, StatusChip, Toast } from '../../shared/components/ui';
-import { applyServerComplaintState, canWriteAdditionalInquiry, compareMessageTimes, consultationChips, formatMessageDate, getConversation } from './conversation';
+import { applyServerComplaintState, canWriteAdditionalInquiry, consultationChips, formatMessageDate, getConversation } from './conversation';
 import { ParentMessageHeader } from './ParentMessageHeader';
+import { ParentMessageComposer } from './ParentMessageComposer';
 import { useParentMessages } from './useParentMessages';
-import { complaintIdFromThreadId, syncServerConversation } from './serverHistory';
+import { complaintIdFromThreadId, prepareServerFollowUp, syncServerConversation } from './serverHistory';
 import { useServerHistorySync } from './useServerHistorySync';
-import { getApiErrorMessage, isApiError } from '../../shared/api';
+import { getApiErrorMessage, isApiError, useApiRequest } from '../../shared/api';
+import { ApiErrorFallback, LoadingState } from '../../shared/components/feedback';
 import { parentComplaintApi } from './api/parentComplaintApi';
 import './ParentMessageHistory.css';
 import './ParentMessageReceipt.css';
@@ -20,6 +22,19 @@ export function ParentMessageReceipt({ userId, messageId }: { userId: number; me
   const navigate = useNavigate();
   const location = useLocation();
   const justSent = location.state?.justSent === true;
+  const followUpOpen = location.state?.followUpOpen === true;
+  const restoreFollowUpFocus = useRef(false);
+  const conversationRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!followUpOpen && restoreFollowUpFocus.current) {
+      (document.getElementById('parent-follow-up-trigger') ?? conversationRef.current)?.focus();
+      restoreFollowUpFocus.current = false;
+    }
+  }, [followUpOpen]);
+  function setFollowUpOpen(open: boolean) {
+    restoreFollowUpFocus.current = !open;
+    navigate(location.pathname, { replace: true, state: { ...location.state, followUpOpen: open } });
+  }
   const { messages, error, refresh } = useParentMessages(userId);
   const message = messages.find((item) => item.messageId === messageId);
   // Loads the conversation with the teacher's replies; a link to an inquiry not stored here yet carries its ID.
@@ -27,11 +42,6 @@ export function ParentMessageReceipt({ userId, messageId }: { userId: number; me
   const conversation = message ? getConversation(message) : [];
   const latest = conversation[conversation.length - 1];
   const teacherClassName = mockConnectedTeachers.find((teacher) => teacher.value === message?.teacherId)?.className;
-  const latestTeacherReply = conversation.filter((entry) => entry.authorRole === 'teacher').at(-1);
-  const isAcknowledged = Boolean(message?.parentAcknowledgedAt && latestTeacherReply &&
-    compareMessageTimes(message.parentAcknowledgedAt, latestTeacherReply.sentAt) >= 0);
-  const acknowledgeHint = !latestTeacherReply ? '선생님 답변이 도착하면 확인할 수 있어요.'
-    : isAcknowledged ? '이 답변은 확인을 마쳤어요.' : null;
   const [notice, setNotice] = useState<string | null>(null);
   const [isClosing, setIsClosing] = useState(false);
   const closing = useRef(false);
@@ -44,17 +54,8 @@ export function ParentMessageReceipt({ userId, messageId }: { userId: number; me
   const canFollowUp = !sync.enabled || (serverActionsReady &&
     canWriteAdditionalInquiry(message?.serverComplaintStatus, message?.serverWaitingFor));
 
-  // Records acknowledgement for browser-local conversations.
-  function handleAcknowledge() {
-    try {
-      updateSentMessage(userId, messageId, (current) => ({ ...current, parentAcknowledgedAt: new Date().toISOString() }));
-    } catch {
-      setNotice('확인 여부를 저장하지 못했습니다. 다시 시도해 주세요.');
-    }
-  }
-
   async function handleClose() {
-    if (!message || !canClose || closing.current) return;
+    if (!message || !canClose || closing.current || followUpOpen) return;
     closing.current = true;
     setIsClosing(true);
     const complaintId = sync.enabled ? message.serverComplaintId : undefined;
@@ -132,7 +133,7 @@ export function ParentMessageReceipt({ userId, messageId }: { userId: number; me
         <div className="parent-conversation-notice"><Info aria-hidden="true" size={24} /><p>{isWaitingForTeacher
           ? '선생님의 답변을 기다리고 있어요. 답변이 도착하면 이 문의에서 추가 질문을 작성할 수 있습니다.'
           : '같은 내용에 대한 추가 질문은 이 문의에서 이어서 작성할 수 있습니다. 다른 내용은 새 문의로 작성해 주세요.'}</p></div>
-        <section aria-label="전체 대화 내역" className="parent-conversation">
+        <section aria-label="전체 대화 내역" className="parent-conversation" ref={conversationRef} tabIndex={-1}>
           <ol className="parent-conversation-messages">
             {conversation.map((entry, index) => {
               const date = formatMessageDate(entry.sentAt, false);
@@ -152,23 +153,44 @@ export function ParentMessageReceipt({ userId, messageId }: { userId: number; me
           </ol>
           <div className="parent-conversation-actions">
             <div className="parent-conversation-primary-actions">
-              {!sync.enabled && acknowledgeHint ? <p className="parent-acknowledge-hint" id="parent-acknowledge-hint">{acknowledgeHint}</p> : null}
               <div className="parent-conversation-action-buttons">
-                {!sync.enabled ? <Button aria-describedby={acknowledgeHint ? 'parent-acknowledge-hint' : undefined}
-                  disabled={!latestTeacherReply || isAcknowledged} onClick={handleAcknowledge} variant="outline">
-                  {isAcknowledged ? '확인 완료' : '확인했어요.'}
-                </Button> : null}
-                {canClose ? <Button disabled={isClosing} onClick={() => void handleClose()} variant="outline">{isClosing ? '완료 처리 중…' : '문의 완료'}</Button> : null}
-                {canFollowUp ? <Button disabled={isClosing} leftIcon={<Pencil size={20} />} onClick={() => navigate(`/parent/messages/${encodeURIComponent(messageId)}/follow-up`)}>추가 문의하기</Button> : null}
+                {canClose ? <Button disabled={isClosing || followUpOpen} title={followUpOpen ? '추가 문의를 저장하고 접은 뒤 완료할 수 있어요.' : undefined} onClick={() => void handleClose()} variant="outline">{isClosing ? '완료 처리 중…' : '문의 완료'}</Button> : null}
+                {canFollowUp && !followUpOpen ? <Button id="parent-follow-up-trigger" disabled={isClosing} aria-controls="parent-inline-follow-up" aria-expanded={false} leftIcon={<Pencil size={20} />} onClick={() => setFollowUpOpen(true)}>추가 문의하기</Button> : null}
               </div>
             </div>
-            <p>다른 내용으로 문의를 원하시나요? <Link to="/parent/messages/new?fresh=1">새 문의 작성</Link></p>
+            <div id="parent-inline-follow-up" hidden={!followUpOpen}>
+              {followUpOpen ? <InlineFollowUp userId={userId} threadId={messageId} server={sync.enabled}
+                draftId={location.state?.followUpDraftId} blocked={!canFollowUp || isClosing}
+                onCollapse={() => setFollowUpOpen(false)} /> : null}
+            </div>
           </div>
         </section>
+        <p className="parent-conversation-new-inquiry">다른 내용으로 문의를 원하시나요? <Link to="/parent/messages/new?fresh=1">새 문의 작성</Link></p>
       </> : sync.isLoading ? <EmptyState title="문의를 불러오고 있습니다." /> : <EmptyState
         title={error ?? (sync.error ? getApiErrorMessage(sync.error, '문의를 불러오지 못했습니다.') : '문의를 찾을 수 없습니다.')}
         action={error ? <Button onClick={refresh}>다시 시도</Button> : sync.error ? <Button onClick={sync.retry}>다시 시도</Button> : <Button onClick={() => navigate('/parent/messages')}>문의 내역</Button>} />}
     </main>
     {notice ? <Toast message={notice} onClose={dismissNotice} /> : null}
   </>;
+}
+
+function InlineFollowUp({ userId, threadId, draftId, server, blocked, onCollapse }: {
+  userId: number; threadId: string; draftId?: string; server: boolean; blocked: boolean; onCollapse: () => void;
+}) {
+  // Keep the legacy write route's fresh server-turn check before reading a draft.
+  const request = useCallback(async (signal: AbortSignal) => server
+    ? prepareServerFollowUp(userId, threadId, signal) : null, [server, userId, threadId]);
+  const { data, error, isLoading, retry } = useApiRequest(request);
+  if (isLoading || error || data?.canWrite === false) return <div className="parent-inline-composer">
+    <div className="parent-inline-composer-heading">
+      <h2>추가 문의 작성</h2>
+      <Button className="parent-inline-composer-collapse" aria-label="추가 문의 입력창 접기"
+        onClick={onCollapse} rightIcon={<ChevronUp size={18} />} variant="ghost">접기</Button>
+    </div>
+    {error ? <ApiErrorFallback error={error} homePath="/parent/messages" onRetry={retry} variant="section" />
+      : isLoading ? <LoadingState message="추가 문의 가능 여부를 확인하고 있어요." />
+        : <p role="status">선생님의 답변을 기다리고 있어요. 답변이 도착하면 추가 문의를 작성할 수 있습니다.</p>}
+  </div>;
+  return <ParentMessageComposer userId={userId} threadId={data?.threadId ?? threadId} draftId={draftId}
+    embedded blocked={blocked} onCollapse={onCollapse} />;
 }

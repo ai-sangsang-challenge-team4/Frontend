@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type ReactNode,
 } from 'react';
 import { useLocation, useNavigate, type NavigateFunction } from 'react-router-dom';
 import { Sidebar } from '../../shared/components/teacher-shell/TeacherSidebar';
@@ -35,7 +36,6 @@ import { canSendEscalationRequest, getCurrentEmergencyReview, getEscalationState
 import { canRequestEmergencyReview, formatEscalationTime, riskReviewStatusLabel } from '../escalation/escalationRules';
 import type { EscalationStateResponse, TeacherRiskReviewResponse } from '../escalation/escalationTypes';
 import { useEscalationRequest } from '../escalation/useEscalationRequest';
-import { AiJudgmentNotice } from '../safety/AiJudgmentNotice';
 import { AdminShareSection } from './components/AdminShareSection';
 import { BoardConfirmDialog } from './components/BoardConfirmDialog';
 import { ConversationDateChip } from './components/ConversationDateChip';
@@ -58,6 +58,7 @@ import { ProfileAvatar } from './components/ProfileAvatar';
 import { ReplyCheckPanel } from './components/ReplyCheckPanel';
 import { ReplyEditor } from './components/ReplyEditor';
 import { RegulationSourceDialog } from './components/RegulationSourceDialog';
+import { DetailSupportDrawer } from './components/DetailSupportDrawer';
 import { TemplateReplyEditor } from './components/TemplateReplyEditor';
 import { RiskFactorDetail, RiskFactorTitle } from './components/RiskFactorDisplay';
 import {
@@ -92,6 +93,7 @@ import {
 import { formatRegulationSource, searchRegulations, type RegulationSource } from './replyReferences';
 import { getReplyDraftTab, hasReplyDraft, selectReplyDraft } from './replyDrafts';
 import { formatConversationDate, formatConversationTime } from './messageDates';
+import { continuesReplyGroup } from './conversationGrouping';
 import {
   findCautionExpressions,
   changeReplyTemplateDraft,
@@ -1572,6 +1574,7 @@ function isAcknowledgedByParent(thread: BoardThread) {
 }
 
 type DetailProps = {
+  replyComposer?: (headerAction: ReactNode) => ReactNode;
   // Server inbox only: reloads the thread's detail after a failed request.
   onReloadServerDetail?: (threadId: string) => void;
   initialOriginalViewer?: OriginalMessageRequest;
@@ -1592,6 +1595,7 @@ type DetailProps = {
 };
 
 function ThreadDetail({
+  replyComposer,
   onAdminShared,
   onAiObjection,
   initialOriginalViewer,
@@ -1614,6 +1618,11 @@ function ThreadDetail({
     useState<OriginalMessageRequest | null>(initialOriginalViewer ?? null);
   const isLocked = isReplyLocked(thread);
   const effectiveRiskLevel = getThreadRiskLevel(thread);
+  const supportsAnalysisDrawer = effectiveRiskLevel === 'low' || effectiveRiskLevel === 'medium';
+  const [supportThreadId, setSupportThreadId] = useState<string | null>(null);
+  const supportOpen = supportsAnalysisDrawer && supportThreadId === thread.id && !originalViewer;
+  const analysisStatus = getAnalysisStatus(thread);
+  const analysisReady = analysisStatus === 'ready';
   const hasDraft = hasReplyDraft(thread);
   // Server threads: after the reply the turn is the parent's, so there is nothing to write yet.
   const serverReplyBlockReason = getServerReplyBlockReason(thread);
@@ -1654,10 +1663,27 @@ function ThreadDetail({
 
   useEffect(() => {
     activeThreadIdRef.current = thread.id;
+    setSupportThreadId(null);
     setActiveDetailTab(initialTab ?? 'conversation');
     setOriginalRequest(null);
     setOriginalViewer(initialOriginalViewer ?? null);
   }, [initialOriginalViewer, initialTab, thread.id]);
+
+  const openEvidence = () => {
+    if (supportsAnalysisDrawer) setSupportThreadId(thread.id);
+    else setActiveDetailTab('risk');
+  };
+  const analysisEvidenceButton = supportsAnalysisDrawer ? (
+    <Button className="board-analysis-evidence-button" variant="outline" size="md" disabled={!analysisReady} onClick={openEvidence}>AI 분석 근거</Button>
+  ) : null;
+  const aiJudgmentHelp = supportsAnalysisDrawer && !analysisReady ? null : (
+    <div className="board-answer-ai-note">
+      <span>{supportsAnalysisDrawer
+        ? 'AI 분석 결과는 참고용이며, 최종 판단은 교사가 진행합니다.'
+        : 'AI 판단은 참고용입니다'}</span>
+      {analysisReady ? <InformationTooltip label="AI 판단 및 답변 검토 안내" content="AI 분석과 답변 초안은 오류가 있을 수 있는 참고 자료입니다. 최종 판단과 답변 검토·수정·전송은 교사가 직접 수행해야 합니다." /> : null}
+    </div>
+  );
 
   const openOriginalViewer = (evidence?: string, replyId?: string) => {
     if (!canInspectOriginal) {
@@ -1688,7 +1714,7 @@ function ThreadDetail({
   };
 
   return (
-    <section className="board-detail" aria-labelledby="board-detail-title">
+    <section className={`board-detail${supportOpen ? ' has-support-drawer' : ''}`} aria-labelledby="board-detail-title">
       <header className="board-detail-page-header">
         <div className="board-detail-title-group">
           <button
@@ -1761,6 +1787,7 @@ function ThreadDetail({
             key={tab}
             onClick={() => {
               setActiveDetailTab(tab);
+              setSupportThreadId(null);
               setOriginalRequest(null);
               setOriginalViewer(null);
             }}
@@ -1771,7 +1798,7 @@ function ThreadDetail({
         ))}
       </nav>
 
-      <MessageContextCard thread={thread} />
+      <MessageContextCard compact thread={thread} />
       {isAcknowledgedByParent(thread) ? (
         <div className="board-consultation-controls">
           <Badge>학부모 확인</Badge>
@@ -1794,15 +1821,15 @@ function ThreadDetail({
               thread={thread}
             />
           ) : null}
-          <div className="board-info-box">
+          {!supportsAnalysisDrawer ? <div className="board-info-box">
             <span aria-hidden="true">i</span>
             <p>{conversationInfoText}</p>
-          </div>
+          </div> : null}
 
           <div
             className={`board-conversation${
               showBufferedSummaryOnly ? ' is-summary-only' : ''
-            }`}
+            }${replyComposer ? ' is-composing' : ''}`}
             aria-label="게시글 답글 스레드"
           >
         <ConversationDateChip label={initialConversationDate} />
@@ -1811,7 +1838,7 @@ function ThreadDetail({
           <BufferedSummaryCard
             canInspectOriginal={canInspectOriginal}
             onOpenOriginal={() => openOriginalViewer()}
-            onOpenRiskEvidence={() => setActiveDetailTab('risk')}
+            onOpenRiskEvidence={openEvidence}
             summaryText={bufferedSummaryText ?? '완충 요약이 준비되지 않았습니다. 필요한 경우 원문 보기에서 내용을 직접 확인해 주세요.'}
             unavailable={!bufferedSummaryText}
             thread={thread}
@@ -1821,6 +1848,7 @@ function ThreadDetail({
         {visibleConversationReplies.map((reply, index) => {
           const dateLabel = reply.sentAt ? formatConversationDate(reply.sentAt) : initialConversationDate;
           const previousReply = visibleConversationReplies[index - 1];
+          const continuation = !needsMockSummary && continuesReplyGroup(previousReply, reply);
           const previousDateLabel = previousReply?.sentAt
             ? formatConversationDate(previousReply.sentAt)
             : initialConversationDate;
@@ -1833,18 +1861,20 @@ function ThreadDetail({
                 <BufferedSummaryCard
                   canInspectOriginal={canInspectOriginal}
                   onOpenOriginal={() => openOriginalViewer(undefined, reply.id)}
-                  onOpenRiskEvidence={() => setActiveDetailTab('risk')}
+                  onOpenRiskEvidence={openEvidence}
                   sentAt={reply.sentAt}
+                  continuation={continuation}
+                  authorName={reply.authorName}
                   summaryText={reply.content}
                   unavailable={reply.summaryStatus === 'UNAVAILABLE'}
                   thread={thread}
                 />
               ) : (
-                <article className={`board-reply board-reply-${reply.authorRole}`}>
-                  <div className="board-reply-author">
+                <article className={`board-reply board-reply-${reply.authorRole}${continuation ? ' is-continuation' : ''}`}>
+                  {!continuation ? <div className="board-reply-author">
                     <ProfileAvatar className="board-mini-avatar" />
                     <strong>{reply.authorName}</strong>
-                  </div>
+                  </div> : null}
                   <div className="board-reply-row">
                     {reply.authorRole === 'teacher' ? (
                       <div className="board-reply-time">
@@ -1863,7 +1893,7 @@ function ThreadDetail({
             </Fragment>
           );
         })}
-        <div className={`board-answer-box${isLocked ? ' is-locked' : ''}`}>
+        {!replyComposer ? <div className={`board-answer-box${supportsAnalysisDrawer ? ' has-analysis-action' : ''}${isLocked ? ' is-locked' : !serverReplyBlockReason ? ' is-ready' : ''}`}>
           {isLocked ? (
             <>
               <div className="board-lock-message">
@@ -1888,6 +1918,7 @@ function ThreadDetail({
                     ) : null}
                   </div>
                   <p>{lockedGuide.lockDescription}</p>
+                  {supportsAnalysisDrawer && analysisStatus === 'failed' ? <p>AI 분석을 완료하지 못했습니다. 열람 권한에 따라 문의 원문을 확인해 주세요.</p> : null}
                 </div>
               </div>
               <button
@@ -1908,6 +1939,7 @@ function ThreadDetail({
                 </svg>
                 <span>위험도 검토 바로가기</span>
               </button>
+              {analysisEvidenceButton ? <div className="board-conversation-evidence-actions">{analysisEvidenceButton}</div> : null}
             </>
           ) : (
             <>
@@ -1919,30 +1951,41 @@ function ThreadDetail({
                   </>
                 ) : (
                   <>
-                    <strong>답변 작성이 필요합니다.</strong>
-                    <p>
-                      학부모 메시지와 위험 요소를 확인한 뒤 답변 작성 도우미에서
-                      초안을 다듬을 수 있습니다.
-                    </p>
+                    <strong>{supportsAnalysisDrawer ? '답변이 필요한 문의입니다.' : '답변 작성이 필요합니다.'}</strong>
+                    {supportsAnalysisDrawer ? aiJudgmentHelp : null}
                   </>
                 )}
               </div>
-              {serverReplyBlockReason ? null : (
+              {analysisEvidenceButton || !serverReplyBlockReason ? (
                 <div className="board-answer-actions">
-                  <button
-                    className="board-primary-button board-reply-compose-button"
-                    onClick={() => onOpenReplyComposer(thread.id)}
-                    type="button"
-                  >
-                    {hasDraft ? '답변 이어서 작성하기' : '답변 작성하러 가기'}
-                  </button>
+                  {!supportsAnalysisDrawer && !serverReplyBlockReason ? aiJudgmentHelp : null}
+                  <div className="board-answer-button-group">
+                    {analysisEvidenceButton}
+                    {serverReplyBlockReason ? null : (
+                      <Button
+                        className="board-reply-compose-button"
+                        variant="primary"
+                        size="md"
+                        onClick={() => onOpenReplyComposer(thread.id)}
+                        type="button"
+                      >
+                        {hasDraft ? '답변 이어서 작성하기' : '답변 작성'}
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              )}
+              ) : null}
             </>
           )}
-          </div>
+          </div> : null}
           </div>
         </>
+      ) : null}
+
+      {replyComposer ? (
+        <div hidden={Boolean(originalViewer) || activeDetailTab !== 'conversation'}>
+          {replyComposer(analysisEvidenceButton)}
+        </div>
       ) : null}
 
       {!originalViewer && activeDetailTab === 'risk' ? (
@@ -1970,6 +2013,18 @@ function ThreadDetail({
         onConfirm={confirmOriginalViewer}
         open={originalRequest !== null}
       />
+      {supportOpen ? <DetailSupportDrawer title="AI 위험 분석 근거" onClose={() => setSupportThreadId(null)}>
+        {analysisReady && thread.analysis ? <>
+          <p className="board-support-note">AI 분석은 참고 정보입니다. 판단 이유와 근거를 확인한 뒤 직접 판단해 주세요.</p>
+          <RiskClassificationSummary results={thread.analysis.riskClassifications} />
+          <RiskClassificationPanel canInspectOriginal={canInspectOriginal} results={thread.analysis.riskClassifications}
+            onOriginalOpen={(evidence) => { setSupportThreadId(null); openOriginalViewer(evidence); }} />
+          {thread.analysis.riskFactors.some((factor) => factor.status !== 'unknown') ? <Accordion allowMultiple items={thread.analysis.riskFactors.filter((factor) => factor.status !== 'unknown').map((factor) => ({
+            id: `support-${factor.id}`, title: <RiskFactorTitle factor={factor} />,
+            content: <RiskFactorDetail factor={factor} canInspectOriginal={canInspectOriginal} onOriginalOpen={(evidence) => { setSupportThreadId(null); openOriginalViewer(evidence); }} />,
+          }))} /> : <p className="board-risk-factor-note">추가 판단 근거가 제공되지 않았어요.</p>}
+        </> : <AnalysisStateNotice thread={thread} onRetry={onReloadServerDetail ? () => onReloadServerDetail(thread.id) : undefined} />}
+      </DetailSupportDrawer> : null}
     </section>
   );
 }
@@ -2004,7 +2059,7 @@ function ReplySendConfirmDialog({
     <Modal
       className="board-send-confirm-modal"
       closeOnOverlayClick={false}
-      description="최종 전송 전 교사가 직접 내용을 확인해야 합니다."
+      description="전송할 답변을 최종 확인해 주세요."
       footer={
         <>
           <Button onClick={onCancel} variant="outline">
@@ -2053,7 +2108,7 @@ function ReplySendConfirmDialog({
             type="checkbox"
           />
           <span>
-            AI 초안을 포함한 답변 내용을 직접 확인했고 필요한 수정을 마쳤습니다.
+            답변 내용을 확인했으며, 전송에 동의합니다.
           </span>
         </label>
       </div>
@@ -2098,6 +2153,8 @@ function ReplySendCompleteDialog({
 }
 
 type ReplyComposerPageProps = {
+  inline?: boolean;
+  headerAction?: ReactNode;
   onInitializeDraft: (threadId: string) => void;
   onDraftTabChange: (threadId: string, tab: ReplyDraftTab) => void;
   onApplyOfficialTemplate: (threadId: string, templateId?: string) => void;
@@ -2117,6 +2174,8 @@ type ReplyComposerPageProps = {
 };
 
 function ReplyComposerPage({
+  inline = false,
+  headerAction,
   onInitializeDraft,
   onDraftTabChange,
   onApplyOfficialTemplate,
@@ -2136,7 +2195,8 @@ function ReplyComposerPage({
   const { user } = useAuth();
   const teacherName = user?.name ?? '담임';
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
-  const [isCheckPanelOpen, setIsCheckPanelOpen] = useState(true);
+  const [isCheckPanelOpen, setIsCheckPanelOpen] = useState(false);
+  const composerRef = useRef<HTMLElement>(null);
   const [isOriginalConfirmOpen, setIsOriginalConfirmOpen] = useState(false);
   const [referenceSource, setReferenceSource] = useState<RegulationSource | null>(null);
   const initializedThreadRef = useRef<string | null>(null);
@@ -2185,19 +2245,23 @@ function ReplyComposerPage({
       ? '템플릿 다시 적용'
       : '공식 템플릿 적용';
   const assistButtonDisabled = canRequestAiDraft ? false : isLocked || !replyTemplate;
-  const stageNotice = isLocked
-    ? getReplyLockNotice(thread).lockDescription
-    : serverBlockReason
-      ? serverBlockReason
+  const stageNotice = riskLevel === 'emergency'
+    ? '긴급 단계 · 개별 답변 대신 공식 대응 절차를 확인해 주세요.'
     : riskLevel === 'high'
-      ? replyTemplate
-        ? `위험 단계: 개별 AI 초안 대신 답장 예시(${replyTemplate.title})를 사용합니다.${replyTemplate.approved ? '' : ' 예시 문구는 확정 전입니다.'}`
-        : '이 메시지에 맞는 공식 템플릿이 없습니다. 내용을 검토한 뒤 직접 작성해 주세요.'
-      : !isServerThread && regulationResult.status === 'not_found'
-        ? '관련 규정이 등록된 자료에 없어 AI 초안을 생성하지 않습니다. 직접 작성해 주세요.'
-        : riskLevel === 'low'
-          ? '일반 단계: 원문과 RAG 기반 참고자료로 답변 초안을 생성할 수 있습니다.'
-          : `주의 단계: ${isBufferedContext ? '완충 요약과 원문을' : '학부모 메시지를'} 확인한 뒤 AI 초안을 교사가 검토하고 수정하는 것을 권고합니다.`;
+      ? '높은 위험 단계 · 승인된 공식 답변 양식과 공동 검토 절차를 확인해 주세요.'
+      : riskLevel === 'medium'
+        ? `주의 단계 · ${isBufferedContext ? '완충 요약과 원문을' : '학부모 메시지를'} 확인한 후 답변을 검토해 주세요.`
+        : '';
+  // A local reference search does not determine whether a server-generated draft is available.
+  const failureNotice = serverBlockReason ?? (
+    !isServerThread && (riskLevel === 'low' || riskLevel === 'medium')
+      ? regulationResult.status === 'not_found'
+        ? '관련 규정을 찾지 못해 AI 초안을 생성할 수 없습니다. 직접 작성해 주세요.'
+        : regulationResult.status === 'error'
+          ? '규정 검색에 실패해 AI 초안을 생성할 수 없습니다. 직접 작성해 주세요.'
+          : undefined
+      : undefined
+  );
   const draftStatusText = isLocked
     ? '안전 잠금 · 전송 불가'
     : serverReplyAction
@@ -2245,14 +2309,35 @@ function ReplyComposerPage({
 
   useEffect(() => {
     setIsConfirmOpen(false);
-    setIsCheckPanelOpen(true);
+    setIsCheckPanelOpen(false);
     setIsOriginalConfirmOpen(false);
     setReferenceSource(null);
-  }, [thread.id]);
+  }, [inline, thread.id]);
+
+  useEffect(() => {
+    if (!inline) return;
+    composerRef.current?.focus({ preventScroll: true });
+    composerRef.current?.querySelector('.board-reply-compose-panel')?.scrollIntoView({ block: 'nearest' });
+  }, [inline, thread.id]);
+
+  const replyCheckPanel = (
+    <ReplyCheckPanel
+      isOpen={isCheckPanelOpen}
+      onOpenReference={setReferenceSource}
+      onToggle={() => setIsCheckPanelOpen((isOpen) => !isOpen)}
+      regulationResult={regulationResult}
+    />
+  );
 
   return (
-    <section className="board-detail" aria-labelledby="board-composer-title">
-      <header className="board-detail-page-header">
+    <section
+      className={inline ? 'board-inline-reply-composer' : 'board-detail'}
+      aria-label={inline ? '답변 작성하기' : undefined}
+      aria-labelledby={inline ? undefined : 'board-composer-title'}
+      ref={composerRef}
+      tabIndex={inline ? -1 : undefined}
+    >
+      {!inline ? <><header className="board-detail-page-header">
         <div className="board-detail-title-group">
           <button
             aria-label="메시지 상세로 돌아가기"
@@ -2297,19 +2382,10 @@ function ReplyComposerPage({
       </header>
 
       <MessageContextCard thread={thread} />
-
-      <AiJudgmentNotice />
+      </> : null}
 
       <div className="board-reply-composer">
-        <ReplyCheckPanel
-          isAiDraftFromServer={isServerThread}
-          isOpen={isCheckPanelOpen}
-          onOpenReference={setReferenceSource}
-          onToggle={() => setIsCheckPanelOpen((isOpen) => !isOpen)}
-          regulationResult={regulationResult}
-        />
-
-        <section className="board-reply-context-panel">
+        {!inline ? <section className="board-reply-context-panel">
           <div className="board-reply-context-heading">
             <h2>{latestParentReply?.summaryStatus === 'UNAVAILABLE' ? '완충 요약을 확인할 수 없습니다'
               : isBufferedContext ? '완충 요약' : '학부모 메시지'}</h2>
@@ -2326,10 +2402,12 @@ function ReplyComposerPage({
             ) : null}
           </div>
           <p>{contextMessageText}</p>
-        </section>
+        </section> : null}
 
         <ReplyEditor
           activeDraftTab={activeDraftTab}
+          headerAction={headerAction}
+          onClose={inline ? onBack : undefined}
           aiNoticeId={aiNoticeId}
           assistButtonDisabled={assistButtonDisabled}
           assistButtonLabel={assistButtonLabel}
@@ -2339,6 +2417,9 @@ function ReplyComposerPage({
           isLocked={isLocked}
           isBusy={serverReplyAction !== null}
           isDraftInputDisabled={isDraftInputDisabled || Boolean(serverBlockReason)}
+          unavailableDraftMessage={riskLevel === 'high'
+            ? '사용 가능한 공식 답변 양식과 공동 검토 절차를 확인해 주세요.'
+            : 'AI 초안을 제공할 수 없습니다. 직접 작성 탭에서 답변을 작성해 주세요.'}
           isManualTabDisabled={isManualTabDisabled}
           lockNoticeId={lockNoticeId}
           maxLength={TEACHER_RESPONSE_MAX_LENGTH}
@@ -2352,6 +2433,7 @@ function ReplyComposerPage({
           saveDisabled={Boolean(serverBlockReason) || draftErrors.length > 0}
           showAssistButton={isOfficialTemplateAvailable || canRequestAiDraft}
           stageNotice={stageNotice}
+          failureNotice={failureNotice}
           submitDisabled={isTemplateInactive || draftErrors.length > 0 || isDraftInputDisabled ||
             Boolean(serverBlockReason)}
           templateEditor={!isLocked && (thread.appliedTemplate || replyTemplate) ? (
@@ -2371,6 +2453,7 @@ function ReplyComposerPage({
             </>
           ) : undefined}
         />
+        {replyCheckPanel}
       </div>
 
       <ReplySendConfirmDialog
@@ -2677,6 +2760,9 @@ export function TeacherMessages({
     }
     updateThread(threadId, (thread) => {
       if (isReplyLocked(thread)) return thread;
+      if (canGenerateReplyDraft(thread) && !thread.appliedTemplate && searchRegulations(thread).status === 'not_found') {
+        return selectReplyDraft(thread, 'manual');
+      }
       // An existing AI tab still counts after its contents have been cleared.
       const hasAiDraft = thread.replyDrafts?.ai !== undefined || (
         getReplyDraftTab(thread) === 'ai' && Boolean(thread.draftText || thread.appliedTemplate)
@@ -3244,7 +3330,47 @@ export function TeacherMessages({
     isSidebarCollapsed ? ' is-sidebar-collapsed' : ''
   }`;
 
-  if (replyComposerThread) {
+  // Keep the existing reply route for history, refresh and draft resumption; only its layout changes.
+  const isInlineReply = Boolean(replyComposerThread && !isReplyLocked(replyComposerThread) &&
+    ['low', 'medium'].includes(getThreadRiskLevel(replyComposerThread)));
+  const renderReplyComposer = (headerAction?: ReactNode) => replyComposerThread ? (
+    <ReplyComposerPage
+      inline={isInlineReply}
+      headerAction={headerAction}
+      onInitializeDraft={handleInitializeDraft}
+      onDraftTabChange={handleDraftTabChange}
+      onApplyOfficialTemplate={handleApplyOfficialTemplate}
+      onBack={() => {
+        setInitialOriginalViewerRequest(null);
+        setReplyComposerThreadId(null);
+        setSelectedThreadId(replyComposerThread.id);
+        pushTeacherMessageRoute(replyComposerThread.id, 'detail');
+      }}
+      onDraftChange={handleDraftChange}
+      onTemplateChange={handleTemplateChange}
+      onDraftReset={handleDraftReset}
+      onDraftSave={handleDraftSave}
+      onListOpen={() => {
+        setInitialDetailTabRequest(null);
+        setInitialOriginalViewerRequest(null);
+        setReplyComposerThreadId(null);
+        setSelectedThreadId(null);
+        pushTeacherMessageRoute();
+      }}
+      onOpenOriginalPage={handleOpenOriginalPageFromComposer}
+      onSubmitReply={handleSubmitReply}
+      onGenerateAiDraft={(threadId) => {
+        const target = threads.find((thread) => thread.id === threadId);
+        if (target) void serverReply.generateAiDraft(target);
+      }}
+      serverReplyAction={serverReply.pending?.threadId === replyComposerThread.id
+        ? serverReply.pending.action
+        : null}
+      thread={replyComposerThread}
+    />
+  ) : null;
+
+  if (replyComposerThread && !isInlineReply) {
     return (
       <section className={pageClassName} aria-labelledby="board-composer-title">
         <Sidebar
@@ -3257,38 +3383,7 @@ export function TeacherMessages({
           profileName={user?.name}
         />
         <main className="board-detail-page">
-          <ReplyComposerPage
-            onInitializeDraft={handleInitializeDraft}
-            onDraftTabChange={handleDraftTabChange}
-            onApplyOfficialTemplate={handleApplyOfficialTemplate}
-            onBack={() => {
-              setInitialOriginalViewerRequest(null);
-              setReplyComposerThreadId(null);
-              setSelectedThreadId(replyComposerThread.id);
-              pushTeacherMessageRoute(replyComposerThread.id, 'detail');
-            }}
-            onDraftChange={handleDraftChange}
-            onTemplateChange={handleTemplateChange}
-            onDraftReset={handleDraftReset}
-            onDraftSave={handleDraftSave}
-            onListOpen={() => {
-              setInitialDetailTabRequest(null);
-              setInitialOriginalViewerRequest(null);
-              setReplyComposerThreadId(null);
-              setSelectedThreadId(null);
-              pushTeacherMessageRoute();
-            }}
-            onOpenOriginalPage={handleOpenOriginalPageFromComposer}
-            onSubmitReply={handleSubmitReply}
-            onGenerateAiDraft={(threadId) => {
-              const target = threads.find((thread) => thread.id === threadId);
-              if (target) void serverReply.generateAiDraft(target);
-            }}
-            serverReplyAction={serverReply.pending?.threadId === replyComposerThread.id
-              ? serverReply.pending.action
-              : null}
-            thread={replyComposerThread}
-          />
+          {renderReplyComposer()}
           {toastMessage ? <Toast message={toastMessage} onClose={dismissToast} /> : null}
         </main>
       </section>
@@ -3309,6 +3404,7 @@ export function TeacherMessages({
         />
         <main className="board-detail-page">
           <ThreadDetail
+            replyComposer={isInlineReply ? renderReplyComposer : undefined}
             initialOriginalViewer={
               initialOriginalViewerRequest?.threadId === selectedThread.id
                 ? initialOriginalViewerRequest.request

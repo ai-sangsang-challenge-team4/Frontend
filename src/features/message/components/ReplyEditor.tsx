@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { Tabs } from '../../../shared/components/ui';
+import { Button, Tabs } from '../../../shared/components/ui';
+import { Info, X } from 'lucide-react';
 import type { ReplyDraftTab } from '../types';
 import {
   ResetIcon,
@@ -18,12 +19,15 @@ type ReplyEditorProps = {
   hasDraft: boolean;
   isLocked: boolean;
   isDraftInputDisabled: boolean;
+  unavailableDraftMessage: string;
   isManualTabDisabled: boolean;
   // A request (AI draft, save, send) is in flight; the draft cannot change meanwhile.
   isBusy?: boolean;
   lockNoticeId: string;
   maxLength?: number;
   onAssist: () => void;
+  onClose?: () => void;
+  headerAction?: ReactNode;
   onDraftChange: (value: string) => void;
   onDraftTabChange: (tab: ReplyDraftTab) => void;
   onDraftReset: () => void;
@@ -34,6 +38,7 @@ type ReplyEditorProps = {
   // The official template button on the AI tab, or the AI draft button when the tab is empty.
   showAssistButton: boolean;
   stageNotice: string;
+  failureNotice?: string;
   submitDisabled: boolean;
   templateEditor?: ReactNode;
 };
@@ -48,11 +53,14 @@ export function ReplyEditor({
   hasDraft,
   isLocked,
   isDraftInputDisabled,
+  unavailableDraftMessage,
   isManualTabDisabled,
   isBusy = false,
   lockNoticeId,
   maxLength,
   onAssist,
+  onClose,
+  headerAction,
   onDraftChange,
   onDraftTabChange,
   onDraftReset,
@@ -62,10 +70,12 @@ export function ReplyEditor({
   saveDisabled = false,
   showAssistButton,
   stageNotice,
+  failureNotice,
   submitDisabled,
   templateEditor,
 }: ReplyEditorProps) {
-  const replyTextareaDescription = [isLocked ? lockNoticeId : undefined, aiNoticeId]
+  const failureNoticeId = `${aiNoticeId}-failure`;
+  const replyTextareaDescription = [stageNotice ? aiNoticeId : undefined, failureNotice ? failureNoticeId : undefined]
     .filter(Boolean)
     .join(' ');
 
@@ -87,7 +97,7 @@ export function ReplyEditor({
     maxLength={maxLength}
     onChange={(event) => onDraftChange(event.target.value)}
     placeholder={isDraftInputDisabled
-      ? 'AI 초안을 제공할 수 없습니다. 직접 작성 탭에서 답변을 작성해 주세요.'
+      ? unavailableDraftMessage
       : '학부모에게 전달할 답변을 작성하세요.'}
     rows={11}
     value={draftText}
@@ -96,8 +106,17 @@ export function ReplyEditor({
   return (
     <section className="board-reply-compose-panel">
       <div className="board-reply-compose-header">
-        <label htmlFor={templateEditor ? undefined : 'board-reply-composer-input'}>선생님 답변</label>
-        <span aria-live="polite">{draftStatusText}</span>
+        <div className="board-reply-compose-title">
+          <label htmlFor={templateEditor ? undefined : 'board-reply-composer-input'}>선생님 답변</label>
+          <span aria-live="polite">{draftStatusText}</span>
+        </div>
+        {headerAction || onClose ? <div className="board-reply-header-actions">
+          {headerAction}
+          {onClose ? <Button className="board-reply-compose-close" variant="outline" size="md" onClick={onClose}
+            aria-label="답변 작성 닫기" leftIcon={<X aria-hidden="true" size={14} />}>
+            닫기
+          </Button> : null}
+        </div> : null}
       </div>
       <Tabs
         ariaLabel="답변 작성 방식"
@@ -109,20 +128,16 @@ export function ReplyEditor({
         onValueChange={(value) => onDraftTabChange(value as ReplyDraftTab)}
         value={activeDraftTab}
       />
-      <div className="board-reply-notices">
-        <p className="board-reply-ai-note" id={aiNoticeId}>
-          {stageNotice}
-          <br />
-          답변은 자동 전송되지 않습니다. 내용을 확인하고 필요한 수정을 마친 뒤 전송해 주세요.
-        </p>
-        {!templateEditor && !isDraftInputDisabled ? (
-          <p className="board-reply-draft-hint">
-            {activeDraftTab === 'ai'
-              ? 'AI 초안을 바탕으로 자유롭게 수정해 보세요.'
-              : '학부모에게 전달할 답변을 직접 작성해 주세요.'}
-          </p>
-        ) : null}
-      </div>
+      {stageNotice || failureNotice ? <div className="board-reply-notices">
+        {stageNotice ? <p className="board-reply-ai-note" id={aiNoticeId}>
+          <Info size={16} aria-hidden="true" />
+          <span>{stageNotice}</span>
+        </p> : null}
+        {failureNotice ? <p className="board-reply-ai-note" id={failureNoticeId}>
+          <Info size={16} aria-hidden="true" />
+          <span>{failureNotice}</span>
+        </p> : null}
+      </div> : null}
       <div className="board-reply-bottom-actions">
         <button
           className="board-composer-action-button"

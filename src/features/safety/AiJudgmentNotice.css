@@ -28,3 +28,17 @@
   font-weight: 400;
   line-height: 1.6;
 }
+
+.ai-judgment-notice--inline {
+  display: block;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+}
+
+.ai-judgment-notice--inline p {
+  color: var(--color-text-muted-readable);
+  font-size: var(--font-size-helper);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-body);
+}
