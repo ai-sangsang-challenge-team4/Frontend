@@ -165,6 +165,25 @@ test('느린 상세를 떠난 뒤 응답이 도착해도 목록을 덮지 않고
   await expect(page.locator('.board-list-page')).toHaveCount(0);
 });
 
+test('비정규 민원 ID는 조회하지 않고 정상 ID는 상세와 답변 경로에서 조회한다', async ({ page }) => {
+  const api = await setupInbox(page);
+  for (const id of ['0319', '319.0', '3.19e2', '0x13f', '%20319%20', '0', '-319', '9007199254740992']) {
+    await page.goto(`/teacher/messages/${id}`);
+    await expect(page.getByRole('heading', { name: '메시지를 찾을 수 없습니다', exact: true })).toBeVisible();
+    await expect(page.locator('.board-list-page')).toHaveCount(0);
+    expect(api.requests()).toBe(0);
+  }
+  await page.goto('/teacher/messages/0319/response');
+  await expect(page.getByRole('heading', { name: '메시지를 찾을 수 없습니다', exact: true })).toBeVisible();
+  expect(api.requests()).toBe(0);
+  await page.goto('/teacher/messages/319');
+  await expect(page.locator('.board-conversation')).toBeVisible();
+  await expect(page.locator('.board-parent-card')).toContainText('안정성 확인 문의 319');
+  expect(api.requests()).toBeGreaterThan(0);
+  await page.goto('/teacher/messages/319/response');
+  await expect(page.getByLabel('선생님 답변', { exact: true })).toBeVisible();
+});
+
 test('검색·필터·별표 탭과 사이드바 상태를 보존한다', async ({ page }, testInfo) => {
   await setupInbox(page);
   await page.goto('/teacher/messages');

@@ -62,3 +62,27 @@ npx.cmd playwright test tests/auth/teacher-message-board.spec.ts tests/auth/teac
 ```
 
 위험도 계산, High/Emergency 제한, 안전 잠금, 원문 권한, 승인·공유, 전송·임시저장 및 API 계약을 변경하지 않습니다. 기존 테스트로 이 경로들의 회귀를 확인합니다. 운영 서버 로그인 검증, Safari/Firefox, OS별 고전형 스크롤바, 모든 텍스트에 대한 실제 브라우저 200% 확대 감사는 미검증입니다. 200% 검증은 이번 경로의 편집기·버튼 접근성에 한정합니다.
+
+## PR #97 리뷰 반영 및 머지 전 재검증 (2026-11-22)
+
+PR type: application. Pre-Landing Review: 수정 후 남은 확인된 결함 0건. CodeRabbit 지적 1건은 유효하여 수정했다. 전체 소스 diff와 관련 호출자를 검토했으며, 별도 Codex 하위 에이전트의 반례 중심 리뷰도 같은 결함을 확인하고 수정 후 추가 문제를 찾지 못했다. 하위 에이전트는 테스트 파일을 요약 수준으로만 읽었고, 아래 테스트 실행과 전체 테스트 코드 검토는 주 에이전트가 수행했다.
+
+- 원인: `Number('0319')`가 319로 변환되어 조회는 성공하지만, 선택 ID `0319`와 서버 행 ID `319`가 달라 상세를 찾지 못했다.
+- 수정: `toServerComplaintNumber`에서 양의 안전 정수이면서 `String(value) === threadId`인 ID만 허용한다. 상세 로더·원문 조회·상세 shell의 조회 가능 여부가 공통 함수를 사용한다.
+- 비정규 ID는 API 상세 요청 없이 기존 잘못된 주소 안내를 표시한다. `/319`와 `/319/response`는 유지한다. 데이터 모델·권한·잠금·전송 정책은 변경하지 않는다.
+- 수정 전 새 회귀 테스트가 `/0319`에서 실패하는 것을 확인한 후 제품 코드를 수정했다.
+- 수정 후 HTTP 전환 테스트 **18개 통과**, 폭별 중복 실행 제외 **8개 skip**. 앞자리 0, 소수·지수·16진수 표기, 공백, 0·음수·안전 정수 범위 초과와 정상 상세·답변 경로를 검증한다.
+- 메시지별 완충 요약과 생성 실패 안내·원문 열람 확인 경로: HTTP 테스트 **4개 통과**(데스크톱·모바일).
+- build·lint·Playwright TypeScript 검사 통과. 기존 500 kB 번들 경고 유지.
+
+Gate edits: none detected (1 listed, 1 read; patterns: RH-1,RH-3,RH-4,RH-12,RH-13,RH-14,RH-15,RH-16; unlisted idioms: none). 신규 테스트 파일의 폭/프로젝트 조합별 skip은 중복 실행만 제외하며 모든 네 폭을 실제 실행한다. 기존 검증 기준을 완화한 변경은 없다. 선택한 통합 테스트는 저장소 Playwright 명령으로 수행했다. 별도 Claude Code CLI는 설치되지 않아 외부 모델 검토를 수행하지 않았다.
+
+### Exploratory QA and Verification Results
+
+로컬 Chromium과 HTTP 어댑터에 모의 응답을 제공한 검증이다. 운영 데이터 쓰기는 없다. 상세 전환·실패·재시도·잘못된 ID·대화 요약을 확인했고, 운영 로그인과 실제 API 응답, Safari/Firefox, 전체 회귀 재실행은 이번 점검 범위 밖이다. 최초 재현 실패와 수정 후 결과는 각각 `logs/issue91-review/red`, `logs/issue91-review/final`, 요약 검증은 `logs/issue91-review/summary`에 보관한다(로그는 Git 제외).
+
+### 상단 카드 AI 요약이 보이지 않는 이유
+
+이 PR이 요약을 제거한 것은 아니다. dev에 이미 포함된 `650799d`(문의 상세·답변 UI 흐름 개선, 이슈 #73 / PR #94)에서 `MessageContextCard`에 `compact`를 추가했다. 상세는 `compact`로 렌더링하며, 요약은 `!compact && summary`일 때만 보인다. 발신자·원래 문의 제목·분석 상태만 남기고 자동 요약과 최근 수신 시각을 생략한다는 의도는 `docs/teacher-reply-api.md`에도 명시되어 있다.
+
+목록 API의 `aiSummary` → `conversationSummary.text` 매핑은 `serverThreads.ts`에 남아 있다. 상단 전체 문의 요약과 별개로, 대화 API의 메시지별 `summaryStatus`가 `GENERATED`이면 완충 요약, `UNAVAILABLE`이면 생성 실패 안내를 표시한다. 요약이 적용되지 않은 메시지는 기존 대화 말풍선으로 표시한다. 상단 전체 문의 요약이 대화로 그대로 옮겨진 것은 아니다. 이번 리뷰에서는 요약 UI를 변경하지 않았다.
