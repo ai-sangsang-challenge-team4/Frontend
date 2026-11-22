@@ -73,12 +73,6 @@ async function openAppMenuIfNeeded(page: Page) {
   if (menuLabel) await page.getByRole('button', { name: menuLabel, exact: true }).click();
 }
 
-async function requestVerification(page: Page, email: string) {
-  await page.locator('input[name="email"]').fill(email);
-  await page.getByRole('button', { name: '인증번호 받기', exact: true }).click();
-  await expect(page.locator('input[name="verificationCode"]')).toBeEnabled();
-}
-
 for (const account of accounts) {
   test(`${account.role}: 로그인, 역할 제한, 새로고침, 로그아웃`, async ({ page }) => {
     await loginAs(page, account);
@@ -113,7 +107,7 @@ for (const account of accounts) {
 }
 
 for (const role of ['PARENT', 'TEACHER'] as const) {
-  test(`${role}: 이메일 인증 후 회원가입과 로그인`, async ({ page }) => {
+  test(`${role}: 이메일 인증 없이 회원가입과 로그인`, async ({ page }) => {
     await page.goto(`/signup?role=${role}`);
     await expect(page.getByRole('radio', { name: role === 'PARENT' ? '학부모' : '교사' })).toBeChecked();
     await expect(page.getByRole('radio')).toHaveCount(2);
@@ -125,10 +119,10 @@ for (const role of ['PARENT', 'TEACHER'] as const) {
       await page.getByLabel('교번', { exact: true }).fill('  00123  ');
     }
     const email = `${role.toLowerCase()}-signup@example.com`;
-    await requestVerification(page, email);
-    await page.locator('input[name="verificationCode"]').fill('123456');
-    await page.getByRole('button', { name: '인증하기', exact: true }).click();
-    await expect(page.getByRole('button', { name: '인증 완료', exact: true })).toBeVisible();
+    await page.locator('input[name="email"]').fill(email);
+    await expect(page.getByRole('button', { name: '인증번호 받기', exact: true })).toHaveCount(0);
+    await expect(page.locator('input[name="verificationCode"]')).toHaveCount(0);
+    await expect(page.getByText('이메일 인증 기능은 준비 중이에요. 현재는 인증 없이 가입할 수 있어요.')).toHaveCount(0);
     const signupPassword = 'p'.repeat(role === 'PARENT' ? 100 : 21);
     await page.locator('input[name="password"]').fill(signupPassword);
     await page.locator('input[name="passwordConfirmation"]').fill(signupPassword);
@@ -186,10 +180,7 @@ for (const failingKey of ['teacher-hub.policy-consent.', 'teacher-hub.auth-accou
     }, failingKey);
     await page.goto('/signup?role=PARENT');
     await page.locator('input[name="name"]').fill('테스트 사용자');
-    await requestVerification(page, 'rollback@example.com');
-    await page.locator('input[name="verificationCode"]').fill('123456');
-    await page.getByRole('button', { name: '인증하기', exact: true }).click();
-    await expect(page.getByRole('button', { name: '인증 완료', exact: true })).toBeVisible();
+    await page.locator('input[name="email"]').fill('rollback@example.com');
     await page.locator('input[name="password"]').fill('newpassword123');
     await page.locator('input[name="passwordConfirmation"]').fill('newpassword123');
     await fillChildInformation(page);
@@ -223,9 +214,13 @@ test('회원가입 필수값, 이메일 형식, 비밀번호 불일치를 표시
   await expect(page.getByText('교번을 입력해 주세요.', { exact: true })).toBeVisible();
   await expect(page.getByText('비밀번호는 8자 이상 100자 이하로 입력해 주세요.', { exact: true })).toBeVisible();
   await expect(page.getByText('필수 약관에 동의해 주세요.', { exact: true })).toBeVisible();
-  await page.locator('input[name="email"]').fill('invalid-email');
-  await page.getByRole('button', { name: '인증번호 받기', exact: true }).click();
   await expect(page.getByText('이메일 형식으로 입력해 주세요.', { exact: true })).toBeVisible();
+  for (const invalidEmail of ['invalid-email', 'person@example..com', 'person@-example.com']) {
+    await page.locator('input[name="email"]').fill(invalidEmail);
+    await expect(page.getByText('이메일 형식으로 입력해 주세요.', { exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: '회원가입', exact: true }).click();
+    await expect(page.getByText('이메일 형식으로 입력해 주세요.', { exact: true })).toBeVisible();
+  }
   await page.locator('input[name="email"]').fill('valid@example.com');
   await page.locator('input[name="password"]').fill('password123');
   await page.locator('input[name="passwordConfirmation"]').fill('different123');
@@ -236,10 +231,15 @@ test('회원가입 필수값, 이메일 형식, 비밀번호 불일치를 표시
 
 test('이메일 대소문자와 관계없이 중복 계정을 거절한다', async ({ page }) => {
   await page.goto('/signup');
+  await page.locator('input[name="name"]').fill('테스트 사용자');
   await page.locator('input[name="email"]').fill('PARENT@EXAMPLE.COM');
-  await page.getByRole('button', { name: '인증번호 받기', exact: true }).click();
+  await page.locator('input[name="password"]').fill('password123');
+  await page.locator('input[name="passwordConfirmation"]').fill('password123');
+  await fillChildInformation(page);
+  await page.getByRole('checkbox', { name: /서비스 이용약관/ }).check();
+  await page.getByRole('button', { name: '회원가입', exact: true }).click();
   await expect(page.getByText('이미 가입되어 있는 이메일입니다.', { exact: true })).toBeVisible();
-  await expect(page.locator('input[name="verificationCode"]')).toBeDisabled();
+  expect(await readSession(page)).toBeNull();
 });
 
 test('잘못된 로그인 정보는 오류를 표시하고 인증 정보를 저장하지 않는다', async ({ page }) => {
@@ -443,33 +443,4 @@ test('다른 탭에서 로그인하면 새 사용자 역할을 반영한다', as
   await expect(otherTab).toHaveURL(/\/teacher\/messages$/);
   await expect(page).toHaveURL(/\/teacher\/messages$/);
   expect((await readSession(page))?.user.role).toBe('TEACHER');
-});
-
-test('잘못된 인증번호, 인증 시간 만료, 재전송을 처리한다', async ({ page }) => {
-  await page.clock.install();
-  await page.goto('/signup');
-  await requestVerification(page, 'verification@example.com');
-  await page.locator('input[name="verificationCode"]').fill('000000');
-  await page.getByRole('button', { name: '인증하기', exact: true }).click();
-  await expect(page.getByText('인증코드가 올바르지 않습니다.', { exact: true })).toBeVisible();
-  await page.clock.fastForward(181_000);
-  await expect(page.locator('.auth-verification-timer')).toHaveText('0:00');
-  await expect(page.getByRole('button', { name: '인증하기', exact: true })).toBeDisabled();
-  await page.getByRole('button', { name: '재요청', exact: true }).click();
-  await expect(page.locator('input[name="verificationCode"]')).toHaveValue('');
-  await expect(page.getByRole('button', { name: '인증하기', exact: true })).toBeEnabled();
-  await page.locator('input[name="verificationCode"]').fill('123456');
-  await page.getByRole('button', { name: '인증하기', exact: true }).click();
-  await expect(page.getByRole('button', { name: '인증 완료', exact: true })).toBeVisible();
-});
-
-test('이메일 변경 후 이전 인증번호 요청 응답을 적용하지 않는다', async ({ page }) => {
-  await page.goto('/signup');
-  await configureMock(page, { delayMs: 1000 });
-  await page.locator('input[name="email"]').fill('first@example.com');
-  await page.getByRole('button', { name: '인증번호 받기', exact: true }).click();
-  await page.locator('input[name="email"]').fill('second@example.com');
-  await expect.poll(() => page.evaluate(() => localStorage.getItem('teacher-hub.auth-signup-code'))).not.toBeNull();
-  await expect(page.locator('input[name="verificationCode"]')).toBeDisabled();
-  await expect(page.locator('.auth-dev-code')).toHaveCount(0);
 });

@@ -7,7 +7,7 @@ import {
   useAuth,
   type SignupRole,
 } from '../../features/auth';
-import { authApiMode, isEmailVerificationSupported } from '../../features/auth/api/authApi';
+import { authApiMode, isValidEmail } from '../../features/auth/api/authApi';
 import { SIGNUP_EMPLOYEE_NO_MAX_LENGTH, SIGNUP_NAME_MAX_LENGTH, SIGNUP_PASSWORD_MAX_LENGTH, SIGNUP_PASSWORD_MIN_LENGTH } from '../../features/auth/api/authTypes';
 import { PasswordField } from '../../features/auth/components';
 import { ChildInformationFields } from '../../features/auth/components/ChildInformationFields';
@@ -17,13 +17,13 @@ import {
   validateChildSignupInfo,
   type ChildSignupErrors,
 } from '../../features/auth/childSignup';
-import { useEmailVerification } from '../../features/auth/hooks/useEmailVerification';
 import { validateTeacherSignupInfo } from '../../features/auth/teacherSignup';
 import { Button, TextField } from '../../shared/components/ui';
 import { PolicyDocumentLinks } from '../../features/policy/PolicyDocumentLinks';
 
 type SignupFormErrors = Partial<
   Record<
+    | 'email'
     | 'name'
     | 'schoolId'
     | 'employeeNo'
@@ -31,8 +31,7 @@ type SignupFormErrors = Partial<
     | 'passwordConfirmation'
     | 'policy'
     | 'role'
-    | 'submit'
-    | 'verification',
+    | 'submit',
     string
   >
 > & { child?: ChildSignupErrors };
@@ -41,22 +40,7 @@ export function SignupPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { isLoading, signup } = useAuth();
-  const {
-    developmentCode,
-    email,
-    emailError,
-    formattedRemainingTime,
-    hasRequestedVerification,
-    isVerificationExpired,
-    requestStatus,
-    requestVerification,
-    updateEmail,
-    updateVerificationCode,
-    verificationCode,
-    verificationError,
-    verificationStatus,
-    verify,
-  } = useEmailVerification();
+  const [email, setEmail] = useState('');
   const [role, setRole] = useState<SignupRole>(() =>
     getInitialSignupRole(searchParams.get('role')),
   );
@@ -99,8 +83,9 @@ export function SignupPage() {
       nextErrors.passwordConfirmation = '비밀번호가 일치하지 않습니다.';
     }
 
-    if (isEmailVerificationSupported && verificationStatus !== 'verified') {
-      nextErrors.verification = '이메일 인증을 완료해 주세요.';
+    const emailInput = event.currentTarget.elements.namedItem('email');
+    if (!isValidEmail(email) || (emailInput instanceof HTMLInputElement && emailInput.validity.typeMismatch)) {
+      nextErrors.email = '이메일 형식으로 입력해 주세요.';
     }
 
     if (!policyAgreed) {
@@ -154,7 +139,7 @@ export function SignupPage() {
           <p>간단한 회원가입 후, Teacher Hub 서비스를 이용해보세요.</p>
         </header>
 
-        <form className="auth-form auth-form--signup" onSubmit={handleSubmit}>
+        <form className="auth-form auth-form--signup" noValidate onSubmit={handleSubmit}>
           {formErrors.submit ? (
             <p className="auth-alert auth-alert--danger" role="alert">
               {formErrors.submit}
@@ -289,134 +274,22 @@ export function SignupPage() {
               value={name}
             />
 
-            <div className="auth-stacked-field">
-              <div className="auth-inline-row">
-                <TextField
-                  aria-describedby={!isEmailVerificationSupported ? 'signup-email-verification-notice' : undefined}
-                  autoComplete="email"
-                  error={emailError}
-                  fieldSize="lg"
-                  helperText="예: name@example.com"
-                  label={<RequiredLabel>아이디</RequiredLabel>}
-                  name="email"
-                  onChange={(event) => {
-                    updateEmail(event.target.value);
-                    setFormErrors((errors) => ({
-                      ...errors,
-                      submit: '',
-                      verification: '',
-                    }));
-                  }}
-                  placeholder="이메일 형식으로 입력해주세요."
-                  type="email"
-                  value={email}
-                />
-                <Button
-                  aria-describedby={!isEmailVerificationSupported ? 'signup-email-verification-notice' : undefined}
-                  className="auth-inline-button"
-                  disabled={!isEmailVerificationSupported || requestStatus === 'loading' || verificationStatus === 'verified'}
-                  isLoading={requestStatus === 'loading'}
-                  onClick={requestVerification}
-                  size="lg"
-                  type="button"
-                  variant="outline"
-                >
-                  {hasRequestedVerification ? '재전송' : '인증번호 받기'}
-                </Button>
-              </div>
-              {!isEmailVerificationSupported ? (
-                <p className="auth-verification-notice" id="signup-email-verification-notice">
-                  이메일 인증 기능은 준비 중이에요. 현재는 인증 없이 가입할 수 있어요.
-                </p>
-              ) : null}
-              {developmentCode ? (
-                <p className="auth-dev-code" role="status">
-                  개발용 인증번호: <strong>{developmentCode}</strong>
-                </p>
-              ) : null}
-            </div>
-
-            {isEmailVerificationSupported ? (
-              <div className="auth-stacked-field">
-                <div className="auth-inline-row">
-                  <TextField
-                    autoComplete="one-time-code"
-                    disabled={!hasRequestedVerification || verificationStatus === 'verified'}
-                    error={
-                      verificationStatus === 'verified'
-                        ? undefined
-                        : verificationError || formErrors.verification
-                    }
-                    fieldSize="lg"
-                    inputMode="numeric"
-                    label={<RequiredLabel>인증</RequiredLabel>}
-                    maxLength={6}
-                    name="verificationCode"
-                    onChange={(event) => {
-                      updateVerificationCode(event.target.value);
-                      setFormErrors((errors) => ({
-                        ...errors,
-                        submit: '',
-                        verification: '',
-                      }));
-                    }}
-                    placeholder="인증번호를 입력해주세요."
-                    trailingIcon={
-                      hasRequestedVerification && verificationStatus !== 'verified' ? (
-                        <span className="auth-verification-timer">
-                          {formattedRemainingTime}
-                        </span>
-                      ) : undefined
-                    }
-                    value={verificationCode}
-                  />
-                  <Button
-                    className="auth-inline-button"
-                    disabled={
-                      !hasRequestedVerification ||
-                      isVerificationExpired ||
-                      verificationStatus === 'verified'
-                    }
-                    isLoading={verificationStatus === 'loading'}
-                    onClick={() => {
-                      setFormErrors((errors) => ({
-                        ...errors,
-                        verification: '',
-                      }));
-                      void verify();
-                    }}
-                    size="lg"
-                    type="button"
-                    variant={verificationStatus === 'verified' ? 'secondary' : 'outline'}
-                  >
-                    {verificationStatus === 'verified' ? '인증 완료' : '인증하기'}
-                  </Button>
-                </div>
-                {hasRequestedVerification ? (
-                  <ul className="auth-verification-help">
-                    <li>
-                      인증번호는 3분 이내에 입력해주세요.
-                      <span className="sr-only">
-                        {' '}남은 시간 {formattedRemainingTime}
-                      </span>
-                    </li>
-                    {verificationStatus !== 'verified' ? (
-                      <li>
-                        인증번호를 받지 못하셨나요?{' '}
-                        <button
-                          className="auth-resend-button"
-                          disabled={requestStatus === 'loading'}
-                          onClick={requestVerification}
-                          type="button"
-                        >
-                          재요청
-                        </button>
-                      </li>
-                    ) : null}
-                  </ul>
-                ) : null}
-              </div>
-            ) : null}
+            <TextField
+              autoComplete="email"
+              disabled={isLoading}
+              error={formErrors.email}
+              fieldSize="lg"
+              helperText="예: name@example.com"
+              label={<RequiredLabel>아이디</RequiredLabel>}
+              name="email"
+              onChange={(event) => {
+                setEmail(event.target.value);
+                setFormErrors((errors) => ({ ...errors, email: '', submit: '' }));
+              }}
+              placeholder="이메일 형식으로 입력해주세요."
+              type="email"
+              value={email}
+            />
 
             <PasswordField
               autoComplete="new-password"
