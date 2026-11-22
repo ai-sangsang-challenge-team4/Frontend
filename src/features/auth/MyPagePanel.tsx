@@ -104,7 +104,7 @@ export function MyPagePanel() {
             content: (
               <div className="mypage-tab-content">
                 <PanelHeading title="내 데이터 관리" description="내 데이터의 다운로드와 삭제를 요청하는 공간입니다." />
-                <PreparationNotice>데이터 관리 기능을 준비하고 있어요. 아직 다운로드나 삭제 요청은 접수되지 않습니다.</PreparationNotice>
+                <PreparationNotice>화면에서 직접 요청하는 기능을 준비하고 있어요. 개인정보 열람·정정·삭제 및 회원 탈퇴는 lee24cy@sookmyung.ac.kr로 요청해 주세요.</PreparationNotice>
                 <div className="mypage-data-grid">
                   <section aria-label="데이터 다운로드" className="mypage-card mypage-data-card">
                     <div className="mypage-data-title"><h3>데이터 다운로드</h3><Badge size="sm">준비 중</Badge></div>
@@ -117,7 +117,7 @@ export function MyPagePanel() {
                     <Button aria-describedby="mypage-delete-description" disabled fullWidth leftIcon={<Trash2 size={18} />} variant="outline">삭제 요청</Button>
                   </section>
                 </div>
-                <p className="mypage-footnote">데이터 관리 요청에는 로그인과 본인 확인이 필요하며, 실제 보관된 데이터만 대상이 됩니다.</p>
+                <p className="mypage-footnote">데이터 관리 요청에는 본인 또는 대리 권한 확인이 필요하며, 실제 보관된 데이터만 대상이 됩니다.</p>
               </div>
             ),
           },
@@ -133,7 +133,7 @@ export function MyPagePanel() {
                     items={[
                       { id: 'mypage-faq-consents', title: '동의 내역은 어디에서 확인하나요?', content: '약관 및 동의 탭에서 현재 정책의 동의 여부, 정책 버전과 동의 시각을 확인할 수 있습니다. 필수 동의를 확인하고 선택 동의를 변경한 뒤 저장할 수 있습니다.' },
                       { id: 'mypage-faq-original', title: '선택 동의는 무엇인가요?', content: '서비스 개선을 위한 메시지 활용 동의는 필수 동의와 별도로 관리하는 선택 항목입니다. 현재 계정의 동의 여부는 약관 및 동의 탭에서 확인하고 변경할 수 있습니다.' },
-                      { id: 'mypage-faq-data', title: '데이터 다운로드와 삭제는 어떻게 요청하나요?', content: '내 데이터 관리 탭에서 요청할 수 있도록 준비 중입니다. 지금은 요청을 접수하지 않으며, 기능이 준비되면 본인 확인과 처리 절차를 안내합니다.' },
+                      { id: 'mypage-faq-data', title: '데이터 다운로드와 삭제는 어떻게 요청하나요?', content: '개인정보 열람·정정·삭제 및 회원 탈퇴는 lee24cy@sookmyung.ac.kr로 요청해 주세요. 본인 또는 대리 권한 확인 후 관련 법령에 따라 처리하고 결과를 안내합니다. 내 데이터 관리 탭에서 직접 요청하는 기능은 준비 중입니다.' },
                     ]}
                   />
                 </section>
