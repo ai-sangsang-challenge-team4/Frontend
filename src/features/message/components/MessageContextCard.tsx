@@ -27,7 +27,7 @@ export function MessageContextCard({ thread, compact = false }: MessageContextCa
       </div>
       <div className="board-card-topic">
         <strong>{compact ? thread.title : thread.conversationSummary?.topic ?? thread.title}</strong>
-        {!compact && summary ? <span>{summary}</span> : null}
+        {summary ? <span>{summary}</span> : null}
       </div>
       <div className="board-card-meta-group">
         <div className="board-card-meta">
