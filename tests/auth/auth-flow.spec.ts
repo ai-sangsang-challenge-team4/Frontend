@@ -215,9 +215,12 @@ test('회원가입 필수값, 이메일 형식, 비밀번호 불일치를 표시
   await expect(page.getByText('비밀번호는 8자 이상 100자 이하로 입력해 주세요.', { exact: true })).toBeVisible();
   await expect(page.getByText('필수 약관에 동의해 주세요.', { exact: true })).toBeVisible();
   await expect(page.getByText('이메일 형식으로 입력해 주세요.', { exact: true })).toBeVisible();
-  await page.locator('input[name="email"]').fill('invalid-email');
-  await page.getByRole('button', { name: '회원가입', exact: true }).click();
-  await expect(page.getByText('이메일 형식으로 입력해 주세요.', { exact: true })).toBeVisible();
+  for (const invalidEmail of ['invalid-email', 'person@example..com', 'person@-example.com']) {
+    await page.locator('input[name="email"]').fill(invalidEmail);
+    await expect(page.getByText('이메일 형식으로 입력해 주세요.', { exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: '회원가입', exact: true }).click();
+    await expect(page.getByText('이메일 형식으로 입력해 주세요.', { exact: true })).toBeVisible();
+  }
   await page.locator('input[name="email"]').fill('valid@example.com');
   await page.locator('input[name="password"]').fill('password123');
   await page.locator('input[name="passwordConfirmation"]').fill('different123');

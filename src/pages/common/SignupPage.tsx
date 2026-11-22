@@ -83,7 +83,8 @@ export function SignupPage() {
       nextErrors.passwordConfirmation = '비밀번호가 일치하지 않습니다.';
     }
 
-    if (!isValidEmail(email)) {
+    const emailInput = event.currentTarget.elements.namedItem('email');
+    if (!isValidEmail(email) || (emailInput instanceof HTMLInputElement && emailInput.validity.typeMismatch)) {
       nextErrors.email = '이메일 형식으로 입력해 주세요.';
     }
 

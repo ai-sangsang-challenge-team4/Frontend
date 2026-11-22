@@ -7,7 +7,7 @@
 | 기능 | API | 비고 |
 | --- | --- | --- |
 | 로그인 | `POST /auth/login` | `expiresAt = 요청 시각 + expiresIn(초)`. refresh token 없음 |
-| 회원가입 | `POST /auth/signup` | 이메일 인증 API가 없어 인증 단계 생략 |
+| 회원가입 | `POST /auth/signup` | 이메일을 아이디로 입력하며 이메일 인증 단계 없음 |
 | 사용자 조회 | `GET /users/me` | 응답에 만료 정보가 없어 저장된 `expiresAt` 유지. 5xx·네트워크 오류는 재시도 화면 |
 | 로그아웃 | 없음 | 로컬 세션만 삭제(JWT는 만료 전까지 유효) |
 | 학교·학급·학생 번호 | `GET /auth/schools…`, `/auth/classes…` | 공개 API |
@@ -36,7 +36,7 @@ PLAYWRIGHT_BASE_URL=http://127.0.0.1:5175 npm run test:auth
 
 검증 범위:
 
-- PARENT / TEACHER 회원가입, 이메일 인증, 로그인
+- PARENT / TEACHER 이메일 인증 없는 회원가입과 로그인
 - 이름(학부모·교사 공통)·이메일·비밀번호 필수값과 비밀번호 확인, 교사 소속학교·교번(#45)
 - 학부모 자녀 정보 필수값, 학교 검색, 학년(1~6)·반·번호의 단계별 활성화·초기화
 - HTTP 어댑터의 요청 경로·본문·오류 변환(`auth-http-api.spec.ts`, fetch 대체. 실제 서버 호출 아님)
@@ -52,7 +52,7 @@ PLAYWRIGHT_BASE_URL=http://127.0.0.1:5175 npm run test:auth
 - 사용자 조회 401 응답 시 인증 상태 초기화
 - 사용자 조회 503 응답 시 세션 보존 및 재시도
 - 다른 탭의 로그인·로그아웃 반영, 늦은 조회 응답 무시
-- 인증번호 오류·만료·재전송 및 이메일 변경 중 요청 처리
+- 회원가입 인증번호 요청 버튼·입력란·준비 중 안내 미표시, 이메일 형식 검증
 
 실패 시 `test-results/`에 화면 캡처와 trace가 남습니다. HTML 결과는 `npx playwright show-report`로 확인할 수 있습니다.
 
@@ -64,7 +64,7 @@ PLAYWRIGHT_BASE_URL=http://127.0.0.1:5175 npm run test:auth
 | TEACHER | teacher@example.com | password123 | /teacher → /teacher/messages |
 | ADMIN | admin@teacherhub.local | admin1234 | /admin |
 
-회원가입 인증번호는 `123456`입니다. ADMIN은 회원가입 선택지에 포함하지 않습니다. 가입한 계정은 같은 브라우저와 주소에서 다시 로그인할 수 있습니다.
+회원가입은 mock·HTTP 모드 모두 이메일 인증 없이 진행합니다. 아이디에는 이메일을 입력하며 형식 검증은 유지합니다. ADMIN은 회원가입 선택지에 포함하지 않습니다. 가입한 계정은 같은 브라우저와 주소에서 다시 로그인할 수 있습니다.
 
 신규 가입 시 본인 이름이 필요합니다. 학부모는 학교·학년·반·번호·자녀 이름을, 교사는 소속학교·교번을 입력합니다. mock 학교 검색 결과에서 `상상초등학교`(1~6학년), `상상중학교`·`상상고등학교`(1~3학년)를 선택할 수 있습니다. 학교·학급·번호는 예시 데이터이며 Mock 계정에만 저장됩니다. 자세한 내용은 [회원가입 학교·자녀·소속 정보 문서](parent-signup-child-info.md)를 참고하세요.
 
