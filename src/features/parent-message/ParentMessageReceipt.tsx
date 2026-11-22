@@ -159,9 +159,9 @@ export function ParentMessageReceipt({ userId, messageId }: { userId: number; me
                 draftId={location.state?.followUpDraftId} blocked={!canFollowUp || isClosing}
                 onCollapse={() => setFollowUpOpen(false)} /> : null}
             </div>
+            <p className="parent-conversation-new-inquiry">다른 내용으로 문의를 원하시나요? <Link to="/parent/messages/new?fresh=1">새 문의 작성</Link></p>
           </div>
         </section>
-        <p className="parent-conversation-new-inquiry">다른 내용으로 문의를 원하시나요? <Link to="/parent/messages/new?fresh=1">새 문의 작성</Link></p>
       </> : sync.isLoading ? <EmptyState title="문의를 불러오고 있습니다." /> : <EmptyState
         title={error ?? (sync.error ? getApiErrorMessage(sync.error, '문의를 불러오지 못했습니다.') : '문의를 찾을 수 없습니다.')}
         action={error ? <Button onClick={refresh}>다시 시도</Button> : sync.error ? <Button onClick={sync.retry}>다시 시도</Button> : <Button onClick={() => navigate('/parent/messages')}>문의 내역</Button>} />}

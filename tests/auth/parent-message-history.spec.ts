@@ -233,7 +233,7 @@ test('추가 문의 입력창은 대화 아래에서 열리고 접기·새로고
   await guidelines.click();
   await expect(composer.getByText('개인정보가 포함되지 않았는지 확인해 주세요.', { exact: true })).toBeVisible();
   await expect(composer.locator('.parent-write-analysis-note')).toHaveCount(0);
-  await expect(page.locator('.parent-conversation .parent-conversation-new-inquiry')).toHaveCount(0);
+  await expect(page.locator('.parent-conversation-actions .parent-conversation-new-inquiry')).toHaveCount(1);
   await expect(page.locator('.parent-conversation-new-inquiry a')).toHaveAttribute('href', '/parent/messages/new?fresh=1');
   await input.fill('이전 답변을 읽고 질문드립니다.');
   await expect(saveStatus).toHaveText('저장되지 않은 변경사항');
