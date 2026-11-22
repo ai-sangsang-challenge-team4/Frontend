@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 const documents = [
   { title: '서비스 이용약관', sections: 8, acceptance: '[필수] 티처허브 서비스 이용약관에 동의합니다.' },
-  { title: '개인정보 수집·이용 동의서', sections: 7, acceptance: '[필수 여부 확인] 개인정보 수집·이용에 동의합니다.' },
+  { title: '개인정보 수집·이용 동의서', sections: 7, acceptance: '[필수] 개인정보 수집·이용에 동의합니다.' },
   { title: '테스트 메시지 저장·활용 동의서', sections: 5, acceptance: '[선택] 서비스 개선을 위한 테스트 메시지 저장 및 활용에 동의합니다.' },
 ];
 
@@ -18,7 +18,7 @@ for (const role of ['PARENT', 'TEACHER']) {
       const dialog = page.getByRole('dialog', { name: document.title, exact: true });
       await expect(dialog).toBeVisible();
       await expect(dialog.getByRole('heading', { level: 3 })).toHaveCount(document.sections);
-      await expect(dialog).toContainText('시행일 2026. 11. 17 (화)');
+      await expect(dialog).toContainText('시행일 2026.11.22');
       await expect(dialog.getByRole('checkbox')).toHaveCount(0);
       await expect(page.locator('body')).toHaveCSS('overflow', 'hidden');
       const article = dialog.getByRole('article', { name: `${document.title} 전문`, exact: true });
@@ -27,7 +27,8 @@ for (const role of ['PARENT', 'TEACHER']) {
       await expect.poll(() => dialog.locator('.ui-modal-body').evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
       if (document.title === '개인정보 수집·이용 동의서') {
         await expect(dialog.getByRole('table')).toHaveCount(2);
-        await expect(dialog.getByRole('cell', { name: '[확정 필요]', exact: true })).toHaveCount(4);
+        await expect(dialog.getByRole('cell', { name: '회원 탈퇴 시까지', exact: true })).toHaveCount(1);
+        await expect(dialog.getByRole('cell', { name: /상담 종료일부터 최대 1년/ })).toHaveCount(3);
         const originalViewport = page.viewportSize()!;
         for (const width of [320, originalViewport.width]) {
           await page.setViewportSize({ width, height: originalViewport.height });
