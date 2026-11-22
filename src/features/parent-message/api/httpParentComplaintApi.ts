@@ -16,7 +16,7 @@ import type {
   ParentConversationResponse,
 } from './parentComplaintTypes';
 
-// AI analysis can take longer than the shared API client's default timeout.
+// Keep AI analysis at 60 seconds even when the shared timeout is overridden.
 const AI_ANALYSIS_TIMEOUT_MS = 60_000;
 
 // Paths follow the backend ParentComplaintController, RiskAnalysisController, and UserController (/users/me).
