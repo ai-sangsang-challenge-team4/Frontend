@@ -12,11 +12,6 @@
   background: var(--board-risk-guide-bg);
 }
 
-.board-risk-guide--normal {
-  --board-risk-guide-accent: var(--color-primary);
-  --board-risk-guide-bg: var(--risk-low-bg);
-}
-
 .board-risk-guide--attention {
   --board-risk-guide-accent: #9a6a00;
   --board-risk-guide-bg: var(--risk-medium-bg);
