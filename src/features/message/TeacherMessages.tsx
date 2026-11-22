@@ -135,8 +135,9 @@ import { messageApiMode, teacherInboxApi } from './api/teacherInboxApi';
 import { initialTeacherThreads } from './mockThreads';
 import { persistTeacherParentThread, readTeacherParentThreads } from './teacherParentMessages';
 import { useActiveMessageCount } from './useActiveMessageCount';
-import { getDefaultOriginalReplyId } from './serverThreads';
+import { getDefaultOriginalReplyId, toServerComplaintNumber } from './serverThreads';
 import { useServerTeacherInbox } from './useServerTeacherInbox';
+import { useMessageScrollRestoration } from './useMessageScrollRestoration';
 import { useServerReply, type ServerReplyAction } from './useServerReply';
 import { getServerReplyBlockReason } from './serverReplies';
 import { TEACHER_RESPONSE_MAX_LENGTH } from './api/teacherInboxTypes';
@@ -1600,6 +1601,30 @@ type DetailProps = {
   thread: BoardThread;
 };
 
+function MessageDetailHeader({ onBack, backLabel = '목록으로 돌아가기', children }: {
+  onBack: () => void;
+  backLabel?: string;
+  children?: ReactNode;
+}) {
+  return (
+    <header className="board-detail-page-header">
+      <div className="board-detail-title-group">
+        <button aria-label={backLabel} className="board-back-button" onClick={onBack} type="button">
+          <svg aria-hidden="true" fill="none" viewBox="0 0 16 15" xmlns="http://www.w3.org/2000/svg">
+            <path d="M3.825 8.24079 9.425 13.3684 8 14.6503 0 7.32515 8 0l1.425 1.2819-5.6 5.1276H16v1.83129H3.825Z" fill="currentColor" />
+          </svg>
+        </button>
+        <h1 id="board-detail-title">메시지 상세</h1>
+      </div>
+      {children ?? <nav aria-label="현재 위치" className="board-page-nav">
+        <button onClick={onBack} type="button">홈</button><BreadcrumbSeparator />
+        <button onClick={onBack} type="button">메시지</button><BreadcrumbSeparator />
+        <span>메시지 상세</span><BreadcrumbSeparator /><strong>대화</strong>
+      </nav>}
+    </header>
+  );
+}
+
 function ThreadDetail({
   replyComposer,
   onAdminShared,
@@ -1721,31 +1746,10 @@ function ThreadDetail({
 
   return (
     <section className={`board-detail${supportOpen ? ' has-support-drawer' : ''}`} aria-labelledby="board-detail-title">
-      <header className="board-detail-page-header">
-        <div className="board-detail-title-group">
-          <button
-            aria-label={
-              originalViewer ? '이전 화면으로 돌아가기' : '목록으로 돌아가기'
-            }
-            className="board-back-button"
-            onClick={originalViewer ? closeOriginalViewer : onBack}
-            type="button"
-          >
-            <svg
-              aria-hidden="true"
-              fill="none"
-              viewBox="0 0 16 15"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                d="M3.825 8.24079 9.425 13.3684 8 14.6503 0 7.32515 8 0l1.425 1.2819-5.6 5.1276H16v1.83129H3.825Z"
-                fill="currentColor"
-              />
-            </svg>
-          </button>
-          <h1 id="board-detail-title">메시지 상세</h1>
-        </div>
-
+      <MessageDetailHeader
+        onBack={originalViewer ? closeOriginalViewer : onBack}
+        backLabel={originalViewer ? '이전 화면으로 돌아가기' : '목록으로 돌아가기'}
+      >
         <nav aria-label="현재 위치" className="board-page-nav">
           <button onClick={onBack} type="button">
             홈
@@ -1783,7 +1787,7 @@ function ThreadDetail({
             <strong>{detailTabLabel[activeDetailTab]}</strong>
           )}
         </nav>
-      </header>
+      </MessageDetailHeader>
 
       <nav aria-label="메시지 상세 탭" className="board-detail-tabs">
         {detailTabs.map((tab) => (
@@ -2532,6 +2536,7 @@ export function TeacherMessages({
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(
     initialMessagesRouteState.threadId,
   );
+  useMessageScrollRestoration(selectedThreadId);
   const [sendCompleteThreadId, setSendCompleteThreadId] = useState<string | null>(
     null,
   );
@@ -3425,7 +3430,16 @@ export function TeacherMessages({
     );
   }
 
-  if (selectedThread) {
+  if (selectedThreadId) {
+    const openList = () => {
+      setInitialDetailTabRequest(null);
+      setInitialOriginalViewerRequest(null);
+      setReplyComposerThreadId(null);
+      setSelectedThreadId(null);
+      pushTeacherMessageRoute();
+    };
+    const canLoadDetail = isServerInbox && toServerComplaintNumber(selectedThreadId) !== null;
+    const detailError = serverInbox.detailErrors[selectedThreadId];
     return (
       <section className={pageClassName} aria-labelledby="board-detail-title">
         <Sidebar
@@ -3438,7 +3452,7 @@ export function TeacherMessages({
           profileName={user?.name}
         />
         <main className="board-detail-page">
-          <ThreadDetail
+          {selectedThread ? <ThreadDetail
             replyComposer={isInlineReply ? renderReplyComposer : undefined}
             initialOriginalViewer={
               initialOriginalViewerRequest?.threadId === selectedThread.id
@@ -3450,12 +3464,7 @@ export function TeacherMessages({
                 ? initialDetailTabRequest.tab
                 : undefined
             }
-            onBack={() => {
-              setInitialDetailTabRequest(null);
-              setInitialOriginalViewerRequest(null);
-              setSelectedThreadId(null);
-              pushTeacherMessageRoute();
-            }}
+            onBack={openList}
             onEvidencePackageCreate={handleEvidencePackageCreate}
             onOpenReplyComposer={handleOpenReplyComposer}
             onOriginalViewed={handleOriginalViewed}
@@ -3466,10 +3475,23 @@ export function TeacherMessages({
             onAdminShared={handleAdminShared}
             onAiObjection={handleAiObjection}
             thread={selectedThread}
-          />
+          /> : <section className="board-detail" aria-labelledby="board-detail-title">
+            <MessageDetailHeader onBack={openList} />
+            {canLoadDetail ? <AsyncContent
+              error={detailError}
+              homePath="/teacher/messages"
+              isLoading={!detailError}
+              loadingMessage="메시지 상세 정보를 불러오고 있어요."
+              onRetry={() => retryServerDetail(selectedThreadId)}
+            >{null}</AsyncContent> : <EmptyState
+              title="메시지를 찾을 수 없습니다"
+              description="주소를 확인하거나 메시지 목록으로 돌아가 주세요."
+              action={<Button onClick={openList}>메시지 목록으로</Button>}
+            />}
+          </section>}
           <ReplySendCompleteDialog
             onClose={() => setSendCompleteThreadId(null)}
-            open={sendCompleteThreadId === selectedThread.id}
+            open={sendCompleteThreadId === selectedThreadId}
             thread={sendCompleteThread}
           />
           {toastMessage ? <Toast message={toastMessage} onClose={dismissToast} /> : null}

@@ -68,6 +68,9 @@
   .board-inbox-page,
   .board-inbox-page.is-sidebar-collapsed {
     grid-template-columns: 1fr;
+    /* Keep the 72px mobile header row from sharing spare viewport height
+       with short loading/error content and moving the detail when it loads. */
+    grid-template-rows: auto 1fr;
   }
 
   .board-list-page,
