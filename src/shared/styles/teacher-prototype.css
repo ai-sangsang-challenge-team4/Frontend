@@ -496,6 +496,23 @@ ol {
   margin-left: var(--space-3);
 }
 
+/* Shared list-search treatment; other TextField controls keep their own sizes. */
+.ui-search-field .ui-input-shell {
+  min-height: 47px;
+  padding: 0 var(--space-4);
+  color: var(--color-text-primary);
+}
+
+.ui-search-field .ui-field-control {
+  font-size: var(--font-size-body);
+}
+
+.ui-search-field .ui-field-icon,
+.ui-search-field .ui-field-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
 .ui-textarea-control {
   min-height: 116px;
   padding: var(--space-3-5) var(--space-4);

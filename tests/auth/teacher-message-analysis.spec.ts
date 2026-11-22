@@ -313,7 +313,7 @@ test('Rule-only 검토 안내는 카드 안에 한 번만 표시하고 100점과
   const scoreHelp = page.locator('.board-risk-review-copy').getByRole('button', { name: '위험도 점수 기준', exact: true });
   await scoreHelp.focus();
   await expect(page.getByRole('tooltip')).toContainText('시스템 위험 점수: 75/100');
-  await expect(page.getByRole('tooltip')).toContainText('교사 검토는 별도의 1~7단계 척도');
+  await expect(page.getByRole('tooltip')).toContainText('시스템 위험 점수와 교사 검토 점수는 서로 다른 기준입니다. 교사 검토는 1~7단계로 진행됩니다.');
   await page.keyboard.press('Escape');
   await expect(page.getByRole('tooltip')).toHaveCount(0);
   await expect(scoreHelp).toBeFocused();
@@ -398,7 +398,7 @@ for (const score of [0, undefined]) {
     const tooltip = page.getByRole('tooltip');
     if (score === 0) await expect(tooltip).toContainText('시스템 위험 점수: 0/100');
     else await expect(tooltip).not.toContainText('0/100');
-    await expect(tooltip).toContainText('교사 검토는 별도의 1~7단계 척도');
+    await expect(tooltip).toContainText('시스템 위험 점수와 교사 검토 점수는 서로 다른 기준입니다. 교사 검토는 1~7단계로 진행됩니다.');
     const box = (await tooltip.boundingBox())!;
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(page.viewportSize()!.width);

@@ -23,11 +23,6 @@
   display: flex;
   min-width: 0;
   flex: 1;
-  gap: var(--space-3);
-}
-
-.teacher-admin-share-search .ui-button {
-  flex-shrink: 0;
 }
 
 .teacher-admin-share-search .board-search-field {

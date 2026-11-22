@@ -476,7 +476,7 @@ function ThreadRow({
             {thread.needsTeacherReview ? (
               <>
                 <span className="board-thread-title-dot" aria-hidden="true" />
-                <small className="board-thread-recheck">재확인 필요</small>
+                <small className="board-thread-recheck">추가 문의 도착</small>
               </>
             ) : null}
             {needsAttention ? (
@@ -613,7 +613,7 @@ function BoardWorkspace({
 
         <TextField
           aria-label="메시지 검색"
-          containerClassName="board-search-field"
+          containerClassName="board-search-field ui-search-field"
           leadingIcon={<SearchIcon />}
           onChange={(event) => onFiltersChange({ query: event.currentTarget.value })}
           // The server rejects a keyword over 100 characters (400 VALIDATION_FAILED).
@@ -913,9 +913,6 @@ function RiskReviewPanel({
   const reasonInputId = `board-risk-review-reason-${threadId}`;
   const reasonRequirementId = `${reasonInputId}-requirement`;
   const guideId = `board-risk-review-guide-${threadId}`;
-  const systemScoreDescription = systemRiskScore != null
-    ? `시스템 위험 점수: ${systemRiskScore}/100.`
-    : '시스템 위험 점수는 0~100점 척도입니다.';
   const level = riskScoreToLevel(score);
   const guide = riskScoreGuides[score];
   const isDownwardReview = score < referenceScore;
@@ -959,7 +956,10 @@ function RiskReviewPanel({
               위험도 검토
             </h2>
             <InformationTooltip label="위험도 점수 기준" content={
-              <span className="board-risk-score-help">{systemScoreDescription} 교사 검토는 별도의 1~7단계 척도를 사용합니다.</span>
+              <span className="board-risk-score-help">
+                {systemRiskScore != null ? <>시스템 위험 점수: {systemRiskScore}/100.<br /></> : null}
+                시스템 위험 점수와 교사 검토 점수는 서로 다른 기준입니다. 교사 검토는 1~7단계로 진행됩니다.
+              </span>
             } />
           </div>
           <p>이 메시지의 위험도를 어떻게 판단하시나요?</p>
@@ -3517,7 +3517,7 @@ export function TeacherMessages({
 
         <section className="board-list-panel" aria-label="메시지 목록">
           {threads.some((thread) => thread.needsTeacherReview) ? <p className="board-follow-up-notice" role="status">
-            추가 질문이 도착했습니다. 재확인이 필요한 문의 {threads.filter((thread) => thread.needsTeacherReview).length}건을 확인해 주세요.
+            추가 문의가 도착한 대화 {threads.filter((thread) => thread.needsTeacherReview).length}건을 확인해 주세요.
           </p> : null}
           <Tabs
             ariaLabel="메시지 분류"

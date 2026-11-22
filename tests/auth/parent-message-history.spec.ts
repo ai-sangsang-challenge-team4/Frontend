@@ -99,7 +99,7 @@ test('완료된 문의를 추가 질문으로 재개하고 교사 답변 뒤 학
   await parentRow.click();
   const infoCard = page.getByRole('region', { name: '문의 정보', exact: true });
   await expect(infoCard.getByText('상담 완료', { exact: true })).toBeVisible();
-  await expect(infoCard.getByText('재확인 필요', { exact: true })).toHaveCount(0);
+  await expect(infoCard.getByText('새 답변 도착', { exact: true })).toHaveCount(0);
   const acknowledgeButton = page.getByRole('button', { name: /확인했어요|확인 완료/ });
   await expect(acknowledgeButton).toHaveCount(0);
   await page.getByRole('button', { name: '추가 문의하기', exact: true }).click();
@@ -119,7 +119,7 @@ test('완료된 문의를 추가 질문으로 재개하고 교사 답변 뒤 학
   await page.locator('.parent-history-link').filter({ hasText: '방과후 출결 확인' }).click();
   await expect(page.getByRole('region', { name: '전송한 문의 내용', exact: true })).toHaveCount(2);
   await expect(infoCard.getByText('상담 중', { exact: true })).toBeVisible();
-  await expect(infoCard.getByText('재확인 필요', { exact: true })).toHaveCount(0);
+  await expect(infoCard.getByText('새 답변 도착', { exact: true })).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('parent-detail-status.png') });
   const messages = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), sentKey);
   expect(messages).toHaveLength(3);
@@ -134,14 +134,14 @@ test('완료된 문의를 추가 질문으로 재개하고 교사 답변 뒤 학
 
   await login(page, 'TEACHER');
   await page.goto('/teacher/messages');
-  await expect(page.getByRole('status')).toContainText('추가 질문이 도착했습니다.');
+  await expect(page.getByRole('status')).toContainText('추가 문의가 도착한 대화 1건을 확인해 주세요.');
   const row = page.locator('.board-thread-row').filter({ hasText: '방과후 출결 확인' });
-  await expect(row.getByText('재확인 필요', { exact: true })).toBeVisible();
+  await expect(row.getByText('추가 문의 도착', { exact: true })).toBeVisible();
   await expect(row.getByText('주의 필요', { exact: true })).toHaveCount(0);
   await row.getByRole('button', { name: /메시지 상세 보기/ }).click();
   const controls = page.locator('.board-consultation-controls');
   await expect(page.getByRole('button', { name: /확인했어요/ })).toHaveCount(0);
-  await expect(controls.getByText('재확인 필요', { exact: true })).toHaveCount(0);
+  await expect(controls.getByText('추가 문의 도착', { exact: true })).toHaveCount(0);
   await expect(page.locator('.board-detail-page .ui-status-chip, .board-consultation-controls .ui-status-chip')).toHaveCount(0);
   await page.getByRole('button', { name: '답변 작성', exact: true }).click();
   await page.getByLabel('선생님 답변', { exact: true }).fill('학교 출결 규정에 따라 안내드리겠습니다.');
@@ -151,20 +151,20 @@ test('완료된 문의를 추가 질문으로 재개하고 교사 답변 뒤 학
   await confirm.getByRole('button', { name: '최종 전송', exact: true }).click();
   await page.getByRole('dialog', { name: '답변 전송 완료', exact: true }).getByRole('button', { name: '확인', exact: true }).click();
   expect(await storedStatus(page, 'done')).toBe('inProgress');
-  await expect(row.getByText('재확인 필요', { exact: true })).toHaveCount(0);
+  await expect(row.getByText('추가 문의 도착', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: '상담 완료 처리', exact: true })).toHaveCount(0);
   await expect(controls.getByText('학부모 확인', { exact: true })).toHaveCount(0);
   await login(page);
   await page.goto('/parent/messages');
   await expect(parentRow.getByText('상담 중', { exact: true })).toBeVisible();
-  const recheck = parentRow.locator('.parent-inquiry-title-row').getByText('재확인 필요', { exact: true });
+  const recheck = parentRow.locator('.parent-inquiry-title-row').getByText('새 답변 도착', { exact: true });
   await expect(recheck).toBeVisible();
   const titleBox = (await parentRow.locator('.parent-inquiry-title-row strong').boundingBox())!;
   const recheckBox = (await recheck.boundingBox())!;
   expect(Math.abs((titleBox.y + titleBox.height / 2) - (recheckBox.y + recheckBox.height / 2))).toBeLessThan(4);
   await parentRow.click();
   await expect(page.getByRole('region', { name: '전체 대화 내역', exact: true })).toContainText('학교 출결 규정에 따라 안내드리겠습니다.');
-  await expect(infoCard.getByText('재확인 필요', { exact: true })).toHaveCount(0);
+  await expect(infoCard.getByText('새 답변 도착', { exact: true })).toHaveCount(0);
   await expect(acknowledgeButton).toHaveCount(0);
   await page.getByRole('button', { name: '문의 완료', exact: true }).click();
   await expect(infoCard.getByText('상담 완료', { exact: true })).toBeVisible();
@@ -321,7 +321,7 @@ test('인라인 추가 문의의 AI 검토에서 돌아오면 같은 대화와 �
   await expect(page.getByLabel('문의 내용', { exact: true })).toBeEditable();
 });
 
-test('완료되지 않은 문의의 추가 질문은 재확인 필요로 표시하지 않는다', async ({ page }) => {
+test('완료되지 않은 문의의 추가 질문은 새 답변 도착으로 표시하지 않는다', async ({ page }) => {
   await login(page);
   await seed(page);
   for (const [id, status] of [['before', 'before'], ['active', 'inProgress']]) {
@@ -335,7 +335,7 @@ test('완료되지 않은 문의의 추가 질문은 재확인 필요로 표시�
     expect(thread.needsTeacherReview).toBeFalsy();
   }
   await page.goto('/parent/messages');
-  await expect(page.getByText('재확인 필요', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('새 답변 도착', { exact: true })).toHaveCount(0);
 });
 
 test('교사 화면이 후속 문의를 반영하기 전에 초안을 수정해도 재확인 상태를 유지한다', async ({ page }) => {
