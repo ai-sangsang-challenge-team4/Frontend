@@ -80,6 +80,7 @@ export function useServerTeacherInbox({ enabled, filters, setThreads }: UseServe
   const failedPage = useRef<number | null>(null);
   // Latest detail request per thread, so an older response cannot overwrite a newer one.
   const detailRequests = useRef(new Map<string, number>());
+  const [detailErrors, setDetailErrors] = useState<Record<string, ApiError | null>>({});
   const { risk, sort, status } = filters;
 
   useEffect(() => {
@@ -146,6 +147,7 @@ export function useServerTeacherInbox({ enabled, filters, setThreads }: UseServe
     const requestNumber = (detailRequests.current.get(threadId) ?? 0) + 1;
     detailRequests.current.set(threadId, requestNumber);
     const isLatest = () => !signal?.aborted && detailRequests.current.get(threadId) === requestNumber;
+    setDetailErrors((current) => ({ ...current, [threadId]: null }));
     setThreads((current) => current.map((thread) => thread.id === threadId ? markServerDetailLoading(thread) : thread));
     let bundle;
     try {
@@ -161,6 +163,7 @@ export function useServerTeacherInbox({ enabled, filters, setThreads }: UseServe
     } catch (error) {
       // Leave no endless loading notice behind; the risk tab offers a retry.
       if (isLatest()) {
+        setDetailErrors((current) => ({ ...current, [threadId]: toApiError(error) }));
         setThreads((current) => current.map((thread) => thread.id === threadId ? markServerDetailFailed(thread) : thread));
       }
       throw error;
@@ -190,5 +193,5 @@ export function useServerTeacherInbox({ enabled, filters, setThreads }: UseServe
   // Reloads the first page, e.g. after a status change moves a thread out of the current filter.
   const reloadList = useCallback(() => setAttempt((value) => value + 1), []);
 
-  return { listIds, listState, loadDetail, loadMore, reloadList, retry, viewOriginal };
+  return { listIds, listState, detailErrors, loadDetail, loadMore, reloadList, retry, viewOriginal };
 }

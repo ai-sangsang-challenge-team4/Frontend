@@ -50,7 +50,9 @@ const complaintStatusLabel: Record<ComplaintStatus, string> = {
 
 export function toServerComplaintNumber(threadId: string) {
   const value = Number(threadId);
-  return Number.isSafeInteger(value) && value > 0 ? value : null;
+  // Selection and cached rows use String(complaintId); reject alternate numeric
+  // spellings so a successful response cannot leave the selected row unmatched.
+  return Number.isSafeInteger(value) && value > 0 && String(value) === threadId ? value : null;
 }
 
 // Conversation messages carry "message:{id}"; the original-view path takes the numeric id.

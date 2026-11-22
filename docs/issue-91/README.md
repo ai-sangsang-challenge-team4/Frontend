@@ -1,0 +1,88 @@
+# #91 메시지 상세 전환 안정화
+
+기준 커밋은 PR #96이 머지된 `dev`의 `70945a4`입니다. 작업 ①만 포함하며 문구·검색창·대응가이드·전체 정보 밀도 변경은 후속 PR 범위입니다.
+
+## 원인 확인과 수정
+
+운영 사이트는 gstack `/browse`로 열었으나 로그인 화면으로 이동했습니다. 아래 재현은 실제 Chromium에서 로컬 앱의 HTTP 어댑터에 모의 응답을 제공한 결과이며 운영 계정 검증과 구분합니다.
+
+| 후보 | 확인 결과 및 처리 |
+| --- | --- |
+| `pushState` 뒤 스크롤 초기화 없음 | 코드에서 확인. 메시지 화면 내부에서 다른 문의를 열 때 DOM 반영 후 첫 페인트 전에 상단으로 이동합니다. |
+| 목록 스크롤 승계·복원 | 목록 20행을 스크롤한 뒤 상세를 열고 돌아오는 테스트에서, 기존 목록 버튼은 `scrollY=1796` 대신 `0`으로 복귀했습니다. 목록 위치를 별도로 기억하여 버튼·뒤로가기에서 복원합니다. 짧은 상세의 브라우저 스크롤 보정에 의존하지 않도록 긴 대화 재진입도 검증합니다. |
+| 데이터 로딩 전후 구조·높이 차이 | 상세 로딩 shell을 적용하고 기존 반응형 grid를 검증하던 중, 980px 이하의 단일 열 grid가 짧은 화면의 여유 높이를 상단 메뉴 행에 배분하는 것을 확인했습니다. 이 중간 단계에서 로딩 후 제목 y좌표가 768px에서 `290 → 124`, 375px에서 `292 → 112`로 이동했습니다. 해당 breakpoint에 `grid-template-rows: auto 1fr`만 추가했습니다. |
+| `selectedThread`가 없으면 목록 표시 | 목록 응답에 포함되지 않은 상세 URL `/319`에서 상세 응답을 지연시키면 실제로 목록이 표시됐습니다. 이제 경로의 `selectedThreadId`로 상세 shell을 선택하고 로딩·실패·잘못된 주소를 처리합니다. |
+| 목록·상세 최대 너비와 정렬 | 기존 목록 1188px, 상세 1053px의 목적별 상한을 유지합니다. 로딩 상태와 완료 상태는 같은 `.board-detail` 및 헤더를 사용합니다. 네 폭에서 제목 x/y좌표 불변을 검사합니다. |
+| 200ms transition | grid 열·padding-left·width 전환은 사이드바 접힘에 사용됩니다. 제거하지 않았으며 접힘·펼침과 페이지 전환 후 상태를 검증했습니다. |
+| 스크롤바에 따른 가용 너비 | 네 폭의 가로 넘침과 로딩 전후 제목 x좌표를 검사했습니다. 고전형 스크롤바의 모든 OS 설정은 재현하지 못했으므로 전역 scrollbar/overflow CSS를 추가하지 않았습니다. |
+
+같은 문의의 대화·위험 요소·답변 작성 전환에는 새 스크롤 초기화를 적용하지 않습니다. 메시지 화면을 떠날 때 브라우저의 기존 `history.scrollRestoration` 설정을 복구합니다. 검색·필터·탭·목록 위치 보존은 현재 메시지 화면 세션 안에서 제공하며, 전체 새로고침 후 목록 필터를 영구 복원하는 기능을 추가한 것은 아닙니다.
+
+상세 데이터가 아직 없을 때의 오류는 문의별로 보관하고 재시도 시 초기화합니다. 이미 로딩된 문의의 분석·권한·재시도 처리는 기존 경로를 유지합니다. 재진입 시 AI 초안 탭을 기본으로 여는 기존 동작도 유지하며, 직접 작성 탭의 편집 내용은 보존합니다.
+
+## 화면 비교
+
+1440px 상세 URL 직접 진입, 느린 응답:
+
+| 수정 전: 목록이 잘못 표시됨 | 수정 후: 상세 헤더를 유지하며 로딩 |
+| --- | --- |
+| ![수정 전](before-direct-1440.png) | ![수정 후 로딩](after-loading-1440.png) |
+
+응답 완료 후 같은 헤더 위치:
+
+![1440px 상세 완료](after-loaded-1440.png)
+
+375px에서는 로딩·완료 모두 제목 위치를 유지합니다. 이미지의 디바이스 픽셀 비율은 CSS 화면 폭과 다릅니다.
+
+<img src="after-loading-375.png" alt="375px 로딩" width="375" />
+<img src="after-loaded-375.png" alt="375px 완료" width="375" />
+
+## 검증 범위와 재실행
+
+최종 build·lint·TypeScript 검사와 신규 전환 테스트 16개가 통과했습니다. 폭별 중복 실행을 제외하는 8개 skip은 의도한 설정입니다. 기존 데스크톱 회귀 107개는 최초 실행과 시간 초과 항목 재실행을 합쳐 확인했습니다. 관리자 승인·접근 권한·규정 보기 재검증은 데스크톱/모바일 12개 모두 통과했으며 앞선 회귀 건수와 일부 중복됩니다. 기존 375px 대화·답변 레이아웃 검사 1개도 별도 실행으로 통과했습니다.
+
+전체 216개 회귀 실행은 환경 지연 때문에 모바일 부분에서 중단했습니다. 중단된 전체 실행을 통과로 집계하지 않습니다. 실패 기록은 30초 테스트 제한 초과였으며, 해당 시나리오는 코드·assertion 변경 없이 worker 1개와 90초 제한으로 재실행했습니다. 병렬 검증 중 메모리 부족으로 종료된 빌드도 단독 실행으로 통과했습니다. 빌드의 기존 500KB 번들 경고는 남아 있습니다.
+
+신규 `tests/integration/message-detail-stability.spec.ts`는 다음을 검사합니다.
+
+- 1440·1024·768·375px 목록 상단/하단 진입, 캐시된 긴 대화 재진입
+- 직접 URL·새로고침에서 느린 상세 응답, DOM 관찰을 통한 목록 노출 감지, 헤더 좌표 비교
+- 목록 버튼·브라우저 뒤로가기/앞으로가기 및 목록 스크롤 복원
+- 조회 실패·재시도, 느린 요청 중 목록 복귀, 잘못된 상세 주소
+- 검색·상담 필터·별표 탭·사이드바 상태
+- 답변 작성/닫기/뒤로가기/앞으로가기에서 직접 작성 내용 보존
+- 편집기·버튼 글자 크기 200% 모의 확대 후 키보드로 닫기, 화면 이탈 후 스크롤 정책 복구
+
+```powershell
+npm.cmd run build
+npm.cmd run lint
+npx.cmd tsc -p tsconfig.playwright.json
+npx.cmd playwright test -c playwright.integration-http.config.ts tests/integration/message-detail-stability.spec.ts --workers 2
+npx.cmd playwright test tests/auth/teacher-message-board.spec.ts tests/auth/teacher-message-analysis.spec.ts tests/auth/teacher-reply-flow.spec.ts tests/auth/teacher-message-layout.spec.ts tests/auth/teacher-inbox-api.spec.ts tests/auth/teacher-reply-api.spec.ts tests/auth/privacy-safety.spec.ts tests/auth/admin-escalation.spec.ts --workers 2
+```
+
+위험도 계산, High/Emergency 제한, 안전 잠금, 원문 권한, 승인·공유, 전송·임시저장 및 API 계약을 변경하지 않습니다. 기존 테스트로 이 경로들의 회귀를 확인합니다. 운영 서버 로그인 검증, Safari/Firefox, OS별 고전형 스크롤바, 모든 텍스트에 대한 실제 브라우저 200% 확대 감사는 미검증입니다. 200% 검증은 이번 경로의 편집기·버튼 접근성에 한정합니다.
+
+## PR #97 리뷰 반영 및 머지 전 재검증 (2026-11-22)
+
+PR type: application. Pre-Landing Review: 수정 후 남은 확인된 결함 0건. CodeRabbit 지적 1건은 유효하여 수정했다. 전체 소스 diff와 관련 호출자를 검토했으며, 별도 Codex 하위 에이전트의 반례 중심 리뷰도 같은 결함을 확인하고 수정 후 추가 문제를 찾지 못했다. 하위 에이전트는 테스트 파일을 요약 수준으로만 읽었고, 아래 테스트 실행과 전체 테스트 코드 검토는 주 에이전트가 수행했다.
+
+- 원인: `Number('0319')`가 319로 변환되어 조회는 성공하지만, 선택 ID `0319`와 서버 행 ID `319`가 달라 상세를 찾지 못했다.
+- 수정: `toServerComplaintNumber`에서 양의 안전 정수이면서 `String(value) === threadId`인 ID만 허용한다. 상세 로더·원문 조회·상세 shell의 조회 가능 여부가 공통 함수를 사용한다.
+- 비정규 ID는 API 상세 요청 없이 기존 잘못된 주소 안내를 표시한다. `/319`와 `/319/response`는 유지한다. 데이터 모델·권한·잠금·전송 정책은 변경하지 않는다.
+- 수정 전 새 회귀 테스트가 `/0319`에서 실패하는 것을 확인한 후 제품 코드를 수정했다.
+- 수정 후 HTTP 전환 테스트 **18개 통과**, 폭별 중복 실행 제외 **8개 skip**. 앞자리 0, 소수·지수·16진수 표기, 공백, 0·음수·안전 정수 범위 초과와 정상 상세·답변 경로를 검증한다.
+- 메시지별 완충 요약과 생성 실패 안내·원문 열람 확인 경로: HTTP 테스트 **4개 통과**(데스크톱·모바일).
+- build·lint·Playwright TypeScript 검사 통과. 기존 500 kB 번들 경고 유지.
+
+Gate edits: none detected (1 listed, 1 read; patterns: RH-1,RH-3,RH-4,RH-12,RH-13,RH-14,RH-15,RH-16; unlisted idioms: none). 신규 테스트 파일의 폭/프로젝트 조합별 skip은 중복 실행만 제외하며 모든 네 폭을 실제 실행한다. 기존 검증 기준을 완화한 변경은 없다. 선택한 통합 테스트는 저장소 Playwright 명령으로 수행했다. 별도 Claude Code CLI는 설치되지 않아 외부 모델 검토를 수행하지 않았다.
+
+### Exploratory QA and Verification Results
+
+로컬 Chromium과 HTTP 어댑터에 모의 응답을 제공한 검증이다. 운영 데이터 쓰기는 없다. 상세 전환·실패·재시도·잘못된 ID·대화 요약을 확인했고, 운영 로그인과 실제 API 응답, Safari/Firefox, 전체 회귀 재실행은 이번 점검 범위 밖이다. 최초 재현 실패와 수정 후 결과는 각각 `logs/issue91-review/red`, `logs/issue91-review/final`, 요약 검증은 `logs/issue91-review/summary`에 보관한다(로그는 Git 제외).
+
+### 상단 카드 AI 요약이 보이지 않는 이유
+
+이 PR이 요약을 제거한 것은 아니다. dev에 이미 포함된 `650799d`(문의 상세·답변 UI 흐름 개선, 이슈 #73 / PR #94)에서 `MessageContextCard`에 `compact`를 추가했다. 상세는 `compact`로 렌더링하며, 요약은 `!compact && summary`일 때만 보인다. 발신자·원래 문의 제목·분석 상태만 남기고 자동 요약과 최근 수신 시각을 생략한다는 의도는 `docs/teacher-reply-api.md`에도 명시되어 있다.
+
+목록 API의 `aiSummary` → `conversationSummary.text` 매핑은 `serverThreads.ts`에 남아 있다. 상단 전체 문의 요약과 별개로, 대화 API의 메시지별 `summaryStatus`가 `GENERATED`이면 완충 요약, `UNAVAILABLE`이면 생성 실패 안내를 표시한다. 요약이 적용되지 않은 메시지는 기존 대화 말풍선으로 표시한다. 상단 전체 문의 요약이 대화로 그대로 옮겨진 것은 아니다. 이번 리뷰에서는 요약 UI를 변경하지 않았다.
