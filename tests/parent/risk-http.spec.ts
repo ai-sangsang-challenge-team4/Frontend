@@ -1178,7 +1178,8 @@ for (const followUp of [false, true]) {
     await page.getByRole('button', { name: '전송하기', exact: true }).click();
     await page.getByRole('button', { name: '확인 후 전송', exact: true }).click();
     await expect(page.getByRole('heading', { name: '전송 완료', exact: true })).toBeVisible();
-    await expect(page.getByText('분석 횟수 제한', { exact: true })).toBeVisible();
+    await expect(page.locator('.risk-analysis-notice')).toHaveCount(0);
+    await expect(page.getByText('분석 횟수 제한', { exact: true })).toHaveCount(0);
     await expect(page.getByText(/최종 전송 내용의 시스템 위험 점수/)).toHaveCount(0);
     const messages = await page.evaluate(() => JSON.parse(localStorage.getItem('teacher-hub.parent-sent-messages.101')!));
     expect(messages[0].submissionAnalysis).toMatchObject({ aiAnalysisStatus: 'SKIPPED_LIMIT' });
@@ -1186,7 +1187,7 @@ for (const followUp of [false, true]) {
   });
 }
 
-test('최종 제출은 현재 백엔드의 submissionAnalysisStatus와 최신 위험 점수를 표시한다', async ({ page }) => {
+test('전송 완료 화면은 분석 안내와 위험 점수를 숨기고 최종 분석 데이터는 보존한다', async ({ page }) => {
   await setup(page, { summary: { riskScore: 95 }, submission: {
     submissionAnalysisStatus: 'RULE_ONLY_INVALID_RESPONSE',
     riskAnalysis: { analysisId: 9, complaintId: 42, riskScore: 25, riskLevel: 'MEDIUM',
@@ -1195,9 +1196,15 @@ test('최종 제출은 현재 백엔드의 submissionAnalysisStatus와 최신 �
   await analyze(page);
   await page.getByRole('button', { name: '전송하기', exact: true }).click();
   await page.getByRole('button', { name: '확인 후 전송', exact: true }).click();
-  await expect(page.getByText('최종 전송 내용의 시스템 위험 점수: 25/100', { exact: true })).toBeVisible();
-  await expect(page.getByText('잠정 분석', { exact: true })).toBeVisible();
-  await expect(page.getByText('교사의 직접 검토가 필요합니다.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '전송 완료', exact: true })).toBeVisible();
+  await expect(page.locator('.risk-analysis-notice')).toHaveCount(0);
+  await expect(page.getByText(/최종 전송 내용의 시스템 위험 점수/)).toHaveCount(0);
+  await expect(page.getByText('잠정 분석', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('교사의 직접 검토가 필요합니다.', { exact: true })).toHaveCount(0);
+  const messages = await page.evaluate(() => JSON.parse(localStorage.getItem('teacher-hub.parent-sent-messages.101')!));
+  expect(messages[0].submissionAnalysis).toMatchObject({
+    aiAnalysisStatus: 'RULE_ONLY_INVALID_RESPONSE', riskScore: 25, riskLevel: 'MEDIUM', manualReviewRequired: true,
+  });
 });
 
 test('추가 문의의 내부 안전 오류는 대화 재조회로 전송 성공 처리하지 않는다', async ({ page }) => {
