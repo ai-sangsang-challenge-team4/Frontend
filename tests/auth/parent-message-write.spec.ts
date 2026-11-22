@@ -158,6 +158,47 @@ test('빈 입력과 공백 입력을 차단하고 임시저장한 메시지를 �
   expect(saved.teacherId).toBe('teacher-102');
 });
 
+test('새 문의 진입은 이전 임시저장을 불러오지 않고 목록에서 선택한 초안만 복원한다', async ({ page }) => {
+  await openComposer(page);
+  await fillMessage(page);
+  await page.getByRole('button', { name: '임시저장', exact: true }).click();
+  await expect(page.getByRole('alert')).toHaveText('문의가 임시저장되었습니다.');
+  const saved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), draftKey);
+
+  if (page.viewportSize()!.width <= 980) {
+    await page.getByRole('button', { name: '학부모 메뉴 더보기', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Teacher Hub 학부모 메뉴', exact: true })
+      .getByRole('link', { name: '새 문의', exact: true }).click();
+  } else {
+    await page.getByRole('link', { name: '새 문의', exact: true }).click();
+  }
+  const title = page.getByLabel('문의 제목', { exact: true });
+  const body = page.getByLabel('문의 내용', { exact: true });
+  await expect(title).toHaveValue('');
+  await expect(body).toHaveValue('');
+  await page.reload();
+  await expect(title).toHaveValue('');
+  await expect(body).toHaveValue('');
+
+  await title.fill('새로 작성한 문의');
+  await body.fill('이전 문의와 별개로 작성하는 내용입니다.');
+  await page.getByRole('button', { name: '임시저장', exact: true }).click();
+  await expect(page).toHaveURL(/\/parent\/messages\/new\?draft=/);
+  await page.reload();
+  await expect(title).toHaveValue('새로 작성한 문의');
+  await expect(body).toHaveValue('이전 문의와 별개로 작성하는 내용입니다.');
+  const drafts = await page.evaluate((key) => JSON.parse(localStorage.getItem(`${key}.all`)!), draftKey);
+  expect(drafts).toHaveLength(2);
+  expect(drafts).toContainEqual(saved);
+
+  await page.goto('/parent/messages?tab=drafts');
+  await page.getByRole('button', { name: /상담 일정을 문의드립니다\./ }).click();
+  await page.getByRole('dialog', { name: '작성 중인 문의가 있어요.', exact: true })
+    .getByRole('button', { name: '이어서 작성', exact: true }).click();
+  await expect(title).toHaveValue(saved.title);
+  await expect(body).toHaveValue(saved.body);
+});
+
 test('분석 중 화면을 표시하고 뒤로가기 시 입력을 유지하며 검토 경로로 연결한다', async ({ page }, testInfo) => {
   await openComposer(page);
   await fillMessage(page);
@@ -180,6 +221,16 @@ test('분석 중 화면을 표시하고 뒤로가기 시 입력을 유지하며 
   const saved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), draftKey);
   expect(saved.status).toBe('PARENT_REVIEW');
   expect(saved.body).toContain('다음 주 상담');
+
+  await page.goBack();
+  await expect(page).toHaveURL(`/parent/messages/new?draft=${saved.messageId}`);
+  await expect(page.getByLabel('문의 제목', { exact: true })).toHaveValue(saved.title);
+  await expect(page.getByLabel('문의 내용', { exact: true })).toHaveValue(saved.body);
+  await page.getByRole('button', { name: 'AI 분석 시작', exact: true }).click();
+  await expect(page).toHaveURL(/\/review$/);
+  await page.getByRole('button', { name: '문의 작성으로 돌아가기', exact: true }).click();
+  await expect(page).toHaveURL(`/parent/messages/new?draft=${saved.messageId}`);
+  await expect(page.getByLabel('문의 내용', { exact: true })).toHaveValue(saved.body);
 });
 
 test('저장 실패와 오프라인 상태에서 작성한 내용을 유지한다', async ({ page, context }) => {

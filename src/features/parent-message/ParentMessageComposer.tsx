@@ -390,6 +390,12 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
       setNotice(null);
       setDraft(nextDraft);
       setIsAnalyzing(true);
+      if (!threadId && !draftId) {
+        // Preserve the mounted analysis while making reload and Browser Back resume this draft.
+        navigate(getDraftPath(nextDraft), {
+          replace: true, state: { composerKey: location.state?.composerKey ?? location.key },
+        });
+      }
     } catch {
       setNotice('작성한 내용을 저장하지 못했습니다. 다시 시도해 주세요.');
     }

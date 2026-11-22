@@ -32,7 +32,7 @@ function ServerFollowUpWritePage({ userId, threadId, search }: { userId: number;
 export function MessageWritePage() {
   const { user } = useAuth();
   const { messageId } = useParams();
-  const { search } = useLocation();
+  const { search, key, state } = useLocation();
   if (!user) return null;
 
   const pageKey = `${user.userId}-${messageId ?? 'new'}`;
@@ -41,6 +41,9 @@ export function MessageWritePage() {
   }
 
   const params = new URLSearchParams(search);
-  return <ParentMessageComposer key={`${pageKey}-${search}`}
-    userId={user.userId} threadId={messageId} draftId={params.get('draft') ?? undefined} fresh={params.has('fresh')} />;
+  const draftId = params.get('draft') ?? undefined;
+  // New inquiries start empty; only an explicit draft URL resumes saved content.
+  const fresh = params.has('fresh') || (!messageId && !draftId);
+  return <ParentMessageComposer key={`${pageKey}-${state?.composerKey ?? key}`}
+    userId={user.userId} threadId={messageId} draftId={draftId} fresh={fresh} />;
 }

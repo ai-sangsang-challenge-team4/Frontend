@@ -304,7 +304,7 @@ test('분석 실패·로딩·잘못된 응답을 구분하며 답변을 차단�
   await expect(page.getByRole('button', { name: 'AI 분석 근거', exact: true })).toBeEnabled();
 });
 
-test('Rule-only 검토 안내는 카드 안에 한 번만 표시하고 100점과 교사 7단계를 구분한다', async ({ page }, testInfo) => {
+test('Rule-only 검토 안내는 카드 안에 한 번만 표시하고 교사 검토 단계만 안내한다', async ({ page }, testInfo) => {
   await openTeacherMessage(page);
   await changeAnalysis(page, { systemRiskScore: 75, analysisMode: 'RULE_ONLY', manualReviewRequired: true, analysisMessage: '잠정 분석: 교사의 직접 검토가 필요합니다.' });
   await openTab(page, '위험 요소');
@@ -312,8 +312,8 @@ test('Rule-only 검토 안내는 카드 안에 한 번만 표시하고 100점과
   await expect(page.locator('.board-risk-tab')).not.toContainText('시스템 위험 점수:');
   const scoreHelp = page.locator('.board-risk-review-copy').getByRole('button', { name: '위험도 점수 기준', exact: true });
   await scoreHelp.focus();
-  await expect(page.getByRole('tooltip')).toContainText('시스템 위험 점수: 75/100');
-  await expect(page.getByRole('tooltip')).toContainText('시스템 위험 점수와 교사 검토 점수는 서로 다른 기준입니다. 교사 검토는 1~7단계로 진행됩니다.');
+  await expect(page.getByRole('tooltip')).not.toContainText('시스템 위험 점수');
+  await expect(page.getByRole('tooltip')).toContainText('교사 검토는 1~7단계로 진행됩니다.');
   await page.keyboard.press('Escape');
   await expect(page.getByRole('tooltip')).toHaveCount(0);
   await expect(scoreHelp).toBeFocused();
@@ -389,16 +389,15 @@ test('결과 로딩 중에는 미확인 원문 권한을 제한으로 단정하�
 });
 
 for (const score of [0, undefined]) {
-  test(`점수 도움말에서 ${score === 0 ? '실제 0점' : '미제공 점수'} 구분과 터치·키보드 닫힘을 확인한다`, async ({ page }, testInfo) => {
+  test(`점수 도움말은 ${score === 0 ? '실제 0점' : '미제공 점수'}를 노출하지 않고 터치·키보드로 닫힌다`, async ({ page }, testInfo) => {
     await openTeacherMessage(page);
     await changeAnalysis(page, { systemRiskScore: score });
     await openTab(page, '위험 요소');
     const trigger = page.getByRole('button', { name: '위험도 점수 기준', exact: true });
     await trigger.focus();
     const tooltip = page.getByRole('tooltip');
-    if (score === 0) await expect(tooltip).toContainText('시스템 위험 점수: 0/100');
-    else await expect(tooltip).not.toContainText('0/100');
-    await expect(tooltip).toContainText('시스템 위험 점수와 교사 검토 점수는 서로 다른 기준입니다. 교사 검토는 1~7단계로 진행됩니다.');
+    await expect(tooltip).not.toContainText(/시스템 위험 점수|\/100/);
+    await expect(tooltip).toContainText('교사 검토는 1~7단계로 진행됩니다.');
     const box = (await tooltip.boundingBox())!;
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(page.viewportSize()!.width);
@@ -410,14 +409,18 @@ for (const score of [0, undefined]) {
       await trigger.tap();
       await expect(tooltip).toHaveCount(0);
     }
+    await page.locator('.board-parent-card').getByRole('button', { name: 'AI 위험도 설명', exact: true }).focus();
+    await expect(tooltip).toContainText('AI 판단은 참고 정보');
+    await expect(tooltip).not.toContainText(/시스템 위험 점수|\/100/);
   });
 }
 
-test('검토 권한이 없는 화면에서도 시스템 점수는 위험도 설명에서 확인한다', async ({ page }) => {
+test('검토 권한이 없는 화면의 위험도 설명에도 시스템 점수를 노출하지 않는다', async ({ page }) => {
   await openTeacherMessage(page);
   await changeAnalysis(page, { canReviewRisk: false, systemRiskScore: 75 });
   await openTab(page, '위험 요소');
   await expect(page.locator('.board-risk-review-panel')).toHaveCount(0);
   await page.locator('.board-parent-card').getByRole('button', { name: 'AI 위험도 설명', exact: true }).focus();
-  await expect(page.getByRole('tooltip')).toContainText('시스템 위험 점수: 75/100');
+  await expect(page.getByRole('tooltip')).toContainText('AI 판단은 참고 정보이며, 최종 대응은 담당자의 검토를 거쳐 결정됩니다.');
+  await expect(page.getByRole('tooltip')).not.toContainText(/시스템 위험 점수|\/100/);
 });

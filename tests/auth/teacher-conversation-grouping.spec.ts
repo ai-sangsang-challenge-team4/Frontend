@@ -47,8 +47,9 @@ test('상세 원래 제목과 연속 메시지의 프로필·시간·정렬을 �
   await tabs.getByRole('button', { name: '처리 기록', exact: true }).click();
   await tabs.getByRole('button', { name: '대화', exact: true }).click();
   const card = page.locator('.board-parent-card--detail');
-  await expect(card.locator('.board-card-topic')).toHaveText('학부모가 작성한 원래 문의 제목');
-  await expect(card).not.toContainText(/자동 생성|최근 수신/);
+  await expect(card.locator('.board-card-topic strong')).toHaveText('학부모가 작성한 원래 문의 제목');
+  await expect(card.locator('.board-card-topic span')).toHaveText('자동 생성 요약');
+  await expect(card).not.toContainText(/자동 생성 제목|최근 수신/);
   await expect(card.locator('.board-avatar')).toBeVisible();
   await expect(card.locator('.board-card-profile')).toContainText('정하준 학부모');
   const replies = page.locator('.board-conversation .board-reply');

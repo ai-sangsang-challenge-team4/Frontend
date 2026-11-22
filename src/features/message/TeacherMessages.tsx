@@ -890,7 +890,6 @@ type RiskReviewPanelProps = {
   reason: string;
   referenceScore: RiskScore;
   score: RiskScore;
-  systemRiskScore?: number | null;
   threadId: string;
 };
 
@@ -906,7 +905,6 @@ function RiskReviewPanel({
   reason,
   referenceScore,
   score,
-  systemRiskScore,
   threadId,
 }: RiskReviewPanelProps) {
   const trimmedReason = reason.trim();
@@ -957,8 +955,7 @@ function RiskReviewPanel({
             </h2>
             <InformationTooltip label="위험도 점수 기준" content={
               <span className="board-risk-score-help">
-                {systemRiskScore != null ? <>시스템 위험 점수: {systemRiskScore}/100.<br /></> : null}
-                시스템 위험 점수와 교사 검토 점수는 서로 다른 기준입니다. 교사 검토는 1~7단계로 진행됩니다.
+                교사 검토는 1~7단계로 진행됩니다.
               </span>
             } />
           </div>
@@ -1437,7 +1434,6 @@ function RiskAnalysisPanel({
           reason={reviewReason}
           referenceScore={initialReviewScore}
           score={reviewScore}
-          systemRiskScore={analysis.systemRiskScore}
           threadId={thread.id}
         />
       ) : null}
