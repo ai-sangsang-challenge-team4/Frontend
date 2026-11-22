@@ -51,8 +51,7 @@
   min-width: 180px;
 }
 
-.board-filter-select .ui-dropdown-button,
-.board-search-field .ui-input-shell {
+.board-filter-select .ui-dropdown-button {
   height: 47px;
   min-height: 47px;
   border: var(--border-control);
@@ -164,19 +163,6 @@
   height: 47px;
   margin-left: auto;
   padding: 0 20px;
-}
-
-.board-search-field .ui-input-shell {
-  padding: 0 20px;
-}
-
-.board-search-field .ui-field-icon {
-  width: 17px;
-  height: 16px;
-}
-
-.board-search-field .ui-field-control::placeholder {
-  color: var(--color-text-primary);
 }
 
 .board-thread-list {

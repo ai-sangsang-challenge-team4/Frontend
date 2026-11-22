@@ -459,15 +459,6 @@ function DownloadIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-function formatGuidePostDate(date: string) {
-  const weekday = new Intl.DateTimeFormat('ko-KR', {
-    timeZone: 'Asia/Seoul',
-    weekday: 'short',
-  }).format(new Date(`${date}T00:00:00+09:00`));
-
-  return `${date} (${weekday})`;
-}
-
 function getGuideAttachments(post: GuidePost): GuideAttachment[] {
   return [
     {
@@ -525,10 +516,6 @@ function GuidePostRow({
           ) : null}
         </span>
       </span>
-      <time className="guide-board-cell" dateTime={post.date}>
-        {post.date}
-      </time>
-      <span className="guide-board-cell">{post.views}</span>
     </button>
   );
 }
@@ -557,10 +544,6 @@ function GuidePostDetail({
     <article className="guide-post-detail" aria-labelledby="guide-post-title">
       <div className="guide-post-detail-header">
         <h2 id="guide-post-title">{post.title}</h2>
-        <div className="guide-post-date">
-          <span>등록일</span>
-          <time dateTime={post.date}>{formatGuidePostDate(post.date)}</time>
-        </div>
       </div>
 
       <div className="guide-post-content">
@@ -790,7 +773,7 @@ export function TeacherGuide() {
               </p>
               <TextField
                 aria-label="대응 가이드 검색"
-                containerClassName="guide-search-field"
+                containerClassName="guide-search-field ui-search-field"
                 onChange={(event) =>
                   handleQueryChange(event.currentTarget.value)
                 }
@@ -805,8 +788,6 @@ export function TeacherGuide() {
               <div className="guide-board-head" aria-hidden="true">
                 <span>번호</span>
                 <span>제목</span>
-                <span>등록일</span>
-                <span>조회</span>
               </div>
 
               {hasRows ? (

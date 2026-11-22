@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { SearchIcon } from '../../shared/components/teacher-shell/icons';
 import { AsyncContent } from '../../shared/components';
 import { Button, Dropdown, EmptyState, Tabs, TextField } from '../../shared/components/ui';
 import type { EscalationStatus, RiskLevel } from '../../shared/types';
@@ -64,7 +65,8 @@ export function AdminSharePanel() {
         <form className="teacher-admin-share-search" onSubmit={search} role="search" aria-label="공유 내역 검색">
           <TextField
             aria-label="민원 제목 또는 학생명"
-            containerClassName="board-search-field"
+            containerClassName="board-search-field ui-search-field"
+            leadingIcon={<SearchIcon />}
             maxLength={100}
             onChange={(event) => setSearchInput(event.target.value)}
             placeholder="민원 제목 또는 학생명"

@@ -154,34 +154,6 @@
   width: min(360px, 100%);
 }
 
-.guide-search-field .ui-input-shell {
-  height: 45px;
-  min-height: 45px;
-  padding: 0 14px;
-  border-color: var(--color-border-default);
-  border-radius: 8px;
-}
-
-.guide-search-field .ui-input-shell:focus-within {
-  border-color: var(--color-border-default);
-  box-shadow: none;
-  background: var(--color-bg-surface);
-}
-
-.guide-search-field .ui-field-control:focus {
-  color: var(--color-text-primary);
-  outline: 0;
-}
-
-.guide-search-field .ui-field-control::placeholder {
-  color: var(--color-text-primary);
-}
-
-.guide-search-field .ui-field-icon {
-  width: 17px;
-  height: 16px;
-}
-
 .guide-board {
   width: min(
     var(--guide-content-max),
@@ -198,7 +170,7 @@
 .guide-board-head,
 .guide-board-row {
   display: grid;
-  grid-template-columns: 96px minmax(360px, 1fr) 160px 86px;
+  grid-template-columns: 96px minmax(0, 1fr);
   align-items: center;
 }
 
@@ -246,7 +218,7 @@
 
 .guide-board-title-cell {
   min-width: 0;
-  padding: 0 20px;
+  padding: var(--space-4) var(--space-5);
 }
 
 .guide-notice-badge {
@@ -271,10 +243,10 @@
 }
 
 .guide-board-title {
-  overflow: hidden;
   color: var(--color-text-secondary);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 .guide-comment-count {
@@ -385,26 +357,6 @@
   font-size: 28px;
   font-weight: 700;
   line-height: 36px;
-}
-
-.guide-post-date {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 42px;
-  color: var(--color-black);
-}
-
-.guide-post-date span {
-  font-size: 20px;
-  font-weight: 600;
-  line-height: 28px;
-}
-
-.guide-post-date time {
-  font-size: 20px;
-  font-weight: 400;
-  line-height: 24px;
 }
 
 .guide-post-content {
@@ -612,7 +564,7 @@
 
   .guide-board-head,
   .guide-board-row {
-    grid-template-columns: 84px minmax(280px, 1fr) 140px 76px;
+    grid-template-columns: 84px minmax(0, 1fr);
   }
 }
 
@@ -647,10 +599,6 @@
     flex-direction: column;
   }
 
-  .guide-post-date {
-    gap: 20px;
-  }
-
   .guide-post-attachments li {
     grid-template-columns: 1fr;
     gap: 10px;
@@ -683,14 +631,9 @@
     width: 100%;
   }
 
-  .guide-board {
-    overflow-x: auto;
-    padding-bottom: 8px;
-  }
-
   .guide-board-head,
   .guide-board-row {
-    min-width: 760px;
+    grid-template-columns: 72px minmax(0, 1fr);
   }
 }
 
