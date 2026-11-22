@@ -103,7 +103,7 @@ for (const width of [1440, 1024, 768, 375]) {
     await expect(evidence).toHaveCount(1);
     await expect(evidence).toBeVisible();
     await expect(page.locator('.board-answer-button-group').getByRole('button')).toHaveCount(2);
-    await expect(evidence.locator('svg')).toHaveCount(1);
+    await expect(evidence.locator('svg')).toHaveCount(0);
     await expect(page.locator('.board-answer-cta-copy p')).toHaveCount(0);
     await expect(page.locator('.board-answer-box .ui-badge')).toHaveCount(0);
     const aiHelp = page.getByRole('button', { name: 'AI 판단 및 답변 검토 안내', exact: true });
@@ -180,13 +180,19 @@ for (const width of [1440, 1024, 768, 375]) {
     await expect(page.locator('.board-conversation .board-analysis-evidence-button, .board-conversation .board-conversation-evidence-actions')).toHaveCount(0);
     expect(await page.locator('.board-conversation').evaluate((element) =>
       element.getBoundingClientRect().bottom - element.lastElementChild!.getBoundingClientRect().bottom)).toBeCloseTo(24, 0);
-    const close = composerHeader.getByRole('button', { name: '메시지 상세로 돌아가기', exact: true });
-    await expect(close).toHaveText('답변 작성 닫기');
+    const close = composerHeader.getByRole('button', { name: '답변 작성 닫기', exact: true });
+    await expect(close).toHaveText('닫기');
+    await expect(close.locator('svg')).toHaveAttribute('aria-hidden', 'true');
+    await expect(close.locator('svg')).toHaveCSS('width', '14px');
+    await expect(close.locator('svg')).toHaveCSS('height', '14px');
+    await expect(close).toHaveCSS('gap', '8px');
+    await expect(evidence.locator('.ui-button-icon')).toHaveCount(0);
     const labelBox = (await composerHeader.locator('label').boundingBox())!;
     const statusBox = (await composerHeader.locator('[aria-live="polite"]').boundingBox())!;
     const closeBox = (await close.boundingBox())!;
     const headerBox = (await composerHeader.boundingBox())!;
     const headerEvidenceBox = (await evidence.boundingBox())!;
+    expect(closeBox.width).toBeLessThan(headerEvidenceBox.width);
     const titleGroupBox = (await composerHeader.locator('.board-reply-compose-title').boundingBox())!;
     expect(Math.abs(closeBox.x + closeBox.width - headerBox.x - headerBox.width)).toBeLessThan(1);
     expect(closeBox.y).toBeCloseTo(headerEvidenceBox.y, 0);
@@ -229,7 +235,8 @@ for (const width of [1440, 1024, 768, 375]) {
     await panel.screenshot({ path: testInfo.outputPath('references-expanded.png') });
     await toggle.click();
     await expect(editor).toHaveValue('화면을 조정해도 보존되어야 하는 작성 중 답변입니다.');
-    await close.click();
+    await close.focus();
+    await close.press('Enter');
     await expect(page.locator('.board-reply-compose-panel')).toHaveCount(0);
     await expect(page).toHaveURL(/\/thread-003$/);
     await expect(evidence).toHaveCount(1);

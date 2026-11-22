@@ -24,9 +24,10 @@ export function ParentMessageReceipt({ userId, messageId }: { userId: number; me
   const justSent = location.state?.justSent === true;
   const followUpOpen = location.state?.followUpOpen === true;
   const restoreFollowUpFocus = useRef(false);
+  const conversationRef = useRef<HTMLElement>(null);
   useEffect(() => {
     if (!followUpOpen && restoreFollowUpFocus.current) {
-      document.getElementById('parent-follow-up-trigger')?.focus();
+      (document.getElementById('parent-follow-up-trigger') ?? conversationRef.current)?.focus();
       restoreFollowUpFocus.current = false;
     }
   }, [followUpOpen]);
@@ -132,7 +133,7 @@ export function ParentMessageReceipt({ userId, messageId }: { userId: number; me
         <div className="parent-conversation-notice"><Info aria-hidden="true" size={24} /><p>{isWaitingForTeacher
           ? '선생님의 답변을 기다리고 있어요. 답변이 도착하면 이 문의에서 추가 질문을 작성할 수 있습니다.'
           : '같은 내용에 대한 추가 질문은 이 문의에서 이어서 작성할 수 있습니다. 다른 내용은 새 문의로 작성해 주세요.'}</p></div>
-        <section aria-label="전체 대화 내역" className="parent-conversation">
+        <section aria-label="전체 대화 내역" className="parent-conversation" ref={conversationRef} tabIndex={-1}>
           <ol className="parent-conversation-messages">
             {conversation.map((entry, index) => {
               const date = formatMessageDate(entry.sentAt, false);

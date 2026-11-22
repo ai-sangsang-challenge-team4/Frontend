@@ -731,8 +731,11 @@ test('인라인 작성 중 교사 답변 대기로 바뀌면 내용을 보존하
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(page.getByRole('button', { name: 'AI 분석 시작', exact: true })).toBeDisabled();
   await expect(input).toHaveValue('작성 중인 추가 문의를 보존합니다.');
-  await page.getByRole('button', { name: '추가 문의 입력창 접기', exact: true }).click();
+  const collapse = page.getByRole('button', { name: '추가 문의 입력창 접기', exact: true });
+  await collapse.focus();
+  await collapse.press('Enter');
   await expect(input).toHaveCount(0);
+  await expect(page.getByRole('region', { name: '전체 대화 내역', exact: true })).toBeFocused();
   await expect(page.getByRole('button', { name: '추가 문의하기', exact: true })).toHaveCount(0);
   expect(calls.filter((call) => /^(POST|PUT|PATCH) /.test(call))).toEqual([]);
   expect(await page.evaluate(() => localStorage.getItem('teacher-hub.parent-message-draft.101'))).toContain('작성 중인 추가 문의를 보존합니다.');

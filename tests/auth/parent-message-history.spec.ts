@@ -386,7 +386,7 @@ test('교사 답변 두 탭을 새로고침 후 복원하고 선택한 답변을
   await expect(editor).toHaveValue('도시락과 물은 안내장에 따라 준비해 주세요.');
   await expect(page.locator('.board-reply-compose-header')).toContainText('마지막 임시저장');
   await page.getByRole('button', { name: '초기화', exact: true }).click();
-  await page.getByRole('button', { name: '메시지 상세로 돌아가기', exact: true }).click();
+  await page.getByRole('button', { name: '답변 작성 닫기', exact: true }).click();
   await page.getByRole('button', { name: '답변 이어서 작성하기', exact: true }).click();
   await expect(aiTab).toHaveAttribute('aria-selected', 'true');
   await expect(editor).toHaveValue('준비물 관련 AI 초안을 수정했습니다.');

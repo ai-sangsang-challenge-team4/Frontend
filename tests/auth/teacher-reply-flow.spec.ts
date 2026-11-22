@@ -221,7 +221,7 @@ test('규정 자료에 없는 문의는 AI 초안을 만들지 않고 직접 작
   await expect(page.locator('#board-reply-composer-input')).toBeDisabled();
   await manualTab.click();
   await expect(page.locator('#board-reply-composer-input')).toHaveValue('작성 중인 답변');
-  await page.getByRole('button', { name: '메시지 상세로 돌아가기', exact: true }).click();
+  await page.getByRole('button', { name: '답변 작성 닫기', exact: true }).click();
   await page.getByRole('button', { name: '답변 이어서 작성하기', exact: true }).click();
   await expect(manualTab).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('#board-reply-composer-input')).toHaveValue('작성 중인 답변');
@@ -363,7 +363,7 @@ test('임시저장·초기화는 현재 탭에만 적용하고 AI 초안은 한 
   await aiTab.click();
   await expect(editor).toHaveValue('');
   await expect(aiButtons).toHaveCount(0);
-  await page.getByRole('button', { name: '메시지 상세로 돌아가기', exact: true }).click();
+  await page.getByRole('button', { name: '답변 작성 닫기', exact: true }).click();
   await page.getByRole('button', { name: '답변 이어서 작성하기', exact: true }).click();
   await expect(editor).toHaveValue('');
   await expect(aiButtons).toHaveCount(0);
@@ -373,7 +373,7 @@ test('임시저장·초기화는 현재 탭에만 적용하고 AI 초안은 한 
   await expect(editor).toHaveValue('');
   await aiTab.click();
   await expect(editor).toHaveValue('');
-  await page.getByRole('button', { name: '메시지 상세로 돌아가기', exact: true }).click();
+  await page.getByRole('button', { name: '답변 작성 닫기', exact: true }).click();
   await page.getByRole('navigation', { name: '메시지 상세 탭' }).getByRole('button', { name: '처리 기록', exact: true }).click();
   await expect(page.getByText('답변 초안 생성', { exact: true })).toHaveCount(1);
 });

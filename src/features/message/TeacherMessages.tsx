@@ -10,7 +10,6 @@ import {
   type ReactNode,
 } from 'react';
 import { useLocation, useNavigate, type NavigateFunction } from 'react-router-dom';
-import { Info } from 'lucide-react';
 import { Sidebar } from '../../shared/components/teacher-shell/TeacherSidebar';
 import { ChevronDownIcon, SearchIcon, StarIcon } from '../../shared/components/teacher-shell/icons';
 import {
@@ -1675,7 +1674,7 @@ function ThreadDetail({
     else setActiveDetailTab('risk');
   };
   const analysisEvidenceButton = supportsAnalysisDrawer ? (
-    <Button className="board-analysis-evidence-button" variant="outline" size="md" leftIcon={<Info size={16} />} disabled={!analysisReady} onClick={openEvidence}>AI 분석 근거</Button>
+    <Button className="board-analysis-evidence-button" variant="outline" size="md" disabled={!analysisReady} onClick={openEvidence}>AI 분석 근거</Button>
   ) : null;
   const aiJudgmentHelp = supportsAnalysisDrawer && !analysisReady ? null : (
     <div className="board-answer-ai-note">

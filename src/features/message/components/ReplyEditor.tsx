@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Button, Tabs } from '../../../shared/components/ui';
-import { Info } from 'lucide-react';
+import { Info, X } from 'lucide-react';
 import type { ReplyDraftTab } from '../types';
 import {
   ResetIcon,
@@ -113,8 +113,8 @@ export function ReplyEditor({
         {headerAction || onClose ? <div className="board-reply-header-actions">
           {headerAction}
           {onClose ? <Button className="board-reply-compose-close" variant="outline" size="md" onClick={onClose}
-            aria-label="메시지 상세로 돌아가기">
-            답변 작성 닫기
+            aria-label="답변 작성 닫기" leftIcon={<X aria-hidden="true" size={14} />}>
+            닫기
           </Button> : null}
         </div> : null}
       </div>

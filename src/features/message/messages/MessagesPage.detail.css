@@ -565,6 +565,11 @@
 
 .board-reply-compose-close { color: var(--color-text-secondary); }
 
+.board-reply-compose-close .ui-button-icon {
+  width: 14px;
+  height: 14px;
+}
+
 .board-reply-ai-note {
   display: flex;
   align-items: flex-start;
