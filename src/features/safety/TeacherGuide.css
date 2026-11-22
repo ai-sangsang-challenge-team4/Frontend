@@ -692,3 +692,25 @@
     justify-content: center;
   }
 }
+
+@media (min-width: 981px) {
+  .guide-page-shell,
+  .guide-page-shell.is-sidebar-collapsed {
+    --guide-content-left: var(--space-12);
+    --guide-content-right: var(--space-8);
+  }
+  .guide-page-main { padding: var(--space-12) var(--guide-content-right) var(--space-12) var(--guide-content-left); }
+  .guide-page-summary,
+  .guide-board-toolbar,
+  .guide-post-detail { margin-top: var(--space-8); }
+  .guide-page-summary h2 { font-size: 20px; line-height: 28px; }
+  .guide-board-head,
+  .guide-board-row { min-height: 64px; font-size: var(--font-size-body); line-height: var(--line-height-body); }
+  .guide-board-title-cell { padding-block: var(--space-3); }
+  .guide-post-detail-header { padding-block: var(--space-5); }
+  .guide-post-content { padding: var(--space-8) var(--space-2); }
+  .guide-post-content p,
+  .guide-post-content li { font-size: var(--font-size-body); line-height: var(--line-height-body); }
+  .guide-pagination,
+  .guide-post-sibling-nav { margin-top: var(--space-8); }
+}

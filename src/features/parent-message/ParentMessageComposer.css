@@ -528,3 +528,10 @@
   .parent-inline-composer .parent-write-actions { width: 100%; }
   .parent-inline-composer .parent-write-actions > .ui-button { flex: 1 1 auto; }
 }
+
+@media (min-width: 981px) {
+  .parent-write-form { --parent-field-inset: var(--space-4); gap: var(--space-5); }
+  .parent-write-field.ui-field .ui-input-shell,
+  .parent-write-field.ui-field .ui-select-shell { min-height: 47px; }
+  .parent-follow-up-layout .parent-write-main { margin-top: var(--space-8); }
+}

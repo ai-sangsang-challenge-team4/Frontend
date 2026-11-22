@@ -135,3 +135,21 @@
   .parent-conversation-primary-actions .ui-button { min-width: 0; padding: 8px 12px; font-size: 14px; gap: 6px; }
 }
 .parent-conversation-main .parent-history-sync-error { margin: 0 0 16px; }
+
+@media (min-width: 981px) {
+  .parent-history-main,
+  .parent-conversation-main { margin-top: var(--space-8); }
+  .parent-history-toolbar { margin-block: var(--space-6); }
+  .parent-inquiry-link { min-height: 68px; padding-block: var(--space-2); gap: var(--space-4); }
+  .parent-inquiry-avatar { width: 40px; height: 40px; }
+  .parent-inquiry-teacher { gap: var(--space-3); padding-right: var(--space-3); }
+  .parent-inquiry-teacher > span,
+  .parent-inquiry-copy { gap: var(--space-1); }
+  .parent-inquiry-teacher strong,
+  .parent-inquiry-copy strong { font-size: var(--font-size-body); }
+  .parent-draft-row { min-height: 68px; padding: var(--space-3) var(--space-4); }
+  .parent-conversation-card { padding: var(--space-5); }
+  .parent-conversation { margin-top: var(--space-8); }
+  .parent-conversation-messages { min-height: 240px; padding: var(--space-6); gap: var(--space-6); }
+  .parent-conversation-actions { min-height: auto; padding: var(--space-5); gap: var(--space-4); }
+}

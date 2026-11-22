@@ -472,3 +472,34 @@
     line-height: 20px;
   }
 }
+
+/* Desktop density uses existing spacing tokens; rows may grow with content. */
+@media (min-width: 981px) {
+  .board-inbox-page,
+  .board-inbox-page.is-sidebar-collapsed {
+    --board-page-top-offset: var(--space-12);
+    --board-content-left: var(--space-12);
+    --board-content-right: var(--space-8);
+  }
+  .board-inbox-page .board-list-page,
+  .board-inbox-page .board-detail-page {
+    padding-inline: var(--board-content-left) var(--board-content-right);
+  }
+  .board-list-panel { margin-top: var(--space-8); }
+  .board-thread-list { margin-top: var(--space-6); }
+  .board-thread-row { min-height: 68px; gap: var(--space-3); }
+  .board-thread-button { min-height: 68px; padding-block: var(--space-2); }
+  .board-thread-parent { grid-template-columns: 48px minmax(0, 1fr); gap: var(--space-3); }
+  .board-thread-parent .board-avatar { width: 48px; height: 48px; }
+  .board-thread-row .board-parent-copy strong,
+  .board-thread-row .board-thread-copy strong { font-size: 18px; }
+  .board-detail { margin-inline: 0; gap: var(--space-6); }
+  .board-parent-card { padding: var(--space-5); }
+  .board-reply-compose-panel,
+  .board-reply-context-panel { padding: var(--space-5); }
+}
+@media (min-width: 1241px) {
+  .board-thread-button:not(.admin-thread-button):not(.teacher-admin-share-link) {
+    grid-template-columns: minmax(160px, 200px) minmax(0, 1fr) 94px 192px;
+  }
+}

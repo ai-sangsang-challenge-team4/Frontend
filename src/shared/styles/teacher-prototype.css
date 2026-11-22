@@ -1642,3 +1642,16 @@ ol {
     padding: 36px 16px 56px;
   }
 }
+
+/* Desktop workspaces: keep mobile spacing and shared control sizes intact. */
+@media (min-width: 981px) {
+  .app-layout {
+    --app-page-top-offset: var(--space-12);
+    --app-content-left: var(--space-12);
+    --app-content-right: var(--space-8);
+  }
+  .app-layout .layout-body {
+    padding: var(--app-page-top-offset) var(--app-content-right) var(--space-12) var(--app-content-left);
+  }
+  .layout-main { margin-top: var(--space-8); }
+}

@@ -1,0 +1,65 @@
+{
+  "teacher-list": {
+    "x": 345,
+    "y": 275,
+    "height": 224,
+    "width": 647,
+    "font": "16px"
+  },
+  "teacher-detail": {
+    "x": 345,
+    "y": 188,
+    "height": 121.59375,
+    "width": 647,
+    "font": "16px"
+  },
+  "teacher-reply": {
+    "x": 345,
+    "y": 331.59375,
+    "height": 568,
+    "width": 647,
+    "font": "16px"
+  },
+  "guide": {
+    "x": 345,
+    "y": 319,
+    "height": 64,
+    "width": 647,
+    "font": "16px"
+  },
+  "teacher-share": {
+    "x": 345,
+    "y": 116,
+    "height": 431,
+    "width": 647,
+    "font": "16px"
+  },
+  "parent-new": {
+    "x": 345,
+    "y": 231,
+    "height": 473,
+    "width": 647,
+    "font": "16px"
+  },
+  "parent-list": {
+    "x": 407,
+    "y": 268,
+    "height": 82.5,
+    "width": 585,
+    "font": "16px"
+  },
+  "parent-detail": {
+    "x": 345,
+    "y": 379,
+    "height": 240,
+    "width": 647,
+    "font": "16px"
+  },
+  "admin-list": {
+    "x": 345,
+    "y": 116,
+    "height": 375,
+    "width": 647,
+    "font": "16px"
+  }
+}
