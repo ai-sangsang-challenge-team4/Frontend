@@ -43,7 +43,7 @@ import { ConversationDateChip } from './components/ConversationDateChip';
 import { BufferedSummaryCard } from './components/BufferedSummaryCard';
 import { AnalysisStateNotice } from './components/AnalysisStateNotice';
 import { RiskClassificationPanel, RiskClassificationSummary } from '../risk-analysis/RiskClassificationPanel';
-import { EmergencySafetySignals, RiskAnalysisNotice } from '../risk-analysis/RiskAnalysisNotice';
+import { EmergencySafetySignals } from '../risk-analysis/RiskAnalysisNotice';
 import {
   BreadcrumbSeparator,
   CheckCircleIcon,
@@ -1298,7 +1298,6 @@ function RiskAnalysisPanel({
 
   return (
     <div className="board-risk-tab">
-      <RiskAnalysisNotice metadata={analysis} />
       <section
         className={`board-risk-guide board-risk-guide--${currentTone}${
           isProcedureOpen ? ' is-expanded' : ''

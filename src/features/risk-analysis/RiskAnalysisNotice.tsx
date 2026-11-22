@@ -1,4 +1,5 @@
 import { useId } from 'react';
+import { Info } from 'lucide-react';
 import { Badge } from '../../shared/components/ui';
 import type { EmergencyOverride, RiskAnalysisMetadata, SafetyFlags } from '../../shared/types/risk';
 import { isProvisionalAnalysis } from './index';
@@ -13,11 +14,25 @@ const statusLabels = {
   SKIPPED_LIMIT: '분석 횟수 제한',
 };
 
-export function RiskAnalysisNotice({ metadata }: { metadata: RiskAnalysisMetadata }) {
+export function RiskAnalysisNotice({ metadata, audience }: {
+  metadata: RiskAnalysisMetadata;
+  audience?: 'teacher';
+}) {
+  const headingId = useId();
   const { aiAnalysisStatus, manualReviewRequired, analysisMessage } = metadata;
   const skipped = aiAnalysisStatus === 'SKIPPED_LIMIT';
   const provisional = !skipped && isProvisionalAnalysis(metadata);
   if (!aiAnalysisStatus && !provisional && !manualReviewRequired) return null;
+  if (audience === 'teacher' && (provisional || manualReviewRequired) && !skipped) {
+    return <section className="risk-analysis-notice risk-analysis-notice--teacher-review" role="note" aria-labelledby={headingId}>
+      <Info className="risk-analysis-notice-info-icon" size={20} aria-hidden="true" />
+      <div>
+        <h3 id={headingId}>교사의 직접 검토가 필요합니다</h3>
+        <p>{provisional ? 'AI 문맥 분석을 완료하지 못해 규칙 탐지 결과를 바탕으로 위험도를 제공하고 있습니다. ' : ''}
+          메시지 원문과 판단 근거를 확인한 후 위험도를 직접 검토해 주세요.</p>
+      </div>
+    </section>;
+  }
   return <div className={`risk-analysis-notice${provisional || manualReviewRequired || skipped ? ' risk-analysis-notice--review' : ''}`} role="note">
     <div className="risk-analysis-notice-heading">
       {provisional ? <Badge variant="warning" size="sm">잠정 분석</Badge> : null}

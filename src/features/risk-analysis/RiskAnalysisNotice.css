@@ -14,6 +14,30 @@
   color: var(--color-text-primary);
 }
 
+.risk-analysis-notice--teacher-review {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  background: var(--color-bg-canvas);
+  color: var(--color-text-secondary);
+}
+
+.risk-analysis-notice--teacher-review > div { min-width: 0; }
+
+.risk-analysis-notice--teacher-review h3 {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.risk-analysis-notice-info-icon {
+  flex: 0 0 auto;
+  margin-top: var(--space-1);
+  color: var(--color-text-muted-readable);
+}
+
 .risk-analysis-notice--emergency {
   background: var(--color-danger-subtle);
   color: var(--color-text-primary);

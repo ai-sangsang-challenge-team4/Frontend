@@ -237,16 +237,24 @@ for (const [systemRiskLevel, label] of [['low', '일반'], ['medium', '주의'],
   });
 }
 
-test('규칙 기반 잠정 결과를 AI 문맥 분석으로 표시하지 않는다', async ({ page }) => {
+test('규칙 기반 위험도는 일반 배지와 중립적인 설명으로 표시한다', async ({ page }) => {
   await openTeacherMessage(page);
-  await changeAnalysis(page, { aiAnalysisStatus: 'RULE_ONLY_INVALID_RESPONSE', systemRiskScore: 0 });
+  await changeAnalysis(page, { aiAnalysisStatus: 'RULE_ONLY_INVALID_RESPONSE', systemRiskScore: 0, systemRiskLevel: 'low', currentRiskLevel: 'low' });
   await openTab(page, '위험 요소');
   const context = page.locator('.board-parent-card');
-  await expect(context).toContainText('규칙 기반 잠정 위험도');
+  await expect(context).toContainText('규칙 기반 위험도');
+  await expect(context.getByText('일반', { exact: true })).toBeVisible();
+  await expect(page.locator('.board-detail')).not.toContainText('잠정');
   await expect(context.getByText('AI 분석 위험도', { exact: true })).toHaveCount(0);
-  await context.getByRole('button', { name: 'AI 위험도 설명', exact: true }).focus();
-  await expect(page.getByRole('tooltip')).toContainText('AI 문맥 분석을 사용하지 못해 규칙만으로 산정한 잠정 위험도');
-  await expect(page.getByRole('tooltip')).toContainText('시스템 위험 점수: 0/100');
+  const help = context.getByRole('button', { name: '규칙 기반 위험도란?', exact: true });
+  await help.focus();
+  await expect(page.getByRole('tooltip')).toContainText('규칙 기반 위험도란?');
+  await expect(page.getByRole('tooltip')).toContainText('사전에 정의된 규칙으로 탐지한 위험 요소를 반영한 결과입니다.');
+  await expect(page.getByRole('tooltip')).toContainText('문맥에 따른 위험 요소가 반영되지 않았을 수 있으므로, 최종 판단은 교사가 직접 확인해야 합니다.');
+  await expect(page.getByRole('tooltip')).not.toContainText('잠정');
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('tooltip')).toHaveCount(0);
+  await expect(help).toBeFocused();
 });
 
 test('완충 요약 실패 시 이전 요약과 원문으로 자동 대체하지 않는다', async ({ page }) => {
@@ -296,9 +304,9 @@ test('분석 실패·로딩·잘못된 응답을 구분하며 답변을 차단�
   await expect(page.getByRole('button', { name: 'AI 분석 근거', exact: true })).toBeEnabled();
 });
 
-test('Rule-only 잠정 배지와 검토 안내를 표시하고 100점과 교사 7단계를 구분한다', async ({ page }) => {
+test('Rule-only 검토 안내는 카드 안에 한 번만 표시하고 100점과 교사 7단계를 구분한다', async ({ page }, testInfo) => {
   await openTeacherMessage(page);
-  await changeAnalysis(page, { systemRiskScore: 75, analysisMode: 'RULE_ONLY', manualReviewRequired: true });
+  await changeAnalysis(page, { systemRiskScore: 75, analysisMode: 'RULE_ONLY', manualReviewRequired: true, analysisMessage: '잠정 분석: 교사의 직접 검토가 필요합니다.' });
   await openTab(page, '위험 요소');
   await expect(page.locator('.board-card-meta').filter({ hasText: '시스템 위험 점수' })).toHaveCount(0);
   await expect(page.locator('.board-risk-tab')).not.toContainText('시스템 위험 점수:');
@@ -309,10 +317,61 @@ test('Rule-only 잠정 배지와 검토 안내를 표시하고 100점과 교사 
   await page.keyboard.press('Escape');
   await expect(page.getByRole('tooltip')).toHaveCount(0);
   await expect(scoreHelp).toBeFocused();
-  await expect(page.locator('.board-risk-tab').getByText('잠정 분석', { exact: true })).toBeVisible();
-  await expect(page.locator('.board-risk-tab')).toContainText('교사의 직접 검토가 필요합니다.');
+  const notice = page.locator('.board-parent-card .risk-analysis-notice');
+  await expect(notice).toHaveCount(1);
+  await expect(page.locator('.board-risk-tab .risk-analysis-notice')).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: '교사의 직접 검토가 필요합니다', exact: true })).toHaveCount(1);
+  await expect(notice).toContainText('AI 문맥 분석을 완료하지 못해 규칙 탐지 결과를 바탕으로 위험도를 제공하고 있습니다. 메시지 원문과 판단 근거를 확인한 후 위험도를 직접 검토해 주세요.');
+  await expect(page.locator('.board-detail')).not.toContainText('잠정');
+  await expect(notice).toHaveCSS('background-color', 'rgb(248, 248, 248)');
+  await expect(notice).toHaveCSS('border-top-color', 'rgb(231, 231, 231)');
+  await expect(notice).toHaveCSS('color', 'rgb(68, 68, 68)');
+  const bounds = (await notice.boundingBox())!;
+  expect(bounds.x).toBeGreaterThanOrEqual(0);
+  expect(bounds.x + bounds.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+  await page.locator('.board-parent-card').screenshot({ path: testInfo.outputPath('neutral-risk-notice.png') });
   await expect(page.getByRole('button', { name: '7점 매우 위험', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '8점', exact: false })).toHaveCount(0);
+});
+
+test('검토 안내는 태블릿과 작은 모바일 및 글자 200% 확대에서도 잘리지 않는다', async ({ page }, testInfo) => {
+  await openTeacherMessage(page);
+  await changeAnalysis(page, { aiAnalysisStatus: 'REUSED_RULE_ONLY', analysisMode: 'RULE_ONLY', manualReviewRequired: true });
+  await openTab(page, '위험 요소');
+  for (const width of [768, 375]) {
+    await page.setViewportSize({ width, height: 900 });
+    const notice = page.locator('.board-parent-card .risk-analysis-notice');
+    await expect(notice).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await notice.screenshot({ path: testInfo.outputPath(`notice-${width}.png`) });
+  }
+  // The design tokens use px, so double computed text sizes to simulate text-only zoom.
+  await page.locator('.board-parent-card').evaluate((card) => {
+    const elements = [card, ...Array.from(card.querySelectorAll<HTMLElement>('*'))];
+    const sizes = elements.map((element) => parseFloat(getComputedStyle(element).fontSize));
+    elements.forEach((element, index) => (element as HTMLElement).style.setProperty('font-size', `${sizes[index] * 2}px`, 'important'));
+  });
+  const notice = page.locator('.board-parent-card .risk-analysis-notice');
+  await expect(notice.locator('h3')).toHaveCSS('font-size', '32px');
+  const box = (await notice.boundingBox())!;
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(375);
+  expect(await notice.evaluate((element) => element.scrollWidth <= element.clientWidth && element.scrollHeight <= element.clientHeight)).toBe(true);
+  const help = page.getByRole('button', { name: '규칙 기반 위험도란?', exact: true });
+  await help.focus();
+  await expect(page.getByRole('tooltip')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(help).toBeFocused();
+});
+
+test('AI 완료 후 직접 검토 안내는 분석 실패로 설명하지 않는다', async ({ page }) => {
+  await openTeacherMessage(page);
+  await changeAnalysis(page, { aiAnalysisStatus: 'COMPLETED', analysisMode: 'HYBRID', manualReviewRequired: true });
+  await openTab(page, '위험 요소');
+  const notice = page.locator('.board-parent-card .risk-analysis-notice');
+  await expect(notice).toContainText('교사의 직접 검토가 필요합니다');
+  await expect(notice).not.toContainText('완료하지 못해');
+  await expect(notice).toContainText('메시지 원문과 판단 근거를 확인한 후 위험도를 직접 검토해 주세요.');
 });
 
 test('결과 로딩 중에는 미확인 원문 권한을 제한으로 단정하지 않고 답변 잠금을 유지한다', async ({ page }) => {
