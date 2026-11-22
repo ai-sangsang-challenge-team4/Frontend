@@ -32,7 +32,7 @@ export function MessageContextCard({ thread, compact = false }: MessageContextCa
       <div className="board-card-meta-group">
         <div className="board-card-meta">
           {analysisStatus === 'ready' && analysis
-            ? <AiRiskLabel audience="teacher" metadata={analysis} score={analysis.systemRiskScore} />
+            ? <AiRiskLabel audience="teacher" metadata={analysis} />
             : <span>위험도 분석 상태</span>}
           {analysisStatus === 'ready' && analysis ? <RiskBadge level={systemRiskTone[analysis.systemRiskLevel]} /> : (
             <Badge size="sm">{analysisStatus === 'failed' ? '분석 확인 필요' : analysisStatus === 'loading' ? '분석 중' : '분석 대기'}</Badge>

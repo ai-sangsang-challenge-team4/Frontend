@@ -167,6 +167,157 @@ async function analyze(page: Page) {
   await expect(page).toHaveURL(/\/review$/);
 }
 
+test('통합 카드의 상세 아코디언은 키보드로 열리고 내부 펼침 상태를 보존한다', async ({ page }, testInfo) => {
+  await setup(page, { summary: { aiAnalysisStatus: 'COMPLETED', riskLevel: 'EMERGENCY' } });
+  await analyze(page);
+  const card = page.getByRole('region', { name: '위험 분석 결과', exact: true });
+  await expect(card.getByRole('heading', { name: 'AI 분석 결과', exact: true })).toBeVisible();
+  await expect(card.locator('.parent-review-analysis-header').getByRole('status')).toHaveText('분석 완료');
+  await expect(card.locator('.parent-review-risk-notice')).toBeVisible();
+  await expect(card.getByRole('region', { name: '개인정보 마스킹 상태' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: '개인정보 마스킹 상태' })).toBeVisible();
+  const trigger = card.getByRole('button', { name: '상세 탐지 결과 더보기', exact: true });
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  await trigger.focus();
+  await page.keyboard.press('Enter');
+  const close = card.getByRole('button', { name: '상세 탐지 결과 접기', exact: true });
+  await expect(close).toHaveAttribute('aria-expanded', 'true');
+  const detectorTrigger = card.getByRole('button', { name: '서버에서 관리하는 협박 명칭 경계', exact: true });
+  await expect(detectorTrigger.locator('.ui-accordion-icon')).toHaveCSS('transform', 'none');
+  await detectorTrigger.click();
+  await expect(detectorTrigger).toHaveAttribute('aria-expanded', 'true');
+  await expect(card).toContainText('신뢰도: 65%');
+  await close.click();
+  await trigger.click();
+  await expect(detectorTrigger).toHaveAttribute('aria-expanded', 'true');
+  const heading = await card.locator('.parent-review-analysis-header h2').boundingBox();
+  const status = await card.locator('.parent-review-analysis-status').boundingBox();
+  expect(status!.x).toBeGreaterThanOrEqual(heading!.x + heading!.width);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('integrated-analysis-card.png'), fullPage: true });
+});
+
+test('입력창 아래 안내 툴팁은 포커스·터치·Escape·외부 클릭을 지원하고 글자 수는 오른쪽에 표시된다', async ({ page, isMobile }) => {
+  await setup(page);
+  await analyze(page);
+  const info = page.getByRole('button', { name: 'AI 분석 참고 안내', exact: true });
+  const tooltip = page.getByRole('tooltip');
+  await expect(page.locator('.ai-judgment-notice')).toHaveCount(0);
+  await expect(tooltip).toHaveCount(0);
+  const hint = await page.locator('.parent-review-hint').boundingBox();
+  const count = await page.locator('.parent-review-character-count').boundingBox();
+  expect(count!.x).toBeGreaterThanOrEqual(hint!.x + hint!.width);
+  const infoBounds = await info.boundingBox();
+  expect(Math.abs(infoBounds!.y + infoBounds!.height / 2 - hint!.y - hint!.height / 2)).toBeLessThan(1);
+  await info.focus();
+  await expect(tooltip).toHaveText('AI 분석은 참고용이며 오류가 있을 수 있습니다. 최종 전송 내용을 직접 확인해 주세요.');
+  await expect(info).toHaveAttribute('aria-describedby', await tooltip.getAttribute('id') as string);
+  await page.keyboard.press('Escape');
+  await expect(tooltip).toHaveCount(0);
+  await page.getByRole('heading', { name: '새 문의 작성', exact: true }).click();
+  if (isMobile) await info.tap(); else await info.hover();
+  await expect(tooltip).toBeVisible();
+  const bounds = await tooltip.boundingBox();
+  const viewport = page.viewportSize()!;
+  expect(bounds!.x).toBeGreaterThanOrEqual(0);
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(viewport.width);
+  expect(bounds!.y).toBeGreaterThanOrEqual(0);
+  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(viewport.height);
+  await page.getByRole('heading', { name: '새 문의 작성', exact: true }).click();
+  await expect(tooltip).toHaveCount(0);
+});
+
+for (const [riskLevel, label, message] of [
+  ['LOW', '일반', '분석된 내용을 확인해 주세요.'],
+  ['MEDIUM', '주의', '상대방에게 부담을 줄 수 있는 표현이 있어요.'],
+  ['HIGH', '위험', '상대방에게 위협이나 상처가 될 수 있는 표현이 있어요.'],
+  ['EMERGENCY', '긴급', '안전과 관련해 긴급히 확인할 내용이 있어요.'],
+] as const) {
+  test(`${riskLevel}: 단일 위험 안내와 작은 완료 상태만 표시한다`, async ({ page }, testInfo) => {
+    await setup(page, { noRevision: true, summary: { riskLevel, aiAnalysisStatus: 'COMPLETED',
+      analysisMessage: 'AI 위험 분석이 완료되었습니다.' }, detector: { analysisId: 7, results: [], llm: null,
+      safetyFlags: { credibleThreat: false, studentSafetyConcern: false, privacyExposure: false } } });
+    await analyze(page);
+    const notice = page.locator('.parent-review-risk-notice');
+    await expect(notice).toHaveCount(1);
+    await expect(notice.locator('.ui-badge')).toHaveText(label);
+    await expect(notice).toContainText(message);
+    await expect(page.locator('.parent-review-analysis-header').getByRole('status')).toHaveText('분석 완료');
+    await expect(page.getByText('AI 분석 완료', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('AI 위험 분석이 완료되었습니다.', { exact: true })).toHaveCount(0);
+    await expect(page.locator('.parent-review-main .ai-judgment-notice')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'AI 분석 참고 안내', exact: true })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'AI 초안', exact: true })).toBeDisabled();
+    await expect(page.locator('.parent-review-risk-accordion')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '전송하기', exact: true })).toBeEnabled();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`review-${riskLevel}.png`), fullPage: true });
+  });
+}
+
+test('반복 민원 미확인과 미탐지를 상세에서 구분하고 개발 정보는 숨긴다', async ({ page }) => {
+  await setup(page, { detector: { analysisId: 7, llm: { modelName: 'claude-sonnet-4-6', temperature: 0 }, results: [
+    { code: 'REPEAT', finalState: 'UNKNOWN', rule: null, llm: null },
+    { code: 'THREAT', finalState: 'ABSENT', rule: null, llm: null },
+  ] } });
+  await analyze(page);
+  const details = page.getByRole('region', { name: '위험 분석 결과' });
+  await expect(details.getByRole('button', { name: /미확인/ })).toBeHidden();
+  await details.getByText('상세 탐지 결과').click();
+  await expect(details.getByRole('button', { name: /반복.*미확인/ })).toBeVisible();
+  await expect(details.getByRole('button', { name: /협박.*미탐지/ })).toBeVisible();
+  await expect(details).not.toContainText('분석 모델');
+  await expect(details).not.toContainText('claude-sonnet');
+});
+
+test('긴 위험 표현과 여러 아코디언은 모바일에서도 줄바꿈되고 키보드로 근거를 확인한다', async ({ page }, testInfo) => {
+  const excerpt = '긴위험표현'.repeat(50);
+  const explanation = '서버에서 제공한 개별 판단 근거입니다.';
+  await setup(page, { findingsResponse: { findings: [
+    { code: 'THREAT', evidences: [excerpt, '다른 위험 표현'], revisionSuggestions: [
+      { originalExpression: excerpt, suggestedExpression: '상담을 요청합니다.', reason: explanation },
+    ] },
+  ] } });
+  await page.getByLabel('문의 내용', { exact: true }).fill(`${excerpt}\n다른 위험 표현\n${'일반 문장입니다. '.repeat(250)}`);
+  await page.getByRole('button', { name: 'AI 분석 시작', exact: true }).click();
+  await expect(page).toHaveURL(/\/review$/);
+  await page.getByRole('tab', { name: '원문', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '탐지된 위험 표현 목록 (2)' })).toBeVisible();
+  const trigger = page.locator('.parent-review-risk-accordion .ui-accordion-trigger').first();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  await expect(trigger.locator('.ui-badge')).toBeVisible();
+  await expect(trigger.locator('mark')).toHaveText(`"${excerpt}"`);
+  await trigger.focus();
+  await page.keyboard.press('Enter');
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('.parent-review-risk-accordion .ui-accordion-panel')).toContainText(explanation);
+  expect(await page.locator('.parent-review-original').evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('review-long-expressions.png'), fullPage: true });
+});
+
+test('findings 실패와 준비 중에는 완료 표시를 숨기고 이미 받은 긴급 경고는 유지한다', async ({ page }) => {
+  await setup(page, { summary: { aiAnalysisStatus: 'COMPLETED', riskLevel: 'EMERGENCY' } });
+  await page.route('**/risk-analyses/7/findings', (route) => route.fulfill({ status: 500, json: { code: 'INTERNAL_SERVER_ERROR' } }));
+  await analyze(page);
+  await expect(page.locator('.parent-review-analysis-header').getByRole('status')).toHaveText('분석 실패');
+  await expect(page.getByText('분석 결과 일부를 불러오지 못했습니다. 아래는 이미 확인된 위험 정보입니다.', { exact: true })).toBeVisible();
+  await expect(page.getByText('AI 분석 완료', { exact: true })).toHaveCount(0);
+  await expect(page.locator('.parent-review-risk-notice')).toContainText('긴급');
+  await expect(page.getByRole('tab', { name: 'AI 초안', exact: true })).toBeDisabled();
+  // A restored draft may have no successful summary at all; do not invent a prior result.
+  await page.evaluate(() => {
+    const key = 'teacher-hub.parent-message-draft.101';
+    const draft = JSON.parse(localStorage.getItem(key)!);
+    delete draft.review.analysis.riskSummary;
+    localStorage.setItem(key, JSON.stringify(draft));
+  });
+  await page.reload();
+  await expect(page.locator('.parent-review-analysis-header').getByRole('status')).toHaveText('분석 실패');
+  await expect(page.getByText('분석 결과를 불러오지 못했습니다. 원문을 확인해 주세요.', { exact: true })).toBeVisible();
+  await expect(page.locator('.parent-review-risk-notice')).toHaveCount(0);
+});
+
 test('분석 후 작성 화면과 새로고침에서도 선택한 자녀 이름을 표시한다', async ({ page }) => {
   const calls = await setup(page);
   const child = page.getByLabel('자녀', { exact: true });
@@ -209,7 +360,7 @@ test('이름 없이 저장된 초안도 조회 실패를 재시도해 학생 ID�
 });
 
 test('비동기 수정안이 도착해도 원문에서 작성한 내용과 선택한 탭을 유지한다', async ({ page }) => {
-  await setup(page);
+  await setup(page, { summary: { aiAnalysisStatus: 'COMPLETED' } });
   let revisionReady = false;
   await page.route((url) => url.pathname === '/api/risk-analyses/7/findings', (route) => route.fulfill({ json: {
     revisionStatus: revisionReady ? 'COMPLETED' : 'PENDING', findings: [],
@@ -217,12 +368,14 @@ test('비동기 수정안이 도착해도 원문에서 작성한 내용과 선�
   } }));
   await analyze(page);
   await expect(page.getByText('AI 수정안을 준비하고 있습니다.', { exact: false })).toBeVisible();
+  await expect(page.locator('.parent-review-analysis-header').getByRole('status')).toHaveText('분석 중');
   await expect(page.getByRole('tab', { name: 'AI 초안', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: '직접 수정', exact: true }).click();
   const original = page.getByLabel('직접 수정한 문의 내용', { exact: true });
   await original.fill('원문을 확인하며 직접 작성한 문장입니다.');
   revisionReady = true;
   await expect(page.getByRole('tab', { name: 'AI 초안', exact: true })).toBeEnabled({ timeout: 10_000 });
+  await expect(page.locator('.parent-review-analysis-header').getByRole('status')).toHaveText('분석 완료');
   await expect(page.getByRole('tab', { name: '원문', exact: true })).toHaveAttribute('aria-selected', 'true');
   await expect(original).toHaveValue('원문을 확인하며 직접 작성한 문장입니다.');
   await page.getByRole('tab', { name: 'AI 초안', exact: true }).click();
@@ -481,7 +634,7 @@ test('태그 명칭 응답이 지연되어도 검토 화면과 상세 탐지 결
   if (await expand.count()) await expand.click();
   await expect(page.getByRole('region', { name: '탐지된 위험 표현 목록 (1)' }).getByText('위험·협박', { exact: true })).toBeVisible();
   const results = page.getByRole('region', { name: '위험 분석 결과' });
-  await results.getByText('상세 탐지 결과 보기', { exact: true }).click();
+  await results.getByText('상세 탐지 결과', { exact: true }).click();
   await expect(results.getByRole('button', { name: '위험·협박 경계', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '전송하기', exact: true })).toBeEnabled();
 });
@@ -499,19 +652,22 @@ for (const tagFailure of [false, true]) {
   });
 }
 
-test('HTTP 새 문의에서 마스킹·분석·findings·상세 탐지를 호출하고 점수와 수정 이유를 표시한다', async ({ page }) => {
+test('HTTP 검토는 위험 안내를 통합하고 개발 정보 없이 상세 근거를 펼쳐 볼 수 있다', async ({ page }) => {
   const calls = await setup(page);
   await analyze(page);
   const results = page.getByRole('region', { name: '위험 분석 결과' });
-  await expect(results).toContainText('위험 점수: 30/100');
+  await expect(results.locator('.parent-review-risk-notice')).toHaveCount(1);
+  await expect(results).not.toContainText('위험 점수:');
+  await expect(results.getByText('요청을 구체적이고 부드럽게 표현했습니다.', { exact: true })).toBeHidden();
+  await results.getByText('상세 탐지 결과', { exact: true }).click();
   await expect(results).toContainText('요청을 구체적이고 부드럽게 표현했습니다.');
-  await results.getByText('상세 탐지 결과 보기', { exact: true }).click();
   await results.getByRole('button', { name: '서버에서 관리하는 협박 명칭 경계', exact: true }).click();
   await expect(results).toContainText('규칙 분석');
   await expect(results).toContainText('신뢰도: 0%');
   await expect(results).toContainText('신뢰도: 65%');
   await expect(results.getByText('상담 시간을 알려 주세요.', { exact: true })).toBeVisible();
-  await expect(results).toContainText('test-detector');
+  await expect(results).not.toContainText('test-detector');
+  await expect(results).not.toContainText('생성 다양성');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   expect(calls).toEqual(expect.arrayContaining(['GET /risk-tags', 'POST /complaints/42/mask', 'POST /complaints/42/risk-analysis', 'GET /risk-analyses/7/findings', 'GET /risk-analyses/7/detector-results']));
 });
@@ -766,7 +922,7 @@ test('서버 마스킹 실패 시 작성 내용을 유지하고 분석을 중단
 test('상세 탐지만 실패하면 수정안을 유지하고 해당 조회를 재시도한다', async ({ page }) => {
   const calls = await setup(page, { detectorFailure: true });
   await analyze(page);
-  await page.getByText('상세 탐지 결과 보기', { exact: true }).click();
+  await page.getByText('상세 탐지 결과', { exact: true }).click();
   await expect(page.getByRole('button', { name: '다시 불러오기', exact: true })).toBeVisible();
   const beforeRetry = calls.filter((call) => call === 'GET /risk-analyses/7/detector-results').length;
   await page.route('**/risk-analyses/7/detector-results', (route) => route.fulfill({ json: detector }));
@@ -843,7 +999,7 @@ for (const [index, status] of (['COMPLETED', 'REUSED', 'REUSED_RULE_ONLY', 'RULE
     } });
     await analyze(page);
     const results = page.getByRole('region', { name: '위험 분석 결과' });
-    await expect(results).toContainText('위험 점수: 75/100');
+    await expect(results).not.toContainText('위험 점수:');
     await expect(results).toContainText('긴급');
     await expect(results.getByText('잠정 분석', { exact: true })).toHaveCount(provisional ? 1 : 0);
     if (provisional) {
@@ -878,14 +1034,15 @@ test('학부모 분석 POST의 긴급 승격 사유를 일반 위험 태그가 �
   });
   await analyze(page);
   const results = page.getByRole('region', { name: '위험 분석 결과' });
-  const signals = results.getByRole('region', { name: '긴급 안전 신호', exact: true });
+  const signals = results.locator('.parent-review-risk-notice');
   await expect(signals.getByText(safetySignal.title, { exact: true })).toBeVisible();
-  await expect(signals.getByText(safetySignal.description, { exact: true })).toBeVisible();
-  await expect(results).toContainText('시스템 위험도: 긴급');
-  await results.getByText('상세 탐지 결과 보기', { exact: true }).click();
+  await expect(signals).toContainText('긴급');
+  await expect(results).not.toContainText('시스템 위험도:');
+  await expect(results).not.toContainText('단계로 상향');
+  await results.getByText('상세 탐지 결과', { exact: true }).click();
   await expect(results.getByRole('button', { name: '서버에서 관리하는 협박 명칭 미탐지', exact: true })).toBeVisible();
   await page.reload();
-  await expect(signals.getByText(safetySignal.description, { exact: true })).toBeVisible();
+  await expect(signals.getByText(safetySignal.title, { exact: true })).toBeVisible();
 });
 
 test('학부모 findings의 긴급 승격 사유와 기존 위험 태그 목록을 함께 표시한다', async ({ page }) => {
@@ -896,9 +1053,9 @@ test('학부모 findings의 긴급 승격 사유와 기존 위험 태그 목록�
   });
   await analyze(page);
   await page.getByRole('tab', { name: '원문', exact: true }).click();
-  const signals = page.getByRole('region', { name: '긴급 안전 신호', exact: true });
+  const signals = page.locator('.parent-review-risk-notice');
   const tags = page.getByRole('region', { name: '탐지된 위험 표현 목록 (1)', exact: true });
-  await expect(signals).toContainText(safetySignal.description);
+  await expect(signals).toContainText(safetySignal.title);
   await expect(tags).toContainText('서버에서 관리하는 협박 명칭');
   expect(await signals.evaluate((element, next) =>
     Boolean(element.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING), await tags.elementHandle())).toBe(true);
@@ -915,7 +1072,7 @@ test('학부모 findings가 수정안 준비 중이어도 긴급 승격 사유�
   await page.route((url) => url.pathname === '/api/risk-analyses/7/findings', (route) => route.fulfill({ json: {
     revisionStatus: 'PENDING', findings: [], finalRevision: null, emergencyOverride,
   } }));
-  await expect(page.getByRole('region', { name: '긴급 안전 신호', exact: true })).toContainText(safetySignal.description, { timeout: 10_000 });
+  await expect(page.locator('.parent-review-risk-notice')).toContainText(safetySignal.title, { timeout: 10_000 });
   await expect(page.getByRole('tab', { name: 'AI 초안', exact: true })).toBeDisabled();
 });
 
@@ -928,7 +1085,8 @@ for (const applied of [false, null] as const) {
         safetyFlags: { credibleThreat: false, studentSafetyConcern: true, privacyExposure: false } },
     });
     await analyze(page);
-    await expect(page.getByRole('region', { name: '안전 신호', exact: true })).toBeVisible();
+    await expect(page.locator('.parent-review-risk-notice')).toContainText('학생 안전 위험');
+    await expect(page.locator('.parent-review-risk-notice')).not.toContainText(safetySignal.title);
     await expect(page.getByText('긴급 안전 신호', { exact: true })).toHaveCount(0);
     await expect(page.getByText(safetySignal.description, { exact: true })).toHaveCount(0);
   });
@@ -945,15 +1103,17 @@ for (const severity of [0, 1, 2, 3, null] as const) {
     } });
     await analyze(page);
     const results = page.getByRole('region', { name: '위험 분석 결과' });
-    await expect(results).toContainText('긴급 안전 신호');
-    await expect(results).toContainText('학생 안전 위험: 현재 정보만으로 안전 신호를 판단할 수 없습니다.');
+    await expect(results.locator('.parent-review-risk-notice')).toContainText('구체적인 위해를 예고하는 표현');
     await expect(results).not.toContainText('개인정보 노출 또는 유포 위험이 감지');
-    await results.getByText('상세 탐지 결과 보기', { exact: true }).click();
+    await results.getByText('상세 탐지 결과', { exact: true }).click();
+    await expect(results).toContainText('학생 안전 위험: 미확인');
     await results.getByRole('button', { name: '서버에서 관리하는 협박 명칭 탐지', exact: true }).click();
     await expect(results).toContainText(`심각도: ${severity === null ? '경계 사례' : ['해당 없음', '경미', '보통', '심각'][severity]}`);
     await expect(results).toContainText(severity === null ? '반복 횟수 정보 없음' : '현재 민원에서 5회 감지');
     // Safety flags do not cause the client to recalculate the returned score or level.
-    await expect(results).toContainText('위험 점수: 30/100');
+    await expect(results.locator('.parent-review-risk-notice .ui-badge')).toHaveText('위험');
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('teacher-hub.parent-message-draft.101')!));
+    expect(saved.review.analysis.riskSummary).toMatchObject({ riskScore: 30, riskLevel: 'HIGH' });
   });
 }
 
@@ -963,8 +1123,8 @@ test('UNKNOWN과 누락된 안전 신호는 위험 없음으로 표시하지 않
   ] } });
   await analyze(page);
   const results = page.getByRole('region', { name: '위험 분석 결과' });
+  await results.getByText('상세 탐지 결과', { exact: true }).click();
   await expect(results).toContainText('안전 신호 정보가 제공되지 않았습니다.');
-  await results.getByText('상세 탐지 결과 보기', { exact: true }).click();
   await results.getByRole('button', { name: '서버에서 관리하는 협박 명칭 미확인', exact: true }).click();
   await expect(results).toContainText('심각도: 판단 정보 부족');
 });
@@ -1057,7 +1217,7 @@ test('반복 횟수 0을 보존하고 모든 안전 신호가 false이면 경고
   } });
   await analyze(page);
   await expect(page.getByRole('region', { name: '안전 신호', exact: true })).toHaveCount(0);
-  await page.getByText('상세 탐지 결과 보기', { exact: true }).click();
+  await page.getByText('상세 탐지 결과', { exact: true }).click();
   await page.getByRole('button', { name: '서버에서 관리하는 협박 명칭 미탐지', exact: true }).click();
   await expect(page.getByText('현재 민원에서 0회 감지', { exact: true })).toBeVisible();
 });

@@ -2,9 +2,8 @@ import { InformationTooltip } from '../../shared/components/ui';
 import type { RiskAnalysisMetadata } from '../../shared/types/risk';
 import { isProvisionalAnalysis } from './index';
 
-export function AiRiskLabel({ metadata, score, audience }: {
+export function AiRiskLabel({ metadata, audience }: {
   metadata: RiskAnalysisMetadata;
-  score?: number | null;
   audience?: 'teacher';
 }) {
   const provisional = isProvisionalAnalysis(metadata);
@@ -25,7 +24,7 @@ export function AiRiskLabel({ metadata, score, audience }: {
   return <span className="board-card-meta-label">
     {provisional ? '규칙 기반 잠정 위험도' : 'AI 분석 위험도'}
     <InformationTooltip label="AI 위험도 설명" content={<span className="board-risk-score-help">
-      {description}{score != null ? ` 시스템 위험 점수: ${score}/100.` : ''}
+      {description}
     </span>} />
   </span>;
 }

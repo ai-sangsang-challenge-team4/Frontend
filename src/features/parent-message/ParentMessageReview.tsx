@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Ban, ChevronDown, ChevronUp, Eye, Gavel, LockKeyhole, Megaphone, MessageCircleWarning, Pencil, Repeat2, RotateCcw, Save, Send,
-  ShieldAlert, UserRoundX,
+  ChevronDown, ChevronUp, Eye, Pencil, RotateCcw, Save, Send,
 } from 'lucide-react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth';
 import { getApiErrorMessage, isApiError, isRiskAnalysisSafetyError } from '../../shared/api';
-import { Accordion, Button, EmptyState, Modal, Tabs, TextareaField, Toast } from '../../shared/components/ui';
+import { Accordion, Badge, Button, EmptyState, InformationTooltip, Modal, Tabs, TextareaField, Toast } from '../../shared/components/ui';
 import { parentMessageApiMode } from './api/parentComplaintApi';
 import { clearMessageDraft, findSentMessage, mockConnectedTeachers, readMessageDraft, saveMessageDraft, type MessageDraft } from './messageDraft';
 import { ParentMessageHeader } from './ParentMessageHeader';
@@ -16,7 +15,6 @@ import { findSentSubmission, findSentSubmissionById, getDraftPath } from './conv
 import { submitServerDraft } from './serverComplaint';
 import { useServerRevision } from './useServerRevision';
 import { checkPersonalInfo, MaskingError, PrivacyMaskingNotice } from '../pii';
-import { AiJudgmentNotice } from '../safety/AiJudgmentNotice';
 import {
   createMessageReview,
   getSelectedMessage,
@@ -26,14 +24,9 @@ import {
   type MessageReview,
   type MessageSource,
   type RiskExpression,
-  type RiskExpressionKind,
 } from './parentMessageTypes';
 import './ParentMessageReview.css';
 
-const riskIcons: Record<RiskExpressionKind, typeof Gavel> = {
-  repeat: Repeat2, demand: UserRoundX, official: Gavel,
-  profanity: Ban, insult: MessageCircleWarning, threat: ShieldAlert, exposure: Megaphone, privacy: LockKeyhole,
-};
 const SEND_FAILED_MESSAGE = '문의를 전송하지 못했습니다. 작성한 내용은 유지됩니다. 다시 시도해 주세요.';
 const DRAFT_CONFLICT_ON_SEND_MESSAGE = '다른 기기나 탭에서 서버의 추가 문의 초안이 변경되어 전송하지 않았습니다. 작성한 내용은 유지됩니다. 이전 화면에서 서버 초안을 불러와 확인해 주세요.';
 const selectionLabels = { AI: 'AI 초안', ORIGINAL: '원문', CUSTOM: '직접 수정' };
@@ -309,7 +302,7 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
               setError(null);
               setMaskingFailed(false);
             }}
-            rows={12}
+            rows={10}
             value={value}
           />
         ) : (
@@ -320,10 +313,10 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
         )}
         {!isEditable && error ? <p className="ui-field-error" role="alert">{error}</p> : null}
         <div className="parent-review-editor-meta">
-          <span className={value.length > MESSAGE_MAX_LENGTH ? 'is-invalid' : ''}>{value.length}/{MESSAGE_MAX_LENGTH}</span>
-          <span className="parent-review-hint">
-            {isOriginal ? 'AI 초안은 참고용이므로, 전송 전 반드시 확인해주세요.' : 'AI 수정안을 바탕으로 자유롭게 수정해보세요.'}
+          <span className="parent-review-hint">{isOriginal ? '원문을 확인하거나 직접 수정해보세요.' : 'AI 수정안을 바탕으로 자유롭게 수정해보세요.'}{' '}
+            <InformationTooltip label="AI 분석 참고 안내" content="AI 분석은 참고용이며 오류가 있을 수 있습니다. 최종 전송 내용을 직접 확인해 주세요." />
           </span>
+          <span className={`parent-review-character-count${value.length > MESSAGE_MAX_LENGTH ? ' is-invalid' : ''}`}>{value.length}/{MESSAGE_MAX_LENGTH}</span>
           {isOriginal && !isEditingOriginal ? (
             <Button leftIcon={<Pencil size={18} />} onClick={() => {
               setIsEditingOriginal(true);
@@ -394,7 +387,6 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
           onRetry={() => setMaskingFailed(checkPersonalInfo(selected.text).status === 'failed')}
           result={maskingFailed ? { status: 'failed', text: null, count: null } : { status: 'ready', ...privacyPreview }}
         />
-        <AiJudgmentNotice />
 
         {review.source === 'ORIGINAL' && review.analysis.risks.length > 0 ? (
           <section aria-labelledby="parent-review-risks-title" className="parent-review-risks">
@@ -411,11 +403,10 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
             <div hidden={!isRiskListOpen} id="parent-review-risks-list">
               <Accordion allowMultiple className="parent-review-risk-accordion" onValueChange={setOpenRiskIds}
                 items={review.analysis.risks.map((risk) => {
-                  const Icon = riskIcons[risk.kind];
                   return {
                     id: risk.id,
                     title: <>
-                      <span className="parent-review-risk-label"><Icon aria-hidden="true" size={20} />{risk.title}</span>
+                      <Badge className="parent-review-risk-label" size="sm" variant="warning">{risk.title}</Badge>
                       {risk.excerpt ? <span className="parent-review-risk-excerpt"><mark>&quot;{risk.excerpt}&quot;</mark></span> : null}
                     </>,
                     content: <>

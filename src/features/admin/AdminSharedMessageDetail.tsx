@@ -300,7 +300,7 @@ function RiskAnalysisPanel({ escalationId }: { escalationId: number }) {
             <RiskAnalysisNotice metadata={data} />
             <dl className="board-admin-share-summary">
               <div>
-                <dt>{data.riskAnalysisId != null && data.riskLevel ? <AiRiskLabel metadata={data} score={data.riskScore} /> : '위험도 분석 상태'}</dt>
+                <dt>{data.riskAnalysisId != null && data.riskLevel ? <AiRiskLabel metadata={data} /> : '위험도 분석 상태'}</dt>
                 <dd>{data.riskScore == null ? riskText(data.riskLevel, data.riskScore) : `${riskText(data.riskLevel, null)} · 위험 점수 ${data.riskScore}/100`}</dd>
               </div>
               {/* The review fields are null until a teacher reviews. */}

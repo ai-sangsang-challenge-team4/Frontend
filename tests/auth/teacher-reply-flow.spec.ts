@@ -278,6 +278,46 @@ test('High 메시지는 공식 템플릿 빈칸을 채워야 전송되고 주의
   await expect(page.locator('.board-reply-teacher')).toContainText('2026. 10. 26. 오후 04:00');
 });
 
+for (const [state, threadId] of [['긴급 잠금', 'thread-001'], ['답변 대기', 'thread-003']] as const) {
+  test(`${state} 안내는 짧은 대화에서도 하단에 붙고 좁은 화면에서 넘치지 않는다`, async ({ page, isMobile }, testInfo) => {
+    await page.goto(`/teacher/messages/${threadId}`);
+    await expect(page.locator('.board-conversation')).toBeVisible();
+    await page.evaluate(async ({ state, threadId }) => {
+      const url = performance.getEntriesByType('resource').map((entry) => entry.name)
+        .find((path) => /\/mockThreads\.ts(?:\?|$)/.test(path));
+      if (!url) throw new Error('메시지 예시 모듈을 찾지 못했습니다.');
+      const { initialTeacherThreads } = await import(url);
+      const thread = initialTeacherThreads.find((item: { id: string }) => item.id === threadId);
+      // Reproduce the server conversation before its first message is available.
+      thread.serverComplaintId = 98765;
+      thread.replies = [];
+      thread.serverStatus = state === '답변 대기'
+        ? { status: 'ANSWERED', waitingFor: 'PARENT' }
+        : { status: 'OPEN', waitingFor: 'TEACHER' };
+    }, { state, threadId });
+    const tabs = page.getByRole('navigation', { name: '메시지 상세 탭' });
+    await tabs.getByRole('button', { name: '위험 요소', exact: true }).click();
+    await tabs.getByRole('button', { name: '대화', exact: true }).click();
+    const footer = page.locator('.board-answer-box');
+    await expect(footer).toContainText(state === '긴급 잠금' ? '답변 작성이 제한됩니다.' : '지금은 답변할 차례가 아닙니다.');
+    await expect(page.getByRole('button', { name: /^답변 (작성|이어서 작성하기)$/ })).toHaveCount(0);
+    for (const width of isMobile ? [393] : [1440, 980, 620, 375, 320]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect.poll(async () => {
+        const conversation = (await page.locator('.board-conversation').boundingBox())!;
+        const answer = (await footer.boundingBox())!;
+        return Math.abs(conversation.y + conversation.height - answer.y - answer.height);
+      }).toBeLessThan(1);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    }
+    await footer.screenshot({ path: testInfo.outputPath('aligned-conversation-footer.png') });
+    if (state === '긴급 잠금') {
+      await page.getByRole('button', { name: '위험도 검토 바로가기', exact: true }).click();
+      await expect(tabs.getByRole('button', { name: '위험 요소', exact: true })).toHaveClass(/is-active/);
+    }
+  });
+}
+
 test('Emergency 잠금은 위험도 검토 후에도 유지되고 답변 생성·전송을 막는다', async ({ page }) => {
   await page.goto('/teacher/messages/thread-001/response');
   await expect(page.getByRole('heading', { name: '이 메시지는 개별 답변을 보낼 수 없습니다', exact: true })).toBeVisible();

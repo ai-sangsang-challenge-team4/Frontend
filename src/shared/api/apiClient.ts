@@ -21,7 +21,7 @@ type ApiClientConfig = {
   onUnauthorized: (error: ApiError) => void;
 };
 
-const DEFAULT_TIMEOUT_MS = 15_000;
+const DEFAULT_TIMEOUT_MS = 60_000;
 
 const config: ApiClientConfig = {
   // import.meta.env is undefined when modules are loaded outside Vite (Playwright unit tests).
