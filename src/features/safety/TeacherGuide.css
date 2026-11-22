@@ -249,11 +249,6 @@
   overflow-wrap: anywhere;
 }
 
-.guide-comment-count {
-  margin-left: 6px;
-  color: var(--color-text-brand);
-}
-
 .guide-empty-state {
   margin-top: 0;
   border: 0;

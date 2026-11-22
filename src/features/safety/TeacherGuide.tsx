@@ -511,9 +511,6 @@ function GuidePostRow({
       <span className="guide-board-title-cell">
         <span className="guide-board-title">
           {post.title}
-          {post.comments > 0 ? (
-            <span className="guide-comment-count">[{post.comments}]</span>
-          ) : null}
         </span>
       </span>
     </button>
@@ -778,7 +775,7 @@ export function TeacherGuide() {
                   handleQueryChange(event.currentTarget.value)
                 }
                 placeholder="제목 또는 본문 내용으로 검색"
-                trailingIcon={<SearchIcon />}
+                leadingIcon={<SearchIcon />}
                 type="search"
                 value={query}
               />

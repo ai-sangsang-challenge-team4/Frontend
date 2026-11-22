@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { FilePenLine, Search, Star } from 'lucide-react';
+import { FilePenLine, Star } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../features/auth';
 import { ProfileAvatar } from '../../features/message/components/ProfileAvatar';
@@ -10,6 +10,7 @@ import { useParentMessages } from '../../features/parent-message/useParentMessag
 import { useServerHistorySync } from '../../features/parent-message/useServerHistorySync';
 import { getApiErrorMessage } from '../../shared/api';
 import { Badge, Button, EmptyState, Modal, StatusChip, Tabs, TextField, Toast } from '../../shared/components/ui';
+import { SearchIcon } from '../../shared/components/teacher-shell/icons';
 import '../../features/parent-message/ParentMessageHistory.css';
 
 export function MessageHistoryPage() {
@@ -48,7 +49,7 @@ function MessageHistory({ userId }: { userId: number }) {
 
   const content = <>
     <div className="parent-history-toolbar">
-      <TextField aria-label="문의 검색" containerClassName="parent-history-search ui-search-field" trailingIcon={<Search size={20} />}
+      <TextField aria-label="문의 검색" containerClassName="parent-history-search ui-search-field" leadingIcon={<SearchIcon />}
         onChange={(event) => setQuery(event.target.value)} placeholder="선생님 성함 또는 문의 내용으로 검색" type="search" value={query} />
     </div>
     {sync.error && !error ? <div className="parent-history-sync-error" role="alert">

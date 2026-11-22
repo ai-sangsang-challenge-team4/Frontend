@@ -101,7 +101,7 @@ test('위험도와 학생명 검색을 서버에 전달하고 검색 결과 없�
   await page.getByRole('option', { name: '위험', exact: true }).click();
   await expect(page.getByRole('tab', { name: '전체 1', exact: true })).toBeVisible();
   await page.getByRole('searchbox', { name: '민원 제목 또는 학생명', exact: true }).fill('  김하은  ');
-  await page.getByRole('button', { name: '검색', exact: true }).click();
+  await expect(page.getByRole('button', { name: '검색', exact: true })).toHaveCount(0);
   await expect(rows(page)).toContainText('김하은 학생');
   await expect.poll(() => calls.some((url) => url.searchParams.get('keyword') === '김하은' && url.searchParams.get('riskLevel') === 'HIGH')).toBe(true);
   await page.getByRole('tab', { name: '검토 중 0', exact: true }).click();
@@ -126,19 +126,24 @@ test('필터 조회가 실패하면 이전 목록을 숨기고 재시도할 수 
 test('늦게 도착한 검색 응답이 현재 검색 결과를 덮지 않는다', async ({ page }) => {
   const fixture = await setup(page);
   await expect(rows(page).getByRole('link')).toHaveCount(10);
+  await page.getByRole('button', { name: '다음 페이지', exact: true }).click();
+  await expect(rows(page).getByRole('link')).toHaveCount(2);
   fixture.delay('테스트학생');
   const search = page.getByRole('searchbox', { name: '민원 제목 또는 학생명', exact: true });
+  await expect(search).toHaveAttribute('maxlength', '100');
   await search.fill('테스트학생');
-  await page.getByRole('button', { name: '검색', exact: true }).click();
   await expect.poll(() => fixture.calls.filter((url) => url.searchParams.get('keyword') === '테스트학생').length).toBe(4);
+  expect(fixture.calls.filter((url) => url.searchParams.get('keyword') === '테스트학생').every((url) => url.searchParams.get('page') === '0')).toBe(true);
   await search.fill('김하은');
-  await page.getByRole('button', { name: '검색', exact: true }).click();
   await expect(rows(page)).toContainText('김하은 학생');
   fixture.release();
   await expect.poll(fixture.completedDelayedRequests).toBe(4);
   await expect(rows(page).getByRole('link')).toHaveCount(1);
   await expect(rows(page)).toContainText('김하은 학생');
   await expect(rows(page)).not.toContainText('테스트학생');
+  await search.fill('');
+  await expect(page.getByRole('tab', { name: '전체 12', exact: true })).toBeVisible();
+  await expect(rows(page).getByRole('link')).toHaveCount(10);
 });
 
 test('페이지 조회 중 공유 내역이 줄면 마지막 유효 페이지로 복귀한다', async ({ page }) => {

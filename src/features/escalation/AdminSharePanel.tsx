@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { SearchIcon } from '../../shared/components/teacher-shell/icons';
 import { AsyncContent } from '../../shared/components';
 import { Button, Dropdown, EmptyState, Tabs, TextField } from '../../shared/components/ui';
@@ -40,10 +40,13 @@ const emptyCopy: Record<StatusTab, { description: string; title: string }> = {
 export function AdminSharePanel() {
   const [searchInput, setSearchInput] = useState('');
   const [filters, setFilters] = useState<ListFilters>({ keyword: '', risk: 'all', status: 'all', page: 0 });
-  const search = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setFilters((current) => ({ ...current, keyword: searchInput.trim(), page: 0 }));
-  };
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const keyword = searchInput.trim();
+      setFilters((current) => current.keyword === keyword ? current : { ...current, keyword, page: 0 });
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
 
   return (
     <section className="teacher-admin-share-panel" aria-label="관리자 공유 현황">
@@ -62,7 +65,7 @@ export function AdminSharePanel() {
             value={filters.risk}
           />
         </div>
-        <form className="teacher-admin-share-search" onSubmit={search} role="search" aria-label="공유 내역 검색">
+        <div className="teacher-admin-share-search" role="search" aria-label="공유 내역 검색">
           <TextField
             aria-label="민원 제목 또는 학생명"
             containerClassName="board-search-field ui-search-field"
@@ -73,8 +76,7 @@ export function AdminSharePanel() {
             type="search"
             value={searchInput}
           />
-          <Button type="submit" variant="outline">검색</Button>
-        </form>
+        </div>
       </div>
       <AdminShareResults
         filters={filters}

@@ -24,6 +24,8 @@ test('네 목록 검색창은 같은 크기와 키보드 포커스를 사용한�
       await page.goto(path);
       const input = page.getByRole('searchbox', { name: label, exact: true });
       await expect(input).toBeVisible();
+      await expect(input.locator('..').locator(':scope > :first-child')).toHaveClass('ui-field-icon');
+      await expect(input.locator('..').locator(':scope > :last-child')).toHaveClass('ui-field-control');
       await input.scrollIntoViewIfNeeded();
       await page.screenshot({ path: testInfo.outputPath(`${name}-${width}.png`) });
       measurements.push(await input.evaluate((element, name) => {
@@ -56,6 +58,8 @@ test('대응 가이드 두 열 목록은 긴 제목을 줄바꿈하고 검색과
   const board = page.getByRole('region', { name: '대응 가이드 게시글 목록', exact: true });
   await expect(board.locator('.guide-board-head > span')).toHaveText(['번호', '제목']);
   await expect(board.locator('time')).toHaveCount(0);
+  await expect(board.locator('.guide-comment-count')).toHaveCount(0);
+  await expect(board).not.toContainText(/\[\d+\]/);
   await expect(board.locator('.guide-notice-badge').first()).toBeVisible();
   const firstTitle = await board.locator('.guide-board-title').first().innerText();
   for (const width of [1440, 1024, 768, 375]) {
