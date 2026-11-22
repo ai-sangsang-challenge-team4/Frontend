@@ -73,7 +73,7 @@
 .parent-conversation-primary-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 12px; }
 .parent-conversation-action-buttons { display: flex; flex-wrap: wrap; max-width: 100%; align-items: center; justify-content: flex-end; gap: 12px; }
 .parent-conversation-primary-actions .ui-button { min-width: 185px; min-height: 47px; padding: 8px 12px; font-size: 16px; }
-.parent-conversation-new-inquiry { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin-top: var(--space-4); color: var(--color-text-secondary); font-size: var(--font-size-helper); }
+.parent-conversation-new-inquiry { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin: 0; color: var(--color-text-secondary); font-size: var(--font-size-helper); }
 .parent-conversation-new-inquiry a { color: var(--color-primary); }
 .parent-inquiry-star:focus-visible, .parent-inquiry-link:focus-visible, .parent-draft-row:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 3px; }
 @media (max-width: 1360px) {
