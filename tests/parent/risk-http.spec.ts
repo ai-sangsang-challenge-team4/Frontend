@@ -45,7 +45,8 @@ async function setup(page: Page, options: {
     const request = route.request();
     const path = new URL(request.url()).pathname.replace('/api', '');
     const key = `${request.method()} ${path}`;
-    calls.push(key);
+    // Preview requests do not save a draft or change the API sequence asserted by the workflow tests.
+    if (key !== 'POST /complaints/mask-preview') calls.push(key);
     let json: unknown;
     let status = 200;
     switch (key) {
@@ -57,6 +58,11 @@ async function setup(page: Page, options: {
       }; break;
       case 'GET /users/me': json = { userId: 101, email: 'parent@example.com', name: 'Demo Parent', role: 'PARENT', students: [{ studentId: 10, name: studentName, studentNo: '1' }] }; break;
       case 'GET /complaints/recipients': json = [{ teacherId: 20, teacherName: 'Demo Teacher', homeroomTeacher: true }]; break;
+      case 'POST /complaints/mask-preview': {
+        const { title, content } = request.postDataJSON();
+        json = { title, content, titleCount: 0, contentCount: 0 };
+        break;
+      }
       case 'GET /complaints/42': json = {
         complaintId: 42, title: thread.title, teacherName: thread.teacherName, content: thread.finalBody,
         studentId: 10, studentName, parentName: 'Demo Parent', riskLevel: null,
@@ -201,6 +207,72 @@ test('서버가 복원한 수정안을 표시하고 분석 근거의 내부 토�
   await results.getByRole('button', { name: '서버에서 관리하는 협박 명칭 경계', exact: true }).click();
   await expect(results.locator('blockquote')).toContainText('[제3자 학생명]');
   await expect(page.locator('main')).not.toContainText('[개인정보:');
+});
+
+test('제목 없이 작성해도 서버가 같은 학급 이름을 가리고 수정안 전송에 같은 결과를 사용한다', async ({ page }) => {
+  const original = '하늘이가 가람이에게 상황을 들었습니다.';
+  const revised = '가람이에게 들은 상황을 함께 확인해 주세요.';
+  const maskedRevision = '[제3자 학생명]이에게 들은 상황을 함께 확인해 주세요.';
+  const calls = await setup(page, {
+    studentName: '김하늘',
+    findingsResponse: {
+      revisionStatus: 'COMPLETED',
+      finalRevision: { content: revised, reason: null },
+    },
+  });
+  await page.route('**/api/complaints/mask-preview', async (route) => {
+    const { title, content, complaintId, studentId, teacherId } = route.request().postDataJSON();
+    if (complaintId) expect({ complaintId, studentId, teacherId }).toEqual({ complaintId: 42 });
+    else expect({ studentId, teacherId }).toEqual({ studentId: 10, teacherId: 20 });
+    const mask = (value: string) => value.replaceAll('하늘', '[학생명]').replaceAll('가람', '[제3자 학생명]');
+    const count = (value: string) => [...value.matchAll(/하늘|가람/g)].length;
+    await route.fulfill({ json: { title: mask(title), content: mask(content), titleCount: count(title), contentCount: count(content) } });
+  });
+  const title = page.getByLabel('문의 제목', { exact: true });
+  const input = page.getByLabel('문의 내용', { exact: true });
+  await title.fill('');
+  await input.fill(original);
+  const notice = page.getByRole('region', { name: '개인정보 마스킹 상태', exact: true });
+  await notice.getByText('마스킹 결과 보기', { exact: true }).click();
+  await expect(notice).toContainText('[학생명]이가 [제3자 학생명]이에게 상황을 들었습니다.');
+  await expect(input).toHaveValue(original);
+  expect(calls).not.toContain('POST /complaints');
+
+  await title.fill('가람 관련 상담');
+  await expect(notice).toContainText('제목: [제3자 학생명] 관련 상담');
+  const creation = page.waitForRequest((request) => request.method() === 'POST' && new URL(request.url()).pathname === '/api/complaints');
+  await page.getByRole('button', { name: 'AI 분석 시작', exact: true }).click();
+  expect((await creation).postDataJSON().title).toBe('[제3자 학생명] 관련 상담');
+  await expect(page.getByLabel('AI 초안 내용', { exact: true })).toHaveValue(revised);
+  await page.getByRole('button', { name: '전송하기', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '문의를 전송할까요?', exact: true });
+  await expect(dialog).toContainText(maskedRevision);
+  const update = page.waitForRequest((request) => request.method() === 'PATCH' && new URL(request.url()).pathname === '/api/complaints/42');
+  await dialog.getByRole('button', { name: '확인 후 전송', exact: true }).click();
+  expect((await update).postDataJSON()).toEqual({ content: maskedRevision });
+  await expect(page.getByRole('heading', { name: '전송 완료', exact: true })).toBeVisible();
+});
+
+test('검토 화면에서 서버 개인정보 확인에 실패하면 재시도까지 전송을 기다린다', async ({ page }) => {
+  const calls = await setup(page, { noRevision: true });
+  let failReview = true;
+  await page.route('**/api/complaints/mask-preview', async (route) => {
+    const { complaintId, title, content } = route.request().postDataJSON();
+    if (complaintId && failReview) {
+      await route.fulfill({ status: 503, json: { code: 'PRIVACY_MASKING_FAILED' } });
+      return;
+    }
+    await route.fulfill({ json: { title, content, titleCount: 0, contentCount: 0 } });
+  });
+  await analyze(page);
+  const send = page.getByRole('button', { name: '전송하기', exact: true });
+  const retry = page.getByRole('button', { name: '개인정보 확인 다시 시도', exact: true });
+  await expect(retry).toBeVisible();
+  await expect(send).toBeDisabled();
+  expect(calls).not.toContain('POST /complaints/42/send');
+  failReview = false;
+  await retry.click();
+  await expect(send).toBeEnabled();
 });
 
 test('완료 응답의 수정안에 내부 토큰이 남으면 기존 수정안 실패 상태를 표시한다', async ({ page }) => {
@@ -1046,7 +1118,7 @@ test('새 문의의 자녀·대상·제목·내용은 같은 시작선에 표시
     expect(geometry.analyze.right).toBeCloseTo(geometry.form.right, 0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     if ([375, 768, 1024, 1440].includes(width)) {
-      await checkInformationTooltip(page, '개인정보 확인 범위', '전화번호·이메일·주민등록번호와 확인된 학부모·자녀·교사 이름을 자동으로 가립니다. ‘이름:’ 또는 ‘성명:’으로 표시한 한글 이름도 가립니다. 다른 이름이나 주소는 직접 확인해 주세요.',
+      await checkInformationTooltip(page, '개인정보 확인 범위', '학생명·교사명·같은 학급 명부의 다른 학생 이름, 전화번호·이메일·주민등록번호, 학번·교직원번호를 가립니다. 명부에 없는 이름이나 주소는 직접 확인해 주세요.',
         testInfo.project.name === 'mobile', [375, 1440].includes(width) ? testInfo.outputPath(`privacy-tooltip-${width}.png`) : undefined);
     }
   }

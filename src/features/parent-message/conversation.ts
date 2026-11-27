@@ -69,10 +69,10 @@ export function getDraftPath(draft: MessageDraft) {
 }
 
 // null checks only identity, allowing callers to distinguish an already-sent message with different text.
-export function findSentSubmission(userId: number, draft: MessageDraft, review: MessageReview | null | undefined = draft.review, names?: KnownNames) {
+export function findSentSubmission(userId: number, draft: MessageDraft, review: MessageReview | null | undefined = draft.review, names?: KnownNames, preparedBody?: string) {
   const thread = findSentMessage(userId, draft.threadId ?? draft.messageId);
   const remoteId = thread?.serverComplaintId === draft.server?.complaintId ? draft.server?.serverMessageId : undefined;
-  const expectedBody = review ? maskContactInfo(getSelectedMessage(draft.body, review).text.trim(), names).text : null;
+  const expectedBody = review ? preparedBody ?? maskContactInfo(getSelectedMessage(draft.body, review).text.trim(), names).text : null;
   return thread && (!draft.threadId ? expectedBody === null || thread.finalBody === expectedBody
     : getConversation(thread).some((entry) => entry.authorRole === 'parent' &&
       (entry.id === draft.messageId || (remoteId !== undefined && entry.serverMessageId === remoteId)) &&

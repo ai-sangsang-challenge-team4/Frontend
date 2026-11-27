@@ -12,6 +12,8 @@ import type {
   RiskRevisionResponse,
   RiskSummaryResponse,
   ComplaintMaskResponse,
+  ComplaintMaskPreviewRequest,
+  ComplaintMaskPreviewResponse,
   RiskDetectorResponse,
   ParentFollowUpResponse,
   ParentFollowUpDraftRequest,
@@ -34,6 +36,7 @@ export type ParentComplaintApi = {
   submit: (complaintId: number, signal?: AbortSignal) => Promise<ComplaintSubmissionResponse>;
   getStatus: (complaintId: number, signal?: AbortSignal) => Promise<ComplaintResponse>;
   mask: (complaintId: number, signal?: AbortSignal) => Promise<ComplaintMaskResponse>;
+  previewMasking: (request: ComplaintMaskPreviewRequest, signal?: AbortSignal) => Promise<ComplaintMaskPreviewResponse>;
   getDetectorResults: (analysisId: number, signal?: AbortSignal) => Promise<RiskDetectorResponse>;
   saveFollowUpDraft: (complaintId: number, request: ParentFollowUpDraftRequest, signal?: AbortSignal) => Promise<ParentFollowUpResponse>;
   getFollowUpDraft: (complaintId: number, signal?: AbortSignal) => Promise<ParentFollowUpResponse | null>;
