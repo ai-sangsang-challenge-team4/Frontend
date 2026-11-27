@@ -547,7 +547,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
                   inline={embedded}
                   onRetry={() => handleAnalyze()}
                   result={maskingFailed ? { status: 'failed', text: null, count: null }
-                    : { status: 'ready', ...maskContactInfo(`제목: ${draft.title}\n\n내용: ${draft.body}`, names) }}
+                    : { status: 'ready', ...maskContactInfo(`제목: ${draft.title}\n내용: ${draft.body}`, names) }}
                 /> : null}
                 {embedded ? <p className="parent-inline-character-count" id="parent-inline-character-count">
                   {draft.body.length.toLocaleString('ko-KR')} / {MESSAGE_MAX_LENGTH.toLocaleString('ko-KR')}자

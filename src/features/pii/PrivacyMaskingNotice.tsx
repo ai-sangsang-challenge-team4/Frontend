@@ -1,4 +1,4 @@
-import { ShieldAlert, ShieldCheck } from 'lucide-react';
+import { ChevronDown, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { Badge, Button, InformationTooltip } from '../../shared/components/ui';
 import type { MaskingResult } from './masking';
 import './PrivacyMaskingNotice.css';
@@ -25,28 +25,23 @@ export function PrivacyMaskingNotice({ result, onRetry, compact = false, inline 
   }
 
   const hasPersonalInfo = result.count > 0;
+  const StatusIcon = hasPersonalInfo ? ShieldAlert : ShieldCheck;
   const title = hasPersonalInfo ? '개인정보가 포함되어 있습니다.'
     : inline ? '개인정보가 포함되지 않았는지 확인해 주세요.'
       : compact ? '개인정보를 확인해 주세요.' : '탐지된 개인정보가 없습니다.';
   return (
     <section aria-label="개인정보 마스킹 상태" className={`privacy-masking-notice${hasPersonalInfo ? ' has-personal-info' : ''}`}>
       <div className="privacy-masking-heading">
-        {inline ? (hasPersonalInfo ? <ShieldAlert aria-hidden="true" size={18} /> : <ShieldCheck aria-hidden="true" size={18} />) : <svg aria-hidden="true" focusable="false" width={22} height={22} viewBox="0 0 24 24" fill="var(--color-bg-icon)">
-          <path d="M9.51,11.99Q8.5,10.98 8.5,9.5q0-1.48 1.01-2.49T12,6t2.49,1.01T15.5,9.5t-1.01,2.49T12,13q-1.47,0-2.49-1.01Zm3.56-1.41Q13.5,10.15 13.5,9.5T13.08,8.42T12,8T10.93,8.42T10.5,9.5t0.43,1.07T12,11t1.08-0.43ZM12,22q-3.47-0.88-5.74-3.99T4,11.1V5l8-3l8,3v6.1q0,3.8-2.26,6.91T12,22Zm0-10Zm0-7.88L6,6.38V11.1q0,1.35 0.38,2.63t1.03,2.4Q8.45,15.6 9.6,15.3T12,15t2.4,0.3t2.2,0.83q0.65-1.13 1.02-2.4T18,11.1V6.38L12,4.13ZM10.25,17.2Q9.4,17.4 8.63,17.75q0.72,0.75 1.58,1.3T12,19.9q0.95-0.3 1.8-0.85t1.57-1.3Q14.6,17.4 13.75,17.2T12,17t-1.75,0.2Z" />
-        </svg>}
-        {compact ? <span className="privacy-masking-description">
-          <strong>{title}</strong>
-          <InformationTooltip label="개인정보 확인 범위" content={privacyScope} />
-        </span> : <strong>{title}</strong>}
-        {hasPersonalInfo ? <Badge variant="warning">{result.count}건 마스킹</Badge> : null}
+        <StatusIcon aria-hidden="true" size={18} />
+        <strong>{title}</strong>
+        {hasPersonalInfo ? <Badge size="sm" variant="warning">{result.count}건 마스킹</Badge> : null}
+        {compact ? <InformationTooltip label="개인정보 확인 범위" content={privacyScope} /> : null}
       </div>
-      {hasPersonalInfo || !compact ? <p>{hasPersonalInfo
-        ? '아래에서 개인정보를 가린 결과를 확인해 주세요.'
-        : '다른 이름이나 주소가 포함되어 있는지 직접 확인해 주세요.'}</p> : null}
+      {!hasPersonalInfo && !compact ? <p>다른 이름이나 주소가 포함되어 있는지 직접 확인해 주세요.</p> : null}
       {hasPersonalInfo ? (
         <>
           <details className="privacy-masking-preview">
-            <summary>마스킹 결과 보기</summary>
+            <summary>마스킹 결과 보기 <ChevronDown aria-hidden="true" size={16} /></summary>
             <p>{result.text}</p>
           </details>
           {!compact ? <p className="privacy-masking-hint">{privacyScope}</p> : null}

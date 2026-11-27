@@ -197,18 +197,7 @@
   font-weight: var(--font-weight-medium);
 }
 
-.parent-write-form .privacy-masking-description {
-  display: inline-flex;
-  min-width: 0;
-  flex: 0 1 auto;
-  align-items: center;
-  gap: var(--space-2);
-  word-break: keep-all;
-}
-
-.parent-write-analysis-note > .ui-tooltip,
-.parent-write-form .privacy-masking-description > .ui-tooltip,
-.parent-write-form .privacy-masking-heading > .ui-badge {
+.parent-write-analysis-note > .ui-tooltip {
   flex: 0 0 auto;
 }
 
@@ -223,8 +212,10 @@
 
 .parent-write-guidance > .privacy-masking-notice.has-personal-info {
   flex-basis: 100%;
-  padding-left: var(--space-3);
-  border-left: 2px solid var(--color-yellow-2);
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  border: var(--divider-default);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface);
 }
 
 .parent-write-guidance > .privacy-masking-notice.is-failed {
