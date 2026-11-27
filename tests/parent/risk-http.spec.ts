@@ -168,6 +168,27 @@ async function analyze(page: Page) {
   await expect(page).toHaveURL(/\/review$/);
 }
 
+test('작성 화면에서 친구의 전체 이름과 성을 뺀 이름을 저장 없이 바로 가린다', async ({ page }) => {
+  const calls = await setup(page, { studentName: '이도윤' });
+  const title = page.getByLabel('문의 제목', { exact: true });
+  const editor = page.getByLabel('문의 내용', { exact: true });
+  const privacy = page.getByRole('region', { name: '개인정보 마스킹 상태', exact: true });
+  const preview = privacy.locator('.privacy-masking-preview p');
+  const original = '이도윤 학생 학부모입니다. 도윤이가 서윤이에게 김서윤';
+  await title.fill('');
+  await editor.fill(original);
+  await privacy.getByText('마스킹 결과 보기', { exact: true }).click();
+  await expect(preview).toContainText('[이름] 학생 학부모입니다. [이름]이가 [이름]이에게 [이름]');
+  await expect(preview).not.toContainText('서윤');
+  await expect(privacy).toContainText('4건 마스킹');
+  await expect(editor).toHaveValue(original);
+
+  await editor.fill('도윤이가 같은 반 친구인 서윤이에게 우산을 건넸습니다. 같은 반 친구인 어린이에게도 인사했습니다.');
+  await expect(preview).toContainText('[이름]이가 같은 반 친구인 [이름]이에게 우산을 건넸습니다. 같은 반 친구인 어린이에게도 인사했습니다.');
+  await expect(title).toBeEditable();
+  expect(calls.filter((call) => /^(POST|PATCH) \/complaints/.test(call))).toEqual([]);
+});
+
 test('같은 학급 학생 이름은 초안 저장 후 서버 마스킹 결과에서 확인한다', async ({ page }) => {
   await setup(page, { studentName: '김하늘', noRevision: true });
   const paths: string[] = [];
@@ -186,10 +207,12 @@ test('같은 학급 학생 이름은 초안 저장 후 서버 마스킹 결과�
   const privacy = page.getByRole('region', { name: '개인정보 마스킹 상태', exact: true });
   const preview = privacy.locator('.privacy-masking-preview p');
   await privacy.getByText('마스킹 결과 보기', { exact: true }).click();
-  await expect(preview).toContainText('[이름]이가 같은 반 친구인 가람이와 이야기했습니다.');
+  await expect(preview).toContainText('[이름]이가 같은 반 친구인 [이름]이와 이야기했습니다.');
   expect(paths).toEqual([]);
 
+  const create = page.waitForRequest((request) => request.method() === 'POST' && new URL(request.url()).pathname === '/api/complaints');
   await page.getByRole('button', { name: 'AI 분석 시작', exact: true }).click();
+  expect((await create).postDataJSON().content).toBe('[이름]이가 같은 반 친구인 가람이와 이야기했습니다.');
   await expect(page).toHaveURL(/\/review$/);
   expect(paths).toEqual(['/api/complaints', '/api/complaints/42/mask', '/api/complaints/42/risk-analysis']);
   await expect(page.getByLabel('원문 내용', { exact: true })).toHaveText(masked);
@@ -1094,7 +1117,7 @@ test('새 문의의 자녀·대상·제목·내용은 같은 시작선에 표시
     expect(geometry.analyze.right).toBeCloseTo(geometry.form.right, 0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     if ([375, 768, 1024, 1440].includes(width)) {
-      await checkInformationTooltip(page, '개인정보 확인 범위', '전화번호·이메일·주민등록번호와 확인된 학부모·자녀·교사 이름을 자동으로 가립니다. ‘이름:’ 또는 ‘성명:’으로 표시한 한글 이름도 가립니다. 다른 이름이나 주소는 직접 확인해 주세요. 같은 학급 학생 이름은 AI 분석 후 ‘원문’에서 마스킹 결과를 확인할 수 있습니다.',
+      await checkInformationTooltip(page, '개인정보 확인 범위', '전화번호·이메일·주민등록번호와 확인된 학부모·자녀·교사 이름을 자동으로 가립니다. ‘이름:’ 또는 ‘성명:’으로 표시한 한글 이름도 가립니다. 다른 이름이나 주소는 직접 확인해 주세요. 작성 중에는 문맥으로 식별한 친구 이름도 가립니다. AI 분석 시에는 학급 명부를 확인합니다.',
         testInfo.project.name === 'mobile', [375, 1440].includes(width) ? testInfo.outputPath(`privacy-tooltip-${width}.png`) : undefined);
     }
   }

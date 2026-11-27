@@ -17,6 +17,7 @@ import { getDraftPath } from './conversation';
 import { analyzeServerDraft, createServerDraft, toFollowUpServerDraft, type ServerDraftTarget } from './serverComplaint';
 import { useServerRecipients } from './useServerRecipients';
 import { checkPersonalInfo, maskContactInfo, MaskingError, PrivacyMaskingNotice } from '../pii';
+import { maskDraftPreview } from '../pii/masking';
 import './ParentMessageComposer.css';
 
 type FieldName = 'studentId' | 'teacherId' | 'title' | 'body';
@@ -548,7 +549,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
                   inline={embedded}
                   onRetry={() => handleAnalyze()}
                   result={maskingFailed ? { status: 'failed', text: null, count: null }
-                    : { status: 'ready', ...maskContactInfo(`제목: ${draft.title}\n내용: ${draft.body}`, names) }}
+                    : { status: 'ready', ...maskDraftPreview(`제목: ${draft.title}\n내용: ${draft.body}`, names) }}
                 /> : null}
                 {embedded ? <p className="parent-inline-character-count" id="parent-inline-character-count">
                   {draft.body.length.toLocaleString('ko-KR')} / {MESSAGE_MAX_LENGTH.toLocaleString('ko-KR')}자
