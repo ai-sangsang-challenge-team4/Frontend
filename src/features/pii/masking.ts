@@ -21,6 +21,7 @@ const serverMaskingLabels: Readonly<Record<string, string>> = {
   RESIDENT_ID: '주민등록번호',
   CLASS_STUDENT: '학생정보',
 };
+const publicMaskingLabels = ['이름', ...Object.values(serverMaskingLabels)].join('|');
 
 // Analysis evidence can retain the indexed tokens sent to the model.
 export function formatServerMaskedText(text: string): string {
@@ -68,7 +69,7 @@ export function maskContactInfo(text: string, names?: KnownNames) {
     if (known.length > 0) {
       // Keep Korean particles and titles attached to the name. Leave existing masking markers intact.
       const pattern = new RegExp(
-        '\\[(?:이름|전화번호|이메일|주민등록번호)\\]|(?<![\\p{L}\\p{M}\\p{N}])(' + known.join('|') +
+        '\\[(?:' + publicMaskingLabels + ')\\]|(?<![\\p{L}\\p{M}\\p{N}])(' + known.join('|') +
         ')(?=(?:' + NAME_SUFFIX + ')(?![\\p{L}\\p{M}\\p{N}]))', 'giu',
       );
       masked = masked.replace(pattern, (match, name?: string) => name === undefined ? match : maskName());

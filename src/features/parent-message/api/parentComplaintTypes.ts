@@ -122,6 +122,19 @@ export type ComplaintMaskResponse = {
   maskedContent: string;
 };
 
+export type ComplaintMaskPreviewTarget =
+  | { complaintId: number; studentId?: never; teacherId?: never }
+  | { complaintId?: never; studentId: number; teacherId: number };
+
+export type ComplaintMaskPreviewRequest = ComplaintMaskPreviewTarget & { title: string; content: string };
+
+export type ComplaintMaskPreviewResponse = {
+  title: string;
+  content: string;
+  titleCount: number;
+  contentCount: number;
+};
+
 export type RiskDetection = {
   state?: RiskFactorStatus;
   confidence: number | null;
