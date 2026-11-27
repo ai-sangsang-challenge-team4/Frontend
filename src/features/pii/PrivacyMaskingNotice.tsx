@@ -3,14 +3,16 @@ import { Badge, Button, InformationTooltip } from '../../shared/components/ui';
 import type { MaskingResult } from './masking';
 import './PrivacyMaskingNotice.css';
 
-const privacyScope = '전화번호·이메일·주민등록번호와 확인된 학부모·자녀·교사 이름을 자동으로 가립니다. ‘이름:’ 또는 ‘성명:’으로 표시한 한글 이름도 가립니다. 다른 이름이나 주소는 직접 확인해 주세요.';
+const privacyScope = '전화번호·이메일·주민등록번호와 확인된 학부모·자녀·교사 이름을 자동으로 가립니다.';
+const privacyHint = `${privacyScope} ‘이름:’ 또는 ‘성명:’으로 표시한 한글 이름도 가립니다. 다른 이름이나 주소는 직접 확인해 주세요.`;
 
-export function PrivacyMaskingNotice({ result, onRetry, compact = false, inline = false, checksClassmateNamesDuringAnalysis = false }: {
+export function PrivacyMaskingNotice({ result, onRetry, compact = false, inline = false, onPreviewToggle, previewStatus }: {
   result: MaskingResult;
   onRetry?: () => void;
   compact?: boolean;
   inline?: boolean;
-  checksClassmateNamesDuringAnalysis?: boolean;
+  onPreviewToggle?: (open: boolean) => void;
+  previewStatus?: string;
 }) {
   if (result.status === 'failed') {
     return (
@@ -30,25 +32,23 @@ export function PrivacyMaskingNotice({ result, onRetry, compact = false, inline 
   const title = hasPersonalInfo ? '개인정보가 포함되어 있습니다.'
     : inline ? '개인정보가 포함되지 않았는지 확인해 주세요.'
       : compact ? '개인정보를 확인해 주세요.' : '탐지된 개인정보가 없습니다.';
-  const scope = checksClassmateNamesDuringAnalysis
-    ? `${privacyScope} 작성 중에는 문맥으로 식별한 친구 이름도 가립니다. AI 분석 시에는 학급 명부를 확인합니다.`
-    : privacyScope;
   return (
     <section aria-label="개인정보 마스킹 상태" className={`privacy-masking-notice${hasPersonalInfo ? ' has-personal-info' : ''}`}>
       <div className="privacy-masking-heading">
         <StatusIcon aria-hidden="true" size={18} />
         <strong>{title}</strong>
         {hasPersonalInfo ? <Badge size="sm" variant="warning">{result.count}건 마스킹</Badge> : null}
-        {compact ? <InformationTooltip label="개인정보 확인 범위" content={scope} /> : null}
+        {compact ? <InformationTooltip label="개인정보 확인 범위" content={privacyScope} /> : null}
       </div>
       {!hasPersonalInfo && !compact ? <p>다른 이름이나 주소가 포함되어 있는지 직접 확인해 주세요.</p> : null}
-      {hasPersonalInfo ? (
+      {hasPersonalInfo || onPreviewToggle ? (
         <>
-          <details className="privacy-masking-preview">
+          <details className="privacy-masking-preview" onToggle={onPreviewToggle ? (event) => onPreviewToggle(event.currentTarget.open) : undefined}>
             <summary>마스킹 결과 보기 <ChevronDown aria-hidden="true" size={16} /></summary>
-            <p>{result.text}</p>
+            {hasPersonalInfo ? <p>{result.text}</p> : null}
+            {previewStatus ? <span role="status">{previewStatus}</span> : null}
           </details>
-          {!compact ? <p className="privacy-masking-hint">{privacyScope}</p> : null}
+          {!compact ? <p className="privacy-masking-hint">{privacyHint}</p> : null}
         </>
       ) : null}
     </section>
