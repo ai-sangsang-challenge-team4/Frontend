@@ -167,6 +167,64 @@ async function analyze(page: Page) {
   await expect(page).toHaveURL(/\/review$/);
 }
 
+test('작성한 이름을 미리보기와 문의 생성 및 전송 요청에서 가린다', async ({ page }) => {
+  await setup(page, { noRevision: true });
+  const originalTitle = 'Demo Student 상담';
+  const originalBody = 'Demo Teacher 선생님, 학부모 사용자입니다. 학생 이름: 김민수. 연락처 010-1234-5678';
+  await page.getByLabel('문의 제목', { exact: true }).fill(originalTitle);
+  const editor = page.getByLabel('문의 내용', { exact: true });
+  await editor.fill(originalBody);
+  const privacy = page.getByRole('region', { name: '개인정보 마스킹 상태', exact: true });
+  const preview = privacy.locator('.privacy-masking-preview p');
+  await privacy.getByText('마스킹 결과 보기', { exact: true }).click();
+  await expect(privacy).toContainText('5건 마스킹');
+  await expect(preview).toContainText('제목: [이름] 상담');
+  await expect(preview).toContainText('[이름] 선생님, [이름]입니다. 학생 이름: [이름]. 연락처 [전화번호]');
+  await expect(editor).toHaveValue(originalBody);
+
+  const createRequest = page.waitForRequest((request) =>
+    request.method() === 'POST' && new URL(request.url()).pathname === '/api/complaints');
+  await page.getByRole('button', { name: 'AI 분석 시작', exact: true }).click();
+  expect((await createRequest).postDataJSON()).toEqual({
+    studentId: 10, teacherId: 20, title: '[이름] 상담',
+    content: '[이름] 선생님, [이름]입니다. 학생 이름: [이름]. 연락처 [전화번호]',
+  });
+  await expect(page).toHaveURL(/\/review$/);
+
+  await page.getByRole('button', { name: '직접 수정', exact: true }).click();
+  await page.getByLabel('직접 수정한 문의 내용', { exact: true }).fill('Demo Student 상담 요청입니다. 성명: 이영희');
+  await page.getByRole('button', { name: '전송하기', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '문의를 전송할까요?', exact: true });
+  await expect(dialog).toContainText('[이름] 상담');
+  await expect(dialog).toContainText('[이름] 상담 요청입니다. 성명: [이름]');
+  await expect(dialog).not.toContainText(/Demo Student|이영희/);
+  const updateRequest = page.waitForRequest((request) =>
+    request.method() === 'PATCH' && new URL(request.url()).pathname === '/api/complaints/42');
+  await dialog.getByRole('button', { name: '확인 후 전송', exact: true }).click();
+  expect((await updateRequest).postDataJSON()).toEqual({ content: '[이름] 상담 요청입니다. 성명: [이름]' });
+  await expect(page.getByRole('heading', { name: '전송 완료', exact: true })).toBeVisible();
+});
+
+test('이미 서버에 저장한 제목의 개인정보와 전송될 제목을 확인창에 표시한다', async ({ page }) => {
+  await setup(page, { noRevision: true });
+  const title = 'Demo Student 상담';
+  await page.evaluate((storedTitle) => {
+    const content = '상담 시간을 알려 주세요.';
+    localStorage.setItem('teacher-hub.parent-message-draft.101', JSON.stringify({
+      messageId: 'legacy-title', teacherId: '20', studentName: 'Demo Student',
+      title: storedTitle, body: content, status: 'PARENT_REVIEW',
+      server: { complaintId: 42, studentId: 10, teacherId: 20, teacherName: 'Demo Teacher',
+        title: storedTitle, content, analysisId: 7 },
+    }));
+  }, title);
+  await page.goto('/parent/messages/legacy-title/review');
+  await page.getByRole('button', { name: '전송하기', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '문의를 전송할까요?', exact: true });
+  await expect(dialog).toContainText(title);
+  await expect(dialog).toContainText('제목에서 개인정보를 가리려면 새 문의를 작성해 주세요.');
+  await expect(dialog).not.toContainText('개인정보 1건을 가린 문장으로 전송합니다.');
+});
+
 test('통합 카드의 상세 아코디언은 키보드로 열리고 내부 펼침 상태를 보존한다', async ({ page }, testInfo) => {
   await setup(page, { summary: { aiAnalysisStatus: 'COMPLETED', riskLevel: 'EMERGENCY' } });
   await analyze(page);
@@ -841,7 +899,7 @@ test('새 문의의 자녀·대상·제목·내용은 같은 시작선에 표시
     expect(geometry.analyze.right).toBeCloseTo(geometry.form.right, 0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     if ([375, 768, 1024, 1440].includes(width)) {
-      await checkInformationTooltip(page, '개인정보 확인 범위', '전화번호·이메일·주민등록번호를 자동으로 확인합니다. 이름·주소 등 다른 개인정보가 포함되어 있는지도 직접 확인해 주세요.',
+      await checkInformationTooltip(page, '개인정보 확인 범위', '전화번호·이메일·주민등록번호와 확인된 학부모·자녀·교사 이름을 자동으로 가립니다. ‘이름:’ 또는 ‘성명:’으로 표시한 한글 이름도 가립니다. 다른 이름이나 주소는 직접 확인해 주세요.',
         testInfo.project.name === 'mobile', [375, 1440].includes(width) ? testInfo.outputPath(`privacy-tooltip-${width}.png`) : undefined);
     }
   }

@@ -4,9 +4,10 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import analysisIllustration from '../../shared/assets/parent/message-analysis.svg';
 import { getApiErrorMessage, isApiError, isRiskAnalysisSafetyError } from '../../shared/api';
 import { Accordion, Button, EmptyState, InformationTooltip, Select, TextareaField, TextField, Toast } from '../../shared/components/ui';
+import { useAuth } from '../auth';
 import { COMPLAINT_TITLE_MAX_LENGTH, parentComplaintApi, parentMessageApiMode } from './api/parentComplaintApi';
 import {
-  findSentMessage, mockConnectedTeachers, readMessageDraft, readMessageDrafts, saveMessageDraft,
+  findSentMessage, getParentMessageNames, mockConnectedTeachers, readMessageDraft, readMessageDrafts, saveMessageDraft,
   type MessageDraft, type ServerComplaintDraft,
 } from './messageDraft';
 import { ParentMessageHeader } from './ParentMessageHeader';
@@ -32,6 +33,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
   userId: number; threadId?: string; draftId?: string; fresh?: boolean;
   embedded?: boolean; blocked?: boolean; onCollapse?: () => void;
 }) {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [initial] = useState(() => {
@@ -72,7 +74,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
   const draftEdits = useRef(0);
   const reloadAttempt = useRef(0);
   useEffect(() => () => { reloadAttempt.current += 1; }, []);
-  const analysisTarget = useRef<ServerDraftTarget | null>(null);
+  const analysisInput = useRef<{ target: ServerDraftTarget | null; names: ReturnType<typeof getParentMessageNames> }>({ target: null, names: [] });
   const creationKey = `${userId}:${draft.messageId}`;
   const [isCreatingServerDraft, setIsCreatingServerDraft] = useState(() => pendingCreations.has(creationKey));
   const loadingTitle = useRef<HTMLParagraphElement>(null);
@@ -86,6 +88,10 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
   const studentId = draft.server?.studentId ?? draft.studentId;
   const { children, recipients } = useServerRecipients(isServer && !isServerFollowUp, studentId, !draft.server);
   const retryRecipients = recipients.retry;
+  const recipient = recipients.data?.find((item) => String(item.teacherId) === draft.teacherId);
+  const teacherName = draft.server?.teacherName ?? initial.thread?.teacherName ?? recipient?.teacherName ?? draft.teacherName;
+  const studentName = children.data?.find((child) => child.studentId === studentId)?.studentName ?? draft.studentName;
+  const names = getParentMessageNames({ ...draft, studentName, teacherName }, user);
   const teacherOptions = isServerFollowUp && initial.thread ? [{ value: initial.thread.teacherId, label: initial.thread.teacherName }]
     : !isServer ? mockConnectedTeachers
     : draft.server ? [{ value: String(draft.server.teacherId), label: `${draft.server.teacherName} 선생님` }]
@@ -152,6 +158,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
     if (!embedded) window.scrollTo({ top: 0, behavior: 'instant' });
 
     const controller = new AbortController();
+    const { target, names } = analysisInput.current;
     let latestServer = draft.server;
     let creationFailed = false;
     // Keeps the server draft in the form when the analysis stops early, so a retry reuses it.
@@ -172,12 +179,11 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
       let analysis: ParentMessageAnalysis;
       try {
         if (isServer) {
-          const target = analysisTarget.current;
           if (!target) throw new Error(ANALYSIS_FAILED_MESSAGE);
           let current = draft;
           if (!current.server) {
             // Leaving the analysis does not cancel the creation; a new attempt waits for the same one.
-            const creation = pendingCreations.get(creationKey) ?? createServerDraft(draft, target).then((server) => {
+            const creation = pendingCreations.get(creationKey) ?? createServerDraft(draft, target, names).then((server) => {
               try {
                 // Merged into the stored draft, which the parent may have edited after leaving.
                 saveMessageDraft(userId, { ...(readMessageDraft(userId, draft.messageId) ?? draft), server });
@@ -200,9 +206,9 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
             current = { ...draft, server: latestServer };
             controller.signal.throwIfAborted();
           }
-          analysis = (await analyzeServerDraft(current, target, persistServer, controller.signal)).analysis;
+          analysis = (await analyzeServerDraft(current, target, persistServer, controller.signal, names)).analysis;
         } else {
-          analysis = await analyzeParentMessage(draft, controller.signal);
+          analysis = await analyzeParentMessage(draft, controller.signal, names);
         }
       } catch (failure) {
         if (controller.signal.aborted) {
@@ -288,21 +294,24 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
   function updateField(field: Exclude<FieldName, 'studentId'>, value: string) {
     draftEdits.current += 1;
     setSaveFailed(false);
-    setDraft((previous) => ({ ...previous, [field]: value, status: 'DRAFT', review: undefined }));
+    setDraft((previous) => ({
+      ...previous, [field]: value, status: 'DRAFT', review: undefined,
+      ...(field === 'teacherId' ? { teacherName: undefined } : {}),
+    }));
     setErrors((previous) => ({ ...previous, [field]: undefined }));
     setMaskingFailed(false);
   }
 
   function selectChild(value: string) {
-    setDraft((previous) => ({ ...previous, studentId: Number(value) || undefined, teacherId: '', status: 'DRAFT', review: undefined }));
+    setDraft((previous) => ({
+      ...previous, studentId: Number(value) || undefined, studentName: undefined,
+      teacherId: '', teacherName: undefined, status: 'DRAFT', review: undefined,
+    }));
     setErrors((previous) => ({ ...previous, studentId: undefined, teacherId: undefined }));
   }
 
-  // The selected server teacher's name, so the history lists the draft under it before a server draft exists.
-  function withTeacherName(next: MessageDraft): MessageDraft {
-    if (!isServer || next.server) return next;
-    const teacherName = recipients.data?.find((teacher) => String(teacher.teacherId) === next.teacherId)?.teacherName;
-    return { ...next, teacherName };
+  function withRecipientNames(next: MessageDraft): MessageDraft {
+    return isServer ? { ...next, studentName, teacherName } : next;
   }
 
   function handleSaveDraft() {
@@ -311,7 +320,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
       return;
     }
     try {
-      saveMessageDraft(userId, withTeacherName({ ...draft, status: 'DRAFT' }));
+      saveMessageDraft(userId, withRecipientNames({ ...draft, status: 'DRAFT' }));
       setSavedBody(draft.body);
       setSaveFailed(false);
       setNotice('문의가 임시저장되었습니다.');
@@ -328,7 +337,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
       // Closing before the initial server read finishes must not hide that server draft
       // behind a new empty browser draft on the next open.
       if (initial.saved || draftEdits.current > 0 || draft.server || draft.body) {
-        saveMessageDraft(userId, withTeacherName(draft));
+        saveMessageDraft(userId, withRecipientNames(draft));
       }
       onCollapse?.();
     } catch {
@@ -348,21 +357,27 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
     }
     if (!draft.title.trim()) nextErrors.title = '문의 제목을 입력해 주세요.';
     if (draft.title.trim().length > COMPLAINT_TITLE_MAX_LENGTH) nextErrors.title = `문의 제목은 ${COMPLAINT_TITLE_MAX_LENGTH}자 이내로 작성해 주세요.`;
+    else if (!draft.server && !threadId && maskContactInfo(draft.title.trim(), names).text.length > COMPLAINT_TITLE_MAX_LENGTH) {
+      nextErrors.title = `마스킹한 제목이 ${COMPLAINT_TITLE_MAX_LENGTH}자 이내가 되도록 줄여 주세요.`;
+    }
     if (!draft.body.trim()) nextErrors.body = '문의 내용을 입력해 주세요.';
     if (draft.body.length > MESSAGE_MAX_LENGTH) nextErrors.body = `문의 내용은 ${MESSAGE_MAX_LENGTH}자 이내로 작성해 주세요.`;
+    else if (maskContactInfo(draft.body.trim(), names).text.length > MESSAGE_MAX_LENGTH) {
+      nextErrors.body = `마스킹한 내용이 ${MESSAGE_MAX_LENGTH}자 이내가 되도록 줄여 주세요.`;
+    }
     setErrors(nextErrors);
     const firstInvalid = (['studentId', 'teacherId', 'title', 'body'] as const).find((field) => nextErrors[field]);
     if (firstInvalid) {
       document.getElementById(`parent-message-${firstInvalid}`)?.focus();
       return;
     }
-    if (checkPersonalInfo(draft.body).status === 'failed') {
+    if (checkPersonalInfo(draft.body, names).status === 'failed') {
       setMaskingFailed(true);
       return;
     }
     if (draft.review && (!isServer || draft.server)) {
       try {
-        saveMessageDraft(userId, { ...draft, status: 'PARENT_REVIEW' });
+        saveMessageDraft(userId, withRecipientNames({ ...draft, status: 'PARENT_REVIEW' }));
         navigate(`/parent/messages/${draft.messageId}/review`, { state: { inlineFollowUp: embedded } });
       } catch {
         setNotice('작성한 내용을 저장하지 못했습니다. 다시 시도해 주세요.');
@@ -374,17 +389,17 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
       return;
     }
     try {
-      const nextDraft = withTeacherName({
+      const nextDraft = withRecipientNames({
         ...draft, title: draft.title.trim(), body: draft.body.trim(), status: 'DRAFT',
       });
       saveMessageDraft(userId, nextDraft);
       setSavedBody(nextDraft.body);
       setSaveFailed(false);
-      const recipient = recipients.data?.find((item) => String(item.teacherId) === draft.teacherId);
-      analysisTarget.current = draft.server ?? (isServerFollowUp && initial.thread?.serverComplaintId
+      const target = draft.server ?? (isServerFollowUp && initial.thread?.serverComplaintId
         ? { complaintId: initial.thread.serverComplaintId, teacherId: Number(initial.thread.teacherId), teacherName: initial.thread.teacherName }
         : studentId && recipient
         ? { studentId, teacherId: recipient.teacherId, teacherName: recipient.teacherName } : null);
+      analysisInput.current = { target, names };
       analysisPending.current = true;
       setMaskingFailed(false);
       setNotice(null);
@@ -525,7 +540,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
                   inline={embedded}
                   onRetry={() => handleAnalyze()}
                   result={maskingFailed ? { status: 'failed', text: null, count: null }
-                    : { status: 'ready', ...maskContactInfo(`제목: ${draft.title}\n\n내용: ${draft.body}`) }}
+                    : { status: 'ready', ...maskContactInfo(`제목: ${draft.title}\n\n내용: ${draft.body}`, names) }}
                 /> : null}
                 {embedded ? <p className="parent-inline-character-count" id="parent-inline-character-count">
                   {draft.body.length.toLocaleString('ko-KR')} / {MESSAGE_MAX_LENGTH.toLocaleString('ko-KR')}자

@@ -27,11 +27,15 @@ const conversationTab = (page: Page) => page.getByRole('navigation', { name: '�
 
 test('제목·본문 마스킹 결과를 표시하고 가린 문장으로 분석·전송한다', async ({ page }, testInfo) => {
   await writeMessage(page);
+  const namedBody = `${body} 학부모 사용자입니다.`;
+  await page.getByLabel('문의 제목', { exact: true }).fill('성명: 김민수 상담 요청 010-9876-5432');
+  await page.getByLabel('문의 내용', { exact: true }).fill(namedBody);
   const privacy = page.getByRole('region', { name: '개인정보 마스킹 상태', exact: true });
-  await expect(privacy).toContainText('3건 마스킹');
+  await expect(privacy).toContainText('5건 마스킹');
   await privacy.getByText('마스킹 결과 보기', { exact: true }).click();
-  await expect(privacy).toContainText('제목: 상담 요청 [전화번호]');
+  await expect(privacy).toContainText('제목: 성명: [이름] 상담 요청 [전화번호]');
   await expect(privacy).toContainText('[이메일]');
+  await expect(privacy).toContainText('[이름]입니다.');
   await expect(privacy).not.toContainText('010-1234-5678');
   await expect(privacy).not.toContainText('parent@test.com');
   await privacy.screenshot({ path: testInfo.outputPath('privacy-masking.png') });
@@ -41,18 +45,21 @@ test('제목·본문 마스킹 결과를 표시하고 가린 문장으로 분석
   await expect(page).toHaveURL(/\/review$/);
   const aiDraft = page.getByLabel('AI 초안 내용', { exact: true });
   await expect(aiDraft).toHaveValue(/\[전화번호\]/);
-  await expect(aiDraft).not.toHaveValue(/010-1234-5678|parent@test.com/);
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('teacher-hub.parent-message-draft.101')!).body)).toBe(body);
-  await expect(page.locator('.ai-judgment-notice')).toContainText('AI 판단은 참고 정보');
+  await expect(aiDraft).toHaveValue(/\[이름\]입니다/);
+  await expect(aiDraft).not.toHaveValue(/010-1234-5678|parent@test.com|학부모 사용자/);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('teacher-hub.parent-message-draft.101')!).body)).toBe(namedBody);
+  await page.getByRole('button', { name: 'AI 분석 참고 안내', exact: true }).focus();
+  await expect(page.getByRole('tooltip')).toContainText('AI 분석은 참고용');
+  await page.keyboard.press('Escape');
   await page.getByRole('button', { name: '전송하기', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '문의를 전송할까요?', exact: true });
   await expect(dialog).not.toContainText('010-9876-5432');
   await dialog.getByRole('button', { name: '확인 후 전송', exact: true }).click();
   await expect(page.getByRole('heading', { name: '전송 완료', exact: true })).toBeVisible();
   const messages = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), sentKey);
-  expect(messages[0].title).toBe('상담 요청 [전화번호]');
-  expect(messages[0].originalBody).toBe('지난주에도 상담 요청드렸는데 연락이 없으셔서 문의드립니다. 연락처는 [전화번호], 이메일은 [이메일]입니다.');
-  expect(messages[0].finalBody).not.toMatch(/010-1234-5678|parent@test.com/);
+  expect(messages[0].title).toBe('성명: [이름] 상담 요청 [전화번호]');
+  expect(messages[0].originalBody).toBe('지난주에도 상담 요청드렸는데 연락이 없으셔서 문의드립니다. 연락처는 [전화번호], 이메일은 [이메일]입니다. [이름]입니다.');
+  expect(messages[0].finalBody).not.toMatch(/010-1234-5678|parent@test.com|학부모 사용자/);
   expect(JSON.stringify(messages)).not.toMatch(/010-9876-5432|010-1234-5678|parent@test.com/);
   expect(await page.evaluate(() => localStorage.getItem('teacher-hub.parent-message-draft.101'))).toBeNull();
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('teacher-hub.parent-message-draft.101.all')!))).toEqual([]);

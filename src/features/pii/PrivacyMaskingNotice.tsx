@@ -3,6 +3,8 @@ import { Badge, Button, InformationTooltip } from '../../shared/components/ui';
 import type { MaskingResult } from './masking';
 import './PrivacyMaskingNotice.css';
 
+const privacyScope = '전화번호·이메일·주민등록번호와 확인된 학부모·자녀·교사 이름을 자동으로 가립니다. ‘이름:’ 또는 ‘성명:’으로 표시한 한글 이름도 가립니다. 다른 이름이나 주소는 직접 확인해 주세요.';
+
 export function PrivacyMaskingNotice({ result, onRetry, compact = false, inline = false }: {
   result: MaskingResult;
   onRetry?: () => void;
@@ -25,7 +27,7 @@ export function PrivacyMaskingNotice({ result, onRetry, compact = false, inline 
   const hasPersonalInfo = result.count > 0;
   const title = hasPersonalInfo ? '개인정보가 포함되어 있습니다.'
     : inline ? '개인정보가 포함되지 않았는지 확인해 주세요.'
-      : compact ? '개인정보를 확인해 주세요.' : '탐지된 전화번호·이메일·주민등록번호가 없습니다.';
+      : compact ? '개인정보를 확인해 주세요.' : '탐지된 개인정보가 없습니다.';
   return (
     <section aria-label="개인정보 마스킹 상태" className={`privacy-masking-notice${hasPersonalInfo ? ' has-personal-info' : ''}`}>
       <div className="privacy-masking-heading">
@@ -34,20 +36,20 @@ export function PrivacyMaskingNotice({ result, onRetry, compact = false, inline 
         </svg>}
         {compact ? <span className="privacy-masking-description">
           <strong>{title}</strong>
-          <InformationTooltip label="개인정보 확인 범위" content="전화번호·이메일·주민등록번호를 자동으로 확인합니다. 이름·주소 등 다른 개인정보가 포함되어 있는지도 직접 확인해 주세요." />
+          <InformationTooltip label="개인정보 확인 범위" content={privacyScope} />
         </span> : <strong>{title}</strong>}
         {hasPersonalInfo ? <Badge variant="warning">{result.count}건 마스킹</Badge> : null}
       </div>
       {hasPersonalInfo || !compact ? <p>{hasPersonalInfo
-        ? 'AI 분석과 전송에는 전화번호·이메일·주민등록번호를 가린 아래 문장을 사용합니다.'
-        : '이름·주소 등 다른 개인정보가 포함되어 있는지도 직접 확인해 주세요.'}</p> : null}
+        ? '아래에서 개인정보를 가린 결과를 확인해 주세요.'
+        : '다른 이름이나 주소가 포함되어 있는지 직접 확인해 주세요.'}</p> : null}
       {hasPersonalInfo ? (
         <>
           <details className="privacy-masking-preview">
             <summary>마스킹 결과 보기</summary>
             <p>{result.text}</p>
           </details>
-          {!compact ? <p className="privacy-masking-hint">현재 자동 탐지 대상은 전화번호, 이메일, 주민등록번호입니다. 이름·주소 등 다른 개인정보는 직접 확인해 주세요.</p> : null}
+          {!compact ? <p className="privacy-masking-hint">{privacyScope}</p> : null}
         </>
       ) : null}
     </section>

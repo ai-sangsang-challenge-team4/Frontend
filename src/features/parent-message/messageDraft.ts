@@ -1,3 +1,4 @@
+import type { User } from '../../shared/types';
 import { RISK_EXPRESSION_KINDS, type MessageReview, type SentParentMessage } from './parentMessageTypes';
 
 // Local composer step, not the server MessageStatus: PARENT_REVIEW means the parent is
@@ -24,9 +25,9 @@ export type ServerComplaintDraft = {
 export type MessageDraft = {
   messageId: string;
   teacherId: string;
-  // The selected child and the selected teacher's name (http mode), kept for drafts saved before analysis,
-  // which have no server draft to carry the name.
   studentId?: number;
+  // Recipient data from the composer is kept for masking when the draft is reviewed or reopened.
+  studentName?: string;
   teacherName?: string;
   title: string;
   body: string;
@@ -36,6 +37,15 @@ export type MessageDraft = {
   threadId?: string;
   savedAt?: string;
 };
+
+export function getParentMessageNames(draft: MessageDraft, user: User | null) {
+  return [
+    user?.name,
+    ...(user?.students ?? []).map((student) => student.name),
+    draft.studentName,
+    draft.server?.teacherName ?? draft.teacherName,
+  ];
+}
 
 // Replace this fixture with the connected-teachers API when available.
 export const mockConnectedTeachers = [
@@ -141,6 +151,7 @@ function parseDraft(draft: unknown): MessageDraft | null {
     (draft.threadId !== undefined && typeof draft.threadId !== 'string') ||
     (draft.savedAt !== undefined && typeof draft.savedAt !== 'string') ||
     (draft.studentId !== undefined && !isPositiveInteger(draft.studentId)) ||
+    (draft.studentName !== undefined && typeof draft.studentName !== 'string') ||
     (draft.teacherName !== undefined && typeof draft.teacherName !== 'string')) return null;
   let result = draft as MessageDraft;
   // An unreadable server state keeps the text; the next analysis starts a new server draft.

@@ -1,6 +1,6 @@
 import { ApiError, isAbortError, isApiError, isRiskAnalysisSafetyError, toServerInstant } from '../../shared/api';
 import type { DetectedFactorCode } from '../escalation/escalationTypes';
-import { requireMaskedText } from '../pii/masking';
+import { requireMaskedText, type KnownNames } from '../pii/masking';
 import { parentComplaintApi, type ComplaintRecipientResponse, type ParentFollowUpResponse, type RiskRevisionResponse, type RiskSummaryResponse } from './api/parentComplaintApi';
 import { appendFollowUp, applyServerComplaintState, findSentSubmission } from './conversation';
 import { findSentMessage, storeSentMessage, type MessageDraft, type ServerComplaintDraft } from './messageDraft';
@@ -172,9 +172,9 @@ async function updateFollowUp(server: ServerComplaintDraft, content: string, sig
 
 // Not abortable: a server draft created after the parent left the analysis would otherwise stay on the server
 // unlinked (there is no delete API), so the caller keeps the result even when it no longer waits for it.
-export async function createServerDraft(draft: MessageDraft, target: ServerDraftTarget): Promise<ServerComplaintDraft> {
-  const title = requireMaskedText(draft.title.trim());
-  const content = requireMaskedText(draft.body.trim());
+export async function createServerDraft(draft: MessageDraft, target: ServerDraftTarget, names: KnownNames = []): Promise<ServerComplaintDraft> {
+  const title = requireMaskedText(draft.title.trim(), names);
+  const content = requireMaskedText(draft.body.trim(), names);
   const { studentId, teacherId, teacherName } = target;
   if (draft.threadId) {
     if (!target.complaintId) throw new Error('기존 문의의 서버 정보를 확인하지 못했습니다.');
@@ -195,11 +195,12 @@ export async function analyzeServerDraft(
   target: ServerDraftTarget,
   persist: (server: ServerComplaintDraft) => void,
   signal: AbortSignal,
+  names: KnownNames = [],
 ): Promise<{ server: ServerComplaintDraft; analysis: ParentMessageAnalysis }> {
-  const content = requireMaskedText(draft.body.trim());
+  const content = requireMaskedText(draft.body.trim(), names);
   let server = draft.server;
   if (!server) {
-    server = await createServerDraft(draft, target);
+    server = await createServerDraft(draft, target, names);
     persist(server);
     signal.throwIfAborted();
   } else if (server.content !== content && server.serverMessageId === undefined) {
@@ -216,7 +217,7 @@ export async function analyzeServerDraft(
 
   // /mask addresses the initial draft only. Additional-message analysis masks its own draft on the server.
   const masking = server.serverMessageId === undefined ? await parentComplaintApi.mask(server.complaintId, signal) : null;
-  const maskedContent = requireMaskedText(masking?.maskedContent ?? content);
+  const maskedContent = requireMaskedText(masking?.maskedContent ?? content, names);
   let summary: RiskSummaryResponse;
   try {
     summary = server.serverMessageId === undefined
@@ -271,8 +272,9 @@ export async function submitServerDraft(
   signal: AbortSignal,
   parentName?: string,
   onServerDraftUpdate?: (server: ServerComplaintDraft) => void,
+  names: KnownNames = [],
 ): Promise<SentParentMessage> {
-  const existing = findSentSubmission(userId, draft, review);
+  const existing = findSentSubmission(userId, draft, review, names);
   if (existing) return existing;
   if (findSentSubmission(userId, draft, null)) {
     throw new ApiError({ code: 'PARENT_MESSAGE_CONTENT_MISMATCH', status: 409,
@@ -281,10 +283,10 @@ export async function submitServerDraft(
   let server = draft.server;
   if (!server) throw new Error('AI 분석을 먼저 진행해 주세요.');
   const selected = getSelectedMessage(draft.body, review);
-  const validation = validateFinalMessage(selected.text);
+  const content = requireMaskedText(selected.text.trim(), names);
+  const validation = validateFinalMessage(selected.text, content);
   if (validation) throw new Error(validation);
-  const content = requireMaskedText(selected.text.trim());
-  const originalBody = requireMaskedText(draft.body);
+  const originalBody = requireMaskedText(draft.body, names);
 
   const previousThread = draft.threadId ? findSentMessage(userId, draft.threadId) ?? undefined : undefined;
   let sentAt = new Date().toISOString();

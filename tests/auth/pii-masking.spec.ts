@@ -1,6 +1,18 @@
 import { expect, test } from '@playwright/test';
 import { maskContactInfo } from '../../src/features/pii/masking';
 
+test('학부모 문의에서 확인된 이름과 명시한 성명을 가리고 조사와 기존 표시를 유지한다', () => {
+  const names = ['김민수', '김민수', 'A. Kim', '이메일'];
+  const result = maskContactInfo('김민수가 김민수님께 알렸습니다. A. Kim에게도 전달했습니다. 성명: 이영희, 이름: 미상, [이메일]', names);
+  expect(result).toEqual({
+    text: '[이름]가 [이름]님께 알렸습니다. [이름]에게도 전달했습니다. 성명: [이름], 이름: 미상, [이메일]',
+    count: 4,
+  });
+  expect(maskContactInfo(result.text, names)).toEqual({ text: result.text, count: 0 });
+  expect(maskContactInfo('김민수상담실과 김민수를', names)).toEqual({ text: '김민수상담실과 [이름]를', count: 1 });
+  expect(maskContactInfo('성명: 이영희')).toEqual({ text: '성명: 이영희', count: 0 });
+});
+
 test('국제 형식의 한국 휴대전화 번호를 국가 코드까지 마스킹한다', () => {
   for (const phone of [
     '+82 10-1234-5678',

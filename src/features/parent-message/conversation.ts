@@ -1,4 +1,5 @@
 import type { ComplaintStatus, WaitingFor } from '../../shared/types/message';
+import type { KnownNames } from '../pii/masking';
 import { findSentMessage, readSentMessages, updateSentMessage, type MessageDraft } from './messageDraft';
 import type { ComplaintResponse } from './api/parentComplaintTypes';
 import { getSelectedMessage, maskContactInfo, type ConversationMessage, type MessageReview, type SentParentMessage } from './parentMessageTypes';
@@ -68,10 +69,10 @@ export function getDraftPath(draft: MessageDraft) {
 }
 
 // null checks only identity, allowing callers to distinguish an already-sent message with different text.
-export function findSentSubmission(userId: number, draft: MessageDraft, review: MessageReview | null | undefined = draft.review) {
+export function findSentSubmission(userId: number, draft: MessageDraft, review: MessageReview | null | undefined = draft.review, names?: KnownNames) {
   const thread = findSentMessage(userId, draft.threadId ?? draft.messageId);
   const remoteId = thread?.serverComplaintId === draft.server?.complaintId ? draft.server?.serverMessageId : undefined;
-  const expectedBody = review ? maskContactInfo(getSelectedMessage(draft.body, review).text.trim()).text : null;
+  const expectedBody = review ? maskContactInfo(getSelectedMessage(draft.body, review).text.trim(), names).text : null;
   return thread && (!draft.threadId ? expectedBody === null || thread.finalBody === expectedBody
     : getConversation(thread).some((entry) => entry.authorRole === 'parent' &&
       (entry.id === draft.messageId || (remoteId !== undefined && entry.serverMessageId === remoteId)) &&
