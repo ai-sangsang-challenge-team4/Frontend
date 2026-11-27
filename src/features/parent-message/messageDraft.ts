@@ -43,11 +43,23 @@ export function getDraftStudentName(draft: MessageDraft, user: User | null) {
   return user?.students?.find((student) => student.studentId === studentId)?.name.trim() || draft.studentName?.trim();
 }
 
+// Keep the same surname list and minimum given-name length as the server's student masking rule.
+const compoundKoreanSurnames = new Set(['남궁', '독고', '동방', '망절', '사공', '서문', '선우', '제갈', '황보']);
+
+function getStudentGivenName(studentName: string | undefined) {
+  const name = studentName?.trim();
+  if (!name || !/^[가-힣]{3,5}$/.test(name)) return undefined;
+  const surnameLength = compoundKoreanSurnames.has(name.slice(0, 2)) ? 2 : 1;
+  const givenName = name.slice(surnameLength);
+  return givenName.length >= 2 ? givenName : undefined;
+}
+
 export function getParentMessageNames(draft: MessageDraft, user: User | null) {
+  const studentNames = [...(user?.students ?? []).map((student) => student.name), draft.studentName];
   return [
     user?.name,
-    ...(user?.students ?? []).map((student) => student.name),
-    draft.studentName,
+    ...studentNames,
+    ...studentNames.map(getStudentGivenName),
     draft.server?.teacherName ?? draft.teacherName,
   ];
 }

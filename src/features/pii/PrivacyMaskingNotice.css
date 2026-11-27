@@ -12,11 +12,6 @@
   overflow-wrap: anywhere;
 }
 
-.privacy-masking-notice.has-personal-info {
-  border-color: var(--color-yellow-2);
-  background: var(--color-secondary-yellow-subtle);
-}
-
 .privacy-masking-notice.is-failed {
   border-color: var(--color-secondary-pink);
   background: var(--color-danger-subtle);
@@ -34,6 +29,16 @@
   flex-shrink: 0;
 }
 
+.privacy-masking-heading > strong {
+  min-width: 0;
+  word-break: keep-all;
+}
+
+.privacy-masking-heading > .ui-badge {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .privacy-masking-notice p {
   margin: 0;
 }
@@ -43,17 +48,44 @@
 }
 
 .privacy-masking-preview summary {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: var(--space-1);
+  margin-inline-start: calc(-1 * var(--space-2));
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-xs);
+  color: var(--color-text-brand);
   cursor: pointer;
-  font-weight: 500;
+  font-size: var(--font-size-helper);
+  font-weight: var(--font-weight-medium);
+  list-style: none;
+}
+
+.privacy-masking-preview summary::-webkit-details-marker {
+  display: none;
+}
+
+.privacy-masking-preview summary:hover {
+  background: var(--color-primary-subtle);
+}
+
+.privacy-masking-preview summary:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+.privacy-masking-preview[open] summary > svg {
+  transform: rotate(180deg);
 }
 
 .privacy-masking-preview p {
   max-height: 280px;
-  margin-top: 12px;
-  padding: 16px;
+  margin-top: var(--space-1);
+  padding: var(--space-3);
   overflow: auto;
   border-radius: var(--radius-xs);
-  background: var(--color-bg-surface);
+  background: var(--color-bg-canvas);
   white-space: pre-wrap;
 }
 
@@ -63,4 +95,5 @@
 
 @media (max-width: 620px) {
   .privacy-masking-notice { padding: 16px; font-size: 14px; }
+  .privacy-masking-preview summary { min-height: 44px; }
 }

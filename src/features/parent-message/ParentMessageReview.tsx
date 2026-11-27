@@ -146,7 +146,7 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
   const savedTitle = isServer ? (draft.threadId ? draft.title : draft.server?.title) : undefined;
   const savedTitleHasPersonalInfo = savedTitle !== undefined && maskContactInfo(savedTitle, names).count > 0;
   const confirmationMaskCount = masked.count + (draft.threadId || savedTitleHasPersonalInfo ? 0 : maskedTitle.count);
-  const privacyPreview = maskContactInfo(`제목: ${draft.title}\n\n내용: ${selected.text.trim()}`, names);
+  const privacyPreview = maskContactInfo(`제목: ${draft.title}\n내용: ${selected.text.trim()}`, names);
   const teacher = draft.server
     ? { label: `${draft.server.teacherName} 선생님` } : mockConnectedTeachers.find((item) => item.value === draft.teacherId);
   // A previously edited/selected AI draft remains the user's text even if generation is unavailable.

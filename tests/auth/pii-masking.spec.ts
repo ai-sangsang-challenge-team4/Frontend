@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { getParentMessageNames } from '../../src/features/parent-message/messageDraft';
 import { maskContactInfo } from '../../src/features/pii/masking';
 
 test('학부모 문의에서 확인된 이름과 명시한 성명을 가리고 조사와 기존 표시를 유지한다', () => {
@@ -14,6 +15,19 @@ test('학부모 문의에서 확인된 이름과 명시한 성명을 가리고 �
     text: '[이름]만 참석합니다. [이름]라고 합니다. 김민수상담실에 문의합니다.', count: 2,
   });
   expect(maskContactInfo('성명: 이영희')).toEqual({ text: '성명: 이영희', count: 0 });
+});
+
+test('자녀 이름은 외자 성과 두 글자 성을 빼고 써도 가린다', () => {
+  const names = getParentMessageNames({
+    messageId: 'student-name-test', teacherId: '20', studentName: '남궁하람', title: '', body: '', status: 'DRAFT',
+  }, {
+    userId: 1, name: '김미경', email: 'parent@example.com', role: 'PARENT',
+    students: [{ studentId: 10, name: '이도윤', studentNo: '1' }, { studentId: 11, name: '김민', studentNo: '2' }],
+  });
+
+  expect(maskContactInfo('이도윤, 도윤이, 하람만, 궁하람, 도윤상담실, 민이, 미경이', names)).toEqual({
+    text: '[이름], [이름]이, [이름]만, 궁하람, 도윤상담실, 민이, 미경이', count: 3,
+  });
 });
 
 test('국제 형식의 한국 휴대전화 번호를 국가 코드까지 마스킹한다', () => {

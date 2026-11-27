@@ -25,9 +25,10 @@ async function setup(page: Page, options: {
   findingsResponse?: Partial<RiskRevisionResponse>;
   analysisErrorCode?: string; sendErrorCode?: string; noRevision?: boolean;
   lifecycle?: { status: 'OPEN' | 'ANSWERED' | 'CLOSED'; waitingFor?: 'PARENT' | 'TEACHER'; closeConflict?: boolean };
-  uncachedFollowUp?: boolean; cachedAnswered?: boolean;
+  uncachedFollowUp?: boolean; cachedAnswered?: boolean; studentName?: string;
 } = {}) {
   const calls: string[] = [];
+  const studentName = options.studentName ?? 'Demo Student';
   let content = maskedContent;
   let savedFollowUp = false;
   let sendAttempts = 0;
@@ -54,11 +55,11 @@ async function setup(page: Page, options: {
           status: complaintStatus, waitingFor: waitingFor(), latestReceivedAt: followUpSentAt ?? thread.sentAt }] : [],
         hasNext: false, totalPages: 1,
       }; break;
-      case 'GET /users/me': json = { userId: 101, email: 'parent@example.com', name: 'Demo Parent', role: 'PARENT', students: [{ studentId: 10, name: 'Demo Student', studentNo: '1' }] }; break;
+      case 'GET /users/me': json = { userId: 101, email: 'parent@example.com', name: 'Demo Parent', role: 'PARENT', students: [{ studentId: 10, name: studentName, studentNo: '1' }] }; break;
       case 'GET /complaints/recipients': json = [{ teacherId: 20, teacherName: 'Demo Teacher', homeroomTeacher: true }]; break;
       case 'GET /complaints/42': json = {
         complaintId: 42, title: thread.title, teacherName: thread.teacherName, content: thread.finalBody,
-        studentId: 10, studentName: 'Demo Student', parentName: 'Demo Parent', riskLevel: null,
+        studentId: 10, studentName, parentName: 'Demo Parent', riskLevel: null,
         status: complaintStatus, waitingFor: waitingFor(), createdAt: thread.sentAt, updatedAt: followUpSentAt ?? thread.sentAt,
       }; break;
       case 'POST /complaints':
@@ -248,6 +249,35 @@ test('작성한 이름을 미리보기와 문의 생성 및 전송 요청에서 
     request.method() === 'PATCH' && new URL(request.url()).pathname === '/api/complaints/42');
   await dialog.getByRole('button', { name: '확인 후 전송', exact: true }).click();
   expect((await updateRequest).postDataJSON()).toEqual({ content: '[이름] 상담 요청입니다. 성명: [이름]' });
+  await expect(page.getByRole('heading', { name: '전송 완료', exact: true })).toBeVisible();
+});
+
+test('성을 뺀 자녀 이름을 제목과 본문의 미리보기·저장·전송에서 가린다', async ({ page }) => {
+  await setup(page, { studentName: '이도윤', noRevision: true });
+  await page.getByLabel('문의 제목', { exact: true }).fill('도윤');
+  await page.getByLabel('문의 내용', { exact: true }).fill('도윤이 지금 010-1234-5678로 연락할 수 있습니다.');
+  const privacy = page.getByRole('region', { name: '개인정보 마스킹 상태', exact: true });
+  await privacy.getByText('마스킹 결과 보기', { exact: true }).click();
+  const preview = privacy.locator('.privacy-masking-preview p');
+  await expect(preview).toContainText('제목: [이름]');
+  await expect(preview).toContainText('내용: [이름]이 지금 [전화번호]로 연락할 수 있습니다.');
+  await expect(privacy).toContainText('3건 마스킹');
+
+  const create = page.waitForRequest((request) => request.method() === 'POST' && new URL(request.url()).pathname === '/api/complaints');
+  await page.getByRole('button', { name: 'AI 분석 시작', exact: true }).click();
+  expect((await create).postDataJSON()).toEqual({
+    studentId: 10, teacherId: 20, title: '[이름]', content: '[이름]이 지금 [전화번호]로 연락할 수 있습니다.',
+  });
+  await expect(page).toHaveURL(/\/review$/);
+
+  await page.getByRole('button', { name: '직접 수정', exact: true }).click();
+  await page.getByLabel('직접 수정한 문의 내용', { exact: true }).fill('도윤만 참석할 예정입니다.');
+  await page.getByRole('button', { name: '전송하기', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '문의를 전송할까요?', exact: true });
+  await expect(dialog).toContainText('[이름]만 참석할 예정입니다.');
+  const update = page.waitForRequest((request) => request.method() === 'PATCH' && new URL(request.url()).pathname === '/api/complaints/42');
+  await dialog.getByRole('button', { name: '확인 후 전송', exact: true }).click();
+  expect((await update).postDataJSON()).toEqual({ content: '[이름]만 참석할 예정입니다.' });
   await expect(page.getByRole('heading', { name: '전송 완료', exact: true })).toBeVisible();
 });
 
