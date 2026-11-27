@@ -72,26 +72,24 @@ export function toServerAnalysis(revision: RiskRevisionResponse, maskedContent: 
   const risks: RiskExpression[] = revision.findings.flatMap((finding) => {
     const tag = riskTags[finding.code];
     if (!tag) return [];
-    const suggestions = finding.revisionSuggestions.map((suggestion) => ({
-      ...suggestion,
-      originalExpression: formatServerMaskedText(suggestion.originalExpression),
-      suggestedExpression: formatServerMaskedText(suggestion.suggestedExpression),
-      reason: formatServerMaskedText(suggestion.reason),
-    }));
+    // Different token indices can share a display label, so match and deduplicate the original lines.
+    const suggestions = finding.revisionSuggestions;
     const excerpts = [...new Set([
-      ...finding.evidences.flatMap((evidence) => expressionLines(formatServerMaskedText(evidence))),
+      ...finding.evidences.flatMap(expressionLines),
       ...suggestions.flatMap((suggestion) => expressionLines(suggestion.originalExpression)),
     ])];
     return (excerpts.length > 0 ? excerpts : ['']).map((excerpt, index) => {
       const suggestion = suggestions.find((item) => expressionLines(item.originalExpression).includes(excerpt))
         ?? (excerpts.length <= 1 ? suggestions[0] : undefined);
+      const reason = suggestion?.reason.trim();
+      const suggestedExpression = suggestion?.suggestedExpression.trim();
       return {
         id: `${finding.code}-${index}`,
         kind: tag.kind,
         title: tagNames[finding.code] ?? tag.title,
-        excerpt,
-        explanation: suggestion?.reason.trim() || DEFAULT_RISK_EXPLANATION,
-        ...(suggestion?.suggestedExpression.trim() ? { suggestion: suggestion.suggestedExpression.trim() } : {}),
+        excerpt: formatServerMaskedText(excerpt),
+        explanation: reason ? formatServerMaskedText(reason) : DEFAULT_RISK_EXPLANATION,
+        ...(suggestedExpression ? { suggestion: formatServerMaskedText(suggestedExpression) } : {}),
       };
     });
   });

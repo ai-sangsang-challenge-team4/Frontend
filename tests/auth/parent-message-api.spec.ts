@@ -211,6 +211,28 @@ test('findings는 태그별 근거·수정 제안과 최종 수정안으로 바�
   expect(toServerAnalysis({ findings: [], finalRevision: null }, '원문').revisedText).toBeNull();
 });
 
+test('같은 라벨로 표시되는 개인정보 토큰에도 원래 표현의 수정 제안을 각각 연결한다', () => {
+  const first = '[개인정보:STUDENT_NAME:1]에게 사과하세요';
+  const second = '[개인정보:STUDENT_NAME:2]에게 사과하세요';
+  const analysis = toServerAnalysis({
+    revisionStatus: 'COMPLETED', finalRevision: null,
+    findings: [{
+      code: 'UNFAIR_REQUEST',
+      evidences: [first, second, '반복된 근거', first, '반복된 근거'],
+      revisionSuggestions: [
+        { originalExpression: second, suggestedExpression: '두 번째 학생과 대화를 요청해 보세요.', reason: '두 번째 요청을 조정합니다.' },
+        { originalExpression: first, suggestedExpression: '[개인정보:STUDENT_NAME:1]과 대화를 요청해 보세요.', reason: '[개인정보:STUDENT_NAME:1] 관련 요청을 조정합니다.' },
+      ],
+    }],
+  }, '원문');
+
+  expect(analysis.risks.map(({ id, excerpt, suggestion, explanation }) => ({ id, excerpt, suggestion, explanation }))).toEqual([
+    { id: 'UNFAIR_REQUEST-0', excerpt: '[학생명]에게 사과하세요', suggestion: '[학생명]과 대화를 요청해 보세요.', explanation: '[학생명] 관련 요청을 조정합니다.' },
+    { id: 'UNFAIR_REQUEST-1', excerpt: '[학생명]에게 사과하세요', suggestion: '두 번째 학생과 대화를 요청해 보세요.', explanation: '두 번째 요청을 조정합니다.' },
+    expect.objectContaining({ id: 'UNFAIR_REQUEST-2', excerpt: '반복된 근거', suggestion: undefined }),
+  ]);
+});
+
 test('첫 분석은 마스킹한 제목·본문으로 서버 초안을 만든 뒤 분석하고 수정안을 불러온다', async () => {
   mockFetch(route({
     'POST /complaints': () => json(201, { complaintId: 42, status: 'DRAFT', waitingFor: 'TEACHER' }),
