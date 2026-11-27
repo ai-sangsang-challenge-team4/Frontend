@@ -16,8 +16,6 @@ export type ServerComplaintDraft = {
   title: string;
   // Masked content last stored on the server.
   content: string;
-  // Public masking result for this exact saved content, before AI analysis.
-  maskedPreview?: string;
   analysisId: number | null;
   // Present only for additional inquiries; the initial inquiry is addressed by complaintId alone.
   serverMessageId?: number;
@@ -122,7 +120,6 @@ function isServerDraft(value: unknown): value is ServerComplaintDraft {
       : isPositiveInteger(value.serverMessageId) && (value.teacherId === 0 || isPositiveInteger(value.teacherId))) &&
     (value.contentVersion === undefined || (typeof value.contentVersion === 'number' && Number.isInteger(value.contentVersion) && value.contentVersion >= 0)) &&
     typeof value.teacherName === 'string' && typeof value.title === 'string' && typeof value.content === 'string' &&
-    (value.maskedPreview === undefined || typeof value.maskedPreview === 'string') &&
     (value.analysisId === null || isPositiveInteger(value.analysisId));
 }
 

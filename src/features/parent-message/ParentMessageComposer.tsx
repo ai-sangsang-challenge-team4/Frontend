@@ -14,9 +14,9 @@ import { ParentMessageHeader } from './ParentMessageHeader';
 import { analyzeParentMessage } from './parentMessageApi';
 import { createMessageReview, MESSAGE_MAX_LENGTH, type ParentMessageAnalysis } from './parentMessageTypes';
 import { getDraftPath } from './conversation';
-import { analyzeServerDraft, createServerDraft, maskInitialDraft, toFollowUpServerDraft, type ServerDraftTarget } from './serverComplaint';
+import { analyzeServerDraft, createServerDraft, toFollowUpServerDraft, type ServerDraftTarget } from './serverComplaint';
 import { useServerRecipients } from './useServerRecipients';
-import { checkPersonalInfo, countMaskingLabels, maskContactInfo, MaskingError, PrivacyMaskingNotice } from '../pii';
+import { checkPersonalInfo, maskContactInfo, MaskingError, PrivacyMaskingNotice } from '../pii';
 import './ParentMessageComposer.css';
 
 type FieldName = 'studentId' | 'teacherId' | 'title' | 'body';
@@ -28,22 +28,6 @@ const CHILD_LINK_MESSAGE = '선택한 자녀와 계정의 연결을 확인하지
 // Server draft creations by `${userId}:${messageId}`. Module-level so a composer opened again after leaving the
 // page waits for a creation that is still running instead of sending a second POST /complaints.
 const pendingCreations = new Map<string, Promise<ServerComplaintDraft>>();
-
-function getOrCreateServerDraft(userId: number, draft: MessageDraft, target: ServerDraftTarget, names: ReturnType<typeof getParentMessageNames>) {
-  const key = `${userId}:${draft.messageId}`;
-  const pending = pendingCreations.get(key);
-  if (pending) return pending;
-  const creation = createServerDraft(draft, target, names).then((server) => {
-    try {
-      saveMessageDraft(userId, { ...(readMessageDraft(userId, draft.messageId) ?? draft), server });
-    } catch {
-      // The mounted composer keeps the link for this session.
-    }
-    return server;
-  }).finally(() => pendingCreations.delete(key));
-  pendingCreations.set(key, creation);
-  return creation;
-}
 
 export function ParentMessageComposer({ userId, threadId, draftId, fresh = false, embedded = false, blocked = false, onCollapse }: {
   userId: number; threadId?: string; draftId?: string; fresh?: boolean;
@@ -84,10 +68,6 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
   const [saveFailed, setSaveFailed] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [maskingFailed, setMaskingFailed] = useState(false);
-  const [isPreviewing, setIsPreviewing] = useState(false);
-  const [previewError, setPreviewError] = useState<string | null>(null);
-  const previewRequest = useRef<AbortController | null>(null);
-  useEffect(() => () => previewRequest.current?.abort(), []);
   const [canReloadServerDraft, setCanReloadServerDraft] = useState(false);
   const [notice, setNotice] = useState<string | null>(location.state?.draftSaved ? '문의가 임시저장되었습니다.' : null);
   const analysisPending = useRef(false);
@@ -103,8 +83,8 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
     if (embedded) document.getElementById('parent-message-body')?.focus();
   }, [embedded]);
   // Title, child, and teacher cannot change once the server draft exists (PATCH only takes the content),
-  // nor while a preview or analysis is creating the draft.
-  const serverLocked = isServer && (isServerFollowUp || Boolean(draft.server) || isCreatingServerDraft || isPreviewing);
+  // nor while its creation is still running after the parent left the analysis.
+  const serverLocked = isServer && (isServerFollowUp || Boolean(draft.server) || isCreatingServerDraft);
   const studentId = draft.server?.studentId ?? draft.studentId;
   const { children, recipients } = useServerRecipients(isServer && (!isServerFollowUp || studentId !== undefined), studentId, !isServerFollowUp && !draft.server);
   const retryRecipients = recipients.retry;
@@ -204,14 +184,25 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
           let current = draft;
           if (!current.server) {
             // Leaving the analysis does not cancel the creation; a new attempt waits for the same one.
+            const creation = pendingCreations.get(creationKey) ?? createServerDraft(draft, target, names).then((server) => {
+              try {
+                // Merged into the stored draft, which the parent may have edited after leaving.
+                saveMessageDraft(userId, { ...(readMessageDraft(userId, draft.messageId) ?? draft), server });
+              } catch {
+                // The form state below still keeps the link for this session.
+              }
+              return server;
+            }).finally(() => {
+              pendingCreations.delete(creationKey);
+              setIsCreatingServerDraft(false);
+            });
+            pendingCreations.set(creationKey, creation);
             setIsCreatingServerDraft(true);
             try {
-              latestServer = await getOrCreateServerDraft(userId, draft, target, names);
+              latestServer = await creation;
             } catch (failure) {
               creationFailed = true;
               throw failure;
-            } finally {
-              setIsCreatingServerDraft(false);
             }
             current = { ...draft, server: latestServer };
             controller.signal.throwIfAborted();
@@ -275,7 +266,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
     void analyze();
 
     return () => controller.abort();
-  }, [blocked, draft, embedded, isAnalyzing, isServer, isServerFollowUp, navigate, retryRecipients, userId]);
+  }, [blocked, creationKey, draft, embedded, isAnalyzing, isServer, isServerFollowUp, navigate, retryRecipients, userId]);
 
   async function reloadServerFollowUp() {
     const thread = initial.thread;
@@ -310,7 +301,6 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
     }));
     setErrors((previous) => ({ ...previous, [field]: undefined }));
     setMaskingFailed(false);
-    setPreviewError(null);
   }
 
   function selectChild(value: string) {
@@ -319,7 +309,6 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
       teacherId: '', teacherName: undefined, status: 'DRAFT', review: undefined,
     }));
     setErrors((previous) => ({ ...previous, studentId: undefined, teacherId: undefined }));
-    setPreviewError(null);
   }
 
   function withRecipientNames(next: MessageDraft): MessageDraft {
@@ -360,7 +349,9 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
     }
   }
 
-  function validateDraft() {
+  function handleAnalyze(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+    if (analysisPending.current || blocked || needsStudentName) return;
     const nextErrors: FieldErrors = {};
     if (isServer && !isServerFollowUp && !studentId) nextErrors.studentId = '문의할 자녀를 선택해 주세요.';
     const teacher = teacherOptions.find((option) => option.value === draft.teacherId);
@@ -379,80 +370,10 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
     }
     setErrors(nextErrors);
     const firstInvalid = (['studentId', 'teacherId', 'title', 'body'] as const).find((field) => nextErrors[field]);
-    if (firstInvalid) document.getElementById(`parent-message-${firstInvalid}`)?.focus();
-    return !firstInvalid;
-  }
-
-  const target = draft.server ?? (isServerFollowUp && initial.thread?.serverComplaintId
-    ? { complaintId: initial.thread.serverComplaintId, teacherId: Number(initial.thread.teacherId), teacherName: initial.thread.teacherName }
-    : studentId && recipient
-      ? { studentId, teacherId: recipient.teacherId, teacherName: recipient.teacherName } : null);
-
-  function resumeDraftOnReload(next: MessageDraft) {
-    if (!threadId && !draftId) {
-      navigate(getDraftPath(next), { replace: true, state: { composerKey: location.state?.composerKey ?? location.key } });
-    }
-  }
-
-  async function handleServerPreview() {
-    if (!isServer || threadId || blocked || needsStudentName || analysisPending.current || previewRequest.current) return;
-    if (!validateDraft() || !target) return;
-    const content = checkPersonalInfo(draft.body.trim(), names);
-    if (content.status === 'failed') {
-      setPreviewError('개인정보를 가리지 못했습니다. 다시 시도해 주세요.');
+    if (firstInvalid) {
+      document.getElementById(`parent-message-${firstInvalid}`)?.focus();
       return;
     }
-    if (!navigator.onLine) {
-      setPreviewError('인터넷 연결을 확인한 후 다시 시도해 주세요.');
-      return;
-    }
-
-    const controller = new AbortController();
-    previewRequest.current = controller;
-    setIsPreviewing(true);
-    setPreviewError(null);
-    const next = withRecipientNames({ ...draft, status: 'DRAFT' });
-    let latestServer = draft.server;
-    const persistServer = (server: ServerComplaintDraft | undefined) => {
-      latestServer = server;
-      saveMessageDraft(userId, { ...next, server, review: server ? next.review : undefined });
-    };
-    try {
-      saveMessageDraft(userId, next);
-      resumeDraftOnReload(next);
-      const server = latestServer ?? await getOrCreateServerDraft(userId, next, target, names);
-      latestServer = server;
-      controller.signal.throwIfAborted();
-      const masking = await maskInitialDraft(server, content.text, persistServer, controller.signal, names);
-      controller.signal.throwIfAborted();
-      persistServer({ ...masking.server, contentVersion: masking.contentVersion, maskedPreview: masking.maskedContent });
-      setSavedBody(next.body);
-      setSaveFailed(false);
-    } catch (failure) {
-      if (controller.signal.aborted) return;
-      if (isApiError(failure) && failure.code === 'COMPLAINT_NOT_FOUND') {
-        try {
-          persistServer(undefined);
-        } catch {
-          // Drop the missing draft from the form so it can be recreated on retry.
-        }
-      }
-      setPreviewError(getApiErrorMessage(failure, '마스킹 결과를 확인하지 못했습니다. 다시 시도해 주세요.'));
-    } finally {
-      previewRequest.current = null;
-      if (!controller.signal.aborted) {
-        setDraft((previous) => ({
-          ...previous, server: latestServer, studentName, teacherName,
-          review: latestServer ? previous.review : undefined,
-        }));
-        setIsPreviewing(false);
-      }
-    }
-  }
-
-  function handleAnalyze(event?: FormEvent<HTMLFormElement>) {
-    event?.preventDefault();
-    if (analysisPending.current || previewRequest.current || blocked || needsStudentName || !validateDraft()) return;
     if (checkPersonalInfo(draft.body, names).status === 'failed') {
       setMaskingFailed(true);
       return;
@@ -477,13 +398,22 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
       saveMessageDraft(userId, nextDraft);
       setSavedBody(nextDraft.body);
       setSaveFailed(false);
+      const target = draft.server ?? (isServerFollowUp && initial.thread?.serverComplaintId
+        ? { complaintId: initial.thread.serverComplaintId, teacherId: Number(initial.thread.teacherId), teacherName: initial.thread.teacherName }
+        : studentId && recipient
+        ? { studentId, teacherId: recipient.teacherId, teacherName: recipient.teacherName } : null);
       analysisInput.current = { target, names };
       analysisPending.current = true;
       setMaskingFailed(false);
       setNotice(null);
       setDraft(nextDraft);
       setIsAnalyzing(true);
-      resumeDraftOnReload(nextDraft);
+      if (!threadId && !draftId) {
+        // Preserve the mounted analysis while making reload and Browser Back resume this draft.
+        navigate(getDraftPath(nextDraft), {
+          replace: true, state: { composerKey: location.state?.composerKey ?? location.key },
+        });
+      }
     } catch {
       setNotice('작성한 내용을 저장하지 못했습니다. 다시 시도해 주세요.');
     }
@@ -514,7 +444,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
     ? '추가 문의는 기존 문의의 대상과 제목을 그대로 사용합니다. 이어서 전달할 내용을 작성해 주세요.'
     : 'AI 분석 후 내용을 확인하고 전송할 수 있어요.';
   const analysisDetail = threadId ? undefined
-    : isServer ? '초안이 서버에 저장되면 자녀·문의 대상·제목이 확정되며, 문의 내용은 계속 수정할 수 있습니다.'
+    : isServer ? '분석 시작 후 자녀·문의 대상·제목은 변경할 수 없으며, 문의 내용은 계속 수정할 수 있습니다.'
       : '분석 결과를 확인한 뒤 문의를 전송할 수 있습니다.';
   const analysisDescriptionId = 'parent-message-analysis-description';
   const childHelper = children.isLoading ? '자녀 정보를 불러오고 있어요.'
@@ -527,13 +457,6 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
         : serverLocked ? undefined
           : recipients.isLoading ? '선생님 목록을 불러오고 있어요.'
             : teacherOptions.length === 0 ? '연결된 선생님이 없습니다. 학교에 교사 연결을 요청해 주세요.' : undefined;
-  const canPreviewOnServer = isServer && !threadId;
-  const savedPreview = canPreviewOnServer && draft.server?.content === maskContactInfo(draft.body.trim(), names).text
-    ? draft.server.maskedPreview : undefined;
-  const maskedTitle = savedPreview !== undefined ? maskContactInfo(draft.title, names) : undefined;
-  const privacyPreview = savedPreview !== undefined && maskedTitle
-    ? { text: `제목: ${maskedTitle.text}\n내용: ${savedPreview}`, count: maskedTitle.count + countMaskingLabels(savedPreview) }
-    : maskContactInfo(`제목: ${draft.title}\n내용: ${draft.body}`, names);
 
   return (
     <>
@@ -617,22 +540,15 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
                 aria-label={embedded ? '문의 내용' : undefined}
                 aria-describedby={embedded ? 'parent-inline-character-count' : undefined}
                 onChange={(event) => updateField('body', event.target.value)}
-                placeholder={threadId ? '추가로 문의할 내용을 작성해 주세요.' : '선생님께 전달할 문의 내용을 작성해 주세요.'} readOnly={isPreviewing} required rows={6} value={draft.body} />
+                placeholder={threadId ? '추가로 문의할 내용을 작성해 주세요.' : '선생님께 전달할 문의 내용을 작성해 주세요.'} required rows={6} value={draft.body} />
               <div className="parent-write-guidance">
                 {maskingFailed || draft.body.trim() || draft.title.trim() ? <PrivacyMaskingNotice
+                  checksClassmateNamesDuringAnalysis={isServer && !threadId}
                   compact
                   inline={embedded}
                   onRetry={() => handleAnalyze()}
-                  previewActions={canPreviewOnServer ? savedPreview !== undefined
-                    ? <div role="status">{privacyPreview.count === 0 ? '가릴 개인정보를 찾지 못했습니다.' : '같은 학급 학생 이름도 확인했습니다.'}</div>
-                    : <div>
-                      {!draft.server ? <div>초안을 저장하면 자녀·문의 대상·제목이 확정됩니다.</div> : null}
-                      {previewError ? <div role="alert">{previewError}</div> : null}
-                      <Button disabled={blocked || needsStudentName} isLoading={isPreviewing} onClick={() => { void handleServerPreview(); }}
-                        size="sm" variant="outline">초안 저장하고 마스킹 확인</Button>
-                    </div> : undefined}
                   result={maskingFailed ? { status: 'failed', text: null, count: null }
-                    : { status: 'ready', ...privacyPreview }}
+                    : { status: 'ready', ...maskContactInfo(`제목: ${draft.title}\n내용: ${draft.body}`, names) }}
                 /> : null}
                 {embedded ? <p className="parent-inline-character-count" id="parent-inline-character-count">
                   {draft.body.length.toLocaleString('ko-KR')} / {MESSAGE_MAX_LENGTH.toLocaleString('ko-KR')}자
@@ -651,8 +567,8 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
                     : draftEdits.current > 0 ? '저장되지 않은 변경사항' : '아직 저장하지 않음'}
                 </p> : null}
                 <div className="parent-write-actions">
-                  <Button className="parent-write-save" disabled={needsStudentName || isPreviewing} leftIcon={<Save size={18} />} onClick={handleSaveDraft} size="md" variant="outline">임시저장</Button>
-                  <Button aria-describedby={analysisDescriptionId} className="parent-write-analyze" disabled={blocked || needsStudentName || teacherOptions.length === 0 || maskingFailed || isPreviewing}
+                  <Button className="parent-write-save" disabled={needsStudentName} leftIcon={<Save size={18} />} onClick={handleSaveDraft} size="md" variant="outline">임시저장</Button>
+                  <Button aria-describedby={analysisDescriptionId} className="parent-write-analyze" disabled={blocked || needsStudentName || teacherOptions.length === 0 || maskingFailed}
                     leftIcon={<Send size={18} />} size="md" type="submit">AI 분석 시작</Button>
                 </div>
               </div>

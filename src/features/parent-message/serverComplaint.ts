@@ -196,26 +196,6 @@ export async function createServerDraft(draft: MessageDraft, target: ServerDraft
   return { studentId, teacherId, teacherName, complaintId: created.complaintId, title, content, analysisId: null };
 }
 
-export async function maskInitialDraft(
-  server: ServerComplaintDraft,
-  content: string,
-  persist: (server: ServerComplaintDraft) => void,
-  signal: AbortSignal,
-  names: KnownNames,
-) {
-  if (server.content !== content) {
-    await parentComplaintApi.updateDraft(server.complaintId, { content }, signal);
-    server = { ...server, content, maskedPreview: undefined };
-    persist(server);
-  }
-  const masking = await parentComplaintApi.mask(server.complaintId, signal);
-  return {
-    server,
-    contentVersion: masking.contentVersion,
-    maskedContent: requireMaskedText(formatServerMaskedText(masking.maskedContent), names),
-  };
-}
-
 // Creates or updates the server draft and analyzes it. `persist` receives every server state change so a
 // retry after a later failure reuses the same server draft instead of creating another one.
 export async function analyzeServerDraft(
@@ -231,6 +211,10 @@ export async function analyzeServerDraft(
     server = await createServerDraft(draft, target, names);
     persist(server);
     signal.throwIfAborted();
+  } else if (server.content !== content && server.serverMessageId === undefined) {
+    await parentComplaintApi.updateDraft(server.complaintId, { content }, signal);
+    server = { ...server, content };
+    persist(server);
   }
 
   if (server.serverMessageId !== undefined) {
@@ -240,9 +224,8 @@ export async function analyzeServerDraft(
   }
 
   // /mask addresses the initial draft only. Additional-message analysis masks its own draft on the server.
-  const masking = server.serverMessageId === undefined ? await maskInitialDraft(server, content, persist, signal, names) : null;
-  if (masking) server = masking.server;
-  const maskedContent = masking?.maskedContent ?? content;
+  const masking = server.serverMessageId === undefined ? await parentComplaintApi.mask(server.complaintId, signal) : null;
+  const maskedContent = requireMaskedText(masking ? formatServerMaskedText(masking.maskedContent) : content, names);
   let summary: RiskSummaryResponse;
   try {
     summary = server.serverMessageId === undefined
@@ -337,7 +320,7 @@ export async function submitServerDraft(
     } else {
       if (content !== server.content) {
         await parentComplaintApi.updateDraft(server.complaintId, { content }, signal);
-        server = { ...server, content, maskedPreview: undefined };
+        server = { ...server, content };
         onServerDraftUpdate?.(server);
       }
       const sent = await parentComplaintApi.submit(server.complaintId, signal);
