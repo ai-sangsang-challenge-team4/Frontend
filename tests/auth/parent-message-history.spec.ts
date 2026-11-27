@@ -14,7 +14,7 @@ function inquiry(id: string, status: 'before' | 'inProgress' | 'complete', title
 }
 
 async function login(page: Page, role = 'PARENT') {
-  if (page.url() !== 'about:blank') await page.evaluate(() => localStorage.removeItem('teacher-hub.auth-session'));
+  if (page.url() !== 'about:blank') await page.evaluate(() => sessionStorage.removeItem('teacher-hub.auth-session'));
   await page.goto(`/login?role=${role}`);
   await page.locator('input[name="email"]').fill(role === 'PARENT' ? 'parent@example.com' : 'teacher@example.com');
   await page.locator('input[name="password"]').fill('password123');

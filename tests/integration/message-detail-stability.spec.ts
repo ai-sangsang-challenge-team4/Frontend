@@ -4,7 +4,7 @@ import { expect, test, type Page } from '@playwright/test';
 async function setupInbox(page: Page) {
   const user = { userId: 201, name: '테스트 교사', email: 'layout@example.com', role: 'TEACHER' };
   await page.addInitScript((user) => {
-    localStorage.setItem('teacher-hub.auth-session', JSON.stringify({
+    sessionStorage.setItem('teacher-hub.auth-session', JSON.stringify({
       accessToken: 'layout-test-token', expiresAt: Date.now() + 3600_000, user,
     }));
   }, user);
