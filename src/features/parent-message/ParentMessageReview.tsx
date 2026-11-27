@@ -13,10 +13,9 @@ import { ParentRiskAnalysisDetails } from './ParentRiskAnalysisDetails';
 import { createMockAnalysis, sendParentMessage } from './parentMessageApi';
 import { findSentSubmission, findSentSubmissionById, getDraftPath } from './conversation';
 import { submitServerDraft } from './serverComplaint';
-import { combineMaskingPreview, useMaskingPreview } from './useMaskingPreview';
 import { useServerRevision } from './useServerRevision';
 import { useServerChildren } from './useServerRecipients';
-import { checkPersonalInfo, MaskingError, PrivacyMaskingNotice } from '../pii';
+import { checkPersonalInfo, countMaskingLabels, MaskingError, PrivacyMaskingNotice } from '../pii';
 import {
   createMessageReview,
   getSelectedMessage,
@@ -81,8 +80,7 @@ export function ParentMessageReview({ userId, messageId }: { userId: number; mes
   const [initial] = useState(() => {
     try {
       const draft = readMessageDraft(userId, messageId);
-      const sent = draft ? findSentSubmission(userId, draft, draft.review, getParentMessageNames(draft, user)) ??
-        (draft.server ? findSentSubmission(userId, draft, null) : null) : findSentSubmissionById(userId, messageId);
+      const sent = draft ? findSentSubmission(userId, draft, draft.review, getParentMessageNames(draft, user)) : findSentSubmissionById(userId, messageId);
       return { draft, sent, error: null };
     } catch {
       return { draft: null, sent: null, error: '문의 정보를 불러오지 못했습니다. 다시 시도해 주세요.' };
@@ -142,27 +140,27 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
   const serverDraft = useRef(draft.server);
   const dismissNotice = useCallback(() => setNotice(null), []);
   const selected = getSelectedMessage(draft.body, review);
+  const masked = maskContactInfo(selected.text.trim(), names);
+  const serverMaskCount = review.analysis.maskingContentVersion !== undefined && selected.selectionType === 'ORIGINAL'
+    ? countMaskingLabels(selected.text) : 0;
+  const maskedTitle = maskContactInfo(draft.title.trim(), names);
   // Earlier follow-up drafts stored a masked copy under server.title. The draft's title comes from the thread.
   const savedTitle = isServer ? (draft.threadId ? draft.title : draft.server?.title) : undefined;
-  const title = savedTitle ?? draft.title.trim();
-  const content = selected.text.trim();
-  const serverMasking = useMaskingPreview(draft.server && isServer ? { complaintId: draft.server.complaintId } : undefined, title, content);
-  const privacyPreview = combineMaskingPreview(title, content, names, serverMasking.result);
-  const savedTitleHasPersonalInfo = savedTitle !== undefined && privacyPreview.titleCount > 0;
-  const confirmationMaskCount = privacyPreview.contentCount + (draft.threadId || savedTitleHasPersonalInfo ? 0 : privacyPreview.titleCount);
-  const isPreviewUnavailable = serverMasking.status === 'pending' || serverMasking.status === 'failed';
+  const savedTitleHasPersonalInfo = savedTitle !== undefined && maskContactInfo(savedTitle, names).count > 0;
+  const confirmationMaskCount = serverMaskCount + masked.count + (draft.threadId || savedTitleHasPersonalInfo ? 0 : maskedTitle.count);
+  const privacyPreview = maskContactInfo(`제목: ${draft.title}\n내용: ${selected.text.trim()}`, names);
   const teacher = draft.server
     ? { label: `${draft.server.teacherName} 선생님` } : mockConnectedTeachers.find((item) => item.value === draft.teacherId);
   // A previously edited/selected AI draft remains the user's text even if generation is unavailable.
   const hasAiDraft = review.aiText !== '' || review.aiTextEdited === true || review.source === 'AI';
   // The server analyzes the final text again on send when it differs from the reviewed content.
   const analyzedOnSend = isServer && (review.analysis.analyzeOnSubmit === true ||
-    privacyPreview.content !== (review.analysis.maskedContent ?? draft.server?.content));
+    masked.text !== (review.analysis.maskedContent ?? draft.server?.content));
   const revision = useServerRevision(
     isServer ? draft.server?.analysisId ?? undefined : undefined,
     review.analysis.maskedContent ?? draft.body,
     // An analyze-on-submit snapshot belongs to earlier content and must not revive its suggestions.
-    isServer && !review.analysis.analyzeOnSubmit && !isSending && dialog === null,
+    isServer && !review.analysis.analyzeOnSubmit && !isSending,
   );
 
   useEffect(() => {
@@ -212,7 +210,7 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
 
   function handleOpenDialog(mode: 'preview' | 'confirm') {
     if (needsStudentName) return;
-    const validation = validateFinalMessage(selected.text, privacyPreview.content);
+    const validation = validateFinalMessage(selected.text, masked.text);
     setError(validation);
     if (validation) {
       document.getElementById('parent-review-editor')?.focus();
@@ -226,13 +224,12 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
       setMaskingFailed(true);
       return;
     }
-    if (isServer && !serverMasking.result) return;
     setMaskingFailed(false);
     setDialog(mode);
   }
 
   async function handleSend() {
-    if (sendPending.current || needsStudentName || (isServer && !serverMasking.result)) return;
+    if (sendPending.current || needsStudentName) return;
     sendPending.current = true;
     setNotice(null);
     setIsSending(true);
@@ -244,7 +241,7 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
         ? await submitServerDraft(userId, { ...draft, studentName, server: serverDraft.current }, review, controller.signal, user?.name, (next) => {
           serverDraft.current = next;
           saveMessageDraft(userId, { ...draft, studentName, server: next, status: 'PARENT_REVIEW', review });
-        }, names, privacyPreview.content)
+        }, names)
         : await sendParentMessage(userId, draft, review, controller.signal, user?.name, names);
       if (controller.signal.aborted) return;
       submissionComplete.current = true;
@@ -445,12 +442,8 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
 
         <PrivacyMaskingNotice
           onRetry={() => setMaskingFailed(checkPersonalInfo(selected.text, names).status === 'failed')}
-          serverStatus={serverMasking.status}
-          onPreviewRetry={serverMasking.retry}
-          result={maskingFailed ? { status: 'failed', text: null, count: null } : {
-            status: 'ready', text: `제목: ${privacyPreview.title}\n내용: ${privacyPreview.content}`,
-            count: privacyPreview.titleCount + privacyPreview.contentCount,
-          }}
+          result={maskingFailed ? { status: 'failed', text: null, count: null }
+            : { status: 'ready', text: privacyPreview.text, count: serverMaskCount + privacyPreview.count }}
         />
 
         {review.source === 'ORIGINAL' && review.analysis.risks.length > 0 ? (
@@ -487,8 +480,8 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
         <div className="parent-write-actions parent-review-actions">
           <Button disabled={needsStudentName} leftIcon={<Save size={22} />} onClick={handleSave} size="lg" variant="outline">임시저장</Button>
           <div className="parent-review-send-actions">
-            <Button disabled={needsStudentName || maskingFailed || isPreviewUnavailable} leftIcon={<Eye size={22} />} onClick={() => handleOpenDialog('preview')} size="lg" variant="outline">미리보기</Button>
-            <Button disabled={needsStudentName || maskingFailed || isPreviewUnavailable} leftIcon={<Send size={22} />} onClick={() => handleOpenDialog('confirm')} size="lg">전송하기</Button>
+            <Button disabled={needsStudentName || maskingFailed} leftIcon={<Eye size={22} />} onClick={() => handleOpenDialog('preview')} size="lg" variant="outline">미리보기</Button>
+            <Button disabled={needsStudentName || maskingFailed} leftIcon={<Send size={22} />} onClick={() => handleOpenDialog('confirm')} size="lg">전송하기</Button>
           </div>
         </div>
       </main>
@@ -507,7 +500,7 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
         </div> : null}
         <dl className="parent-review-preview-meta">
           <dt>문의 대상</dt><dd>{teacher?.label}</dd>
-          <dt>문의 제목</dt><dd>{savedTitle ?? privacyPreview.title}</dd>
+          <dt>문의 제목</dt><dd>{savedTitle ?? maskedTitle.text}</dd>
           <dt>선택 문장</dt><dd>{selectionLabels[selected.selectionType]}</dd>
         </dl>
         {savedTitleHasPersonalInfo ? <p className="parent-review-meaning-notice">{draft.threadId
@@ -515,7 +508,7 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
           제목에서 개인정보를 가리려면 새 문의를 작성해 주세요.</p> : null}
         {confirmationMaskCount > 0 ? <p className="parent-review-meaning-notice">개인정보 {confirmationMaskCount}건을 가린 문장으로 전송합니다.</p> : null}
         {dialog === 'confirm' && analyzedOnSend ? <p className="parent-review-meaning-notice">AI 검토를 받은 내용과 달라 전송할 때 한 번 더 분석합니다. 전송이 조금 늦어질 수 있습니다.</p> : null}
-        <p className="parent-review-preview-body">{privacyPreview.content}</p>
+        <p className="parent-review-preview-body">{masked.text}</p>
       </Modal>
       {notice && dialog === null ? <Toast message={notice} onClose={dismissNotice} /> : null}
     </>

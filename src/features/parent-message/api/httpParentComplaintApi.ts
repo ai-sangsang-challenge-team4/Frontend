@@ -11,7 +11,6 @@ import type {
   RiskRevisionResponse,
   RiskSummaryResponse,
   ComplaintMaskResponse,
-  ComplaintMaskPreviewResponse,
   RiskDetectorResponse,
   ParentFollowUpResponse,
   ParentConversationResponse,
@@ -66,9 +65,6 @@ export const httpParentComplaintApi: ParentComplaintApi = {
 
   mask: (complaintId, signal) =>
     apiClient.post<ComplaintMaskResponse>(`/complaints/${complaintId}/mask`, undefined, { signal }),
-
-  previewMasking: (request, signal) =>
-    apiClient.post<ComplaintMaskPreviewResponse>('/complaints/mask-preview', request, { signal }),
 
   getDetectorResults: (analysisId, signal) =>
     apiClient.get<RiskDetectorResponse>(`/risk-analyses/${analysisId}/detector-results`, { signal }),
