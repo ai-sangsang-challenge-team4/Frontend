@@ -10,7 +10,7 @@ const EMERGENCY_ROW = '민원 #1 공유 메시지 상세 보기';
 const SHARE_REASON = '보호자 상황 변화로 학교 차원의 공동 검토가 필요합니다.';
 
 async function login(page: Page, role: 'TEACHER' | 'ADMIN') {
-  await page.evaluate((key) => localStorage.removeItem(key), SESSION_KEY).catch(() => undefined);
+  await page.evaluate((key) => sessionStorage.removeItem(key), SESSION_KEY).catch(() => undefined);
   await page.goto(`/login?role=${role}`);
   await page.locator('input[name="email"]').fill(role === 'TEACHER' ? 'teacher@example.com' : 'admin@teacherhub.local');
   await page.locator('input[name="password"]').fill(role === 'TEACHER' ? 'password123' : 'admin1234');

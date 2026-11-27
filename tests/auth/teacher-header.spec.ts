@@ -90,5 +90,5 @@ test('교사 모바일 메뉴는 이동, 키보드 닫기, 화면 크기 전환,
   await expect(page).toHaveURL(/\/login$/);
   await expect(dialog).toHaveCount(0);
   await expect(page.locator('body')).not.toHaveCSS('overflow', 'hidden');
-  expect(await page.evaluate(() => localStorage.getItem('teacher-hub.auth-session'))).toBeNull();
+  expect(await page.evaluate(() => sessionStorage.getItem('teacher-hub.auth-session'))).toBeNull();
 });

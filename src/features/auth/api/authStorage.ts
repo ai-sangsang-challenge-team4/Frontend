@@ -2,9 +2,17 @@ import { isUser } from '../authState';
 import { AuthApiError, type AuthSession } from './authApiContract';
 
 export const AUTH_SESSION_STORAGE_KEY = 'teacher-hub.auth-session';
+export const MOCK_ISSUED_SESSION_STORAGE_KEY = 'teacher-hub.auth-mock-sessions';
+
+type StorageName = 'localStorage' | 'sessionStorage';
+
+export function clearLegacyAuthSessions() {
+  removeStoredValue(AUTH_SESSION_STORAGE_KEY);
+  removeStoredValue(MOCK_ISSUED_SESSION_STORAGE_KEY);
+}
 
 export function readAuthSession(): AuthSession | null {
-  const value = readStoredJson<Partial<AuthSession>>(AUTH_SESSION_STORAGE_KEY);
+  const value = readStoredJson<Partial<AuthSession>>(AUTH_SESSION_STORAGE_KEY, 'sessionStorage');
 
   if (
     !value ||
@@ -21,26 +29,26 @@ export function readAuthSession(): AuthSession | null {
 }
 
 export function persistAuthSession(session: AuthSession) {
-  writeStoredJson(AUTH_SESSION_STORAGE_KEY, session);
+  writeStoredJson(AUTH_SESSION_STORAGE_KEY, session, 'sessionStorage');
 }
 
 export function clearAuthSession() {
-  removeStoredValue(AUTH_SESSION_STORAGE_KEY);
+  removeStoredValue(AUTH_SESSION_STORAGE_KEY, 'sessionStorage');
 }
 
-export function readStoredJson<T>(key: string): T | null {
+export function readStoredJson<T>(key: string, storage: StorageName = 'localStorage'): T | null {
   try {
-    const value = window.localStorage.getItem(key);
+    const value = window[storage].getItem(key);
     return value ? JSON.parse(value) as T : null;
   } catch {
-    removeStoredValue(key);
+    removeStoredValue(key, storage);
     return null;
   }
 }
 
-export function writeStoredJson(key: string, value: unknown) {
+export function writeStoredJson(key: string, value: unknown, storage: StorageName = 'localStorage') {
   try {
-    window.localStorage.setItem(key, JSON.stringify(value));
+    window[storage].setItem(key, JSON.stringify(value));
   } catch {
     throw new AuthApiError({
       code: 'STORAGE_UNAVAILABLE',
@@ -50,9 +58,9 @@ export function writeStoredJson(key: string, value: unknown) {
   }
 }
 
-export function removeStoredValue(key: string) {
+export function removeStoredValue(key: string, storage: StorageName = 'localStorage') {
   try {
-    window.localStorage.removeItem(key);
+    window[storage].removeItem(key);
   } catch {
     return;
   }

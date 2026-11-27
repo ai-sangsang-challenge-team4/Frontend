@@ -36,6 +36,7 @@ export type {
 export {
   AUTH_SESSION_STORAGE_KEY,
   clearAuthSession,
+  clearLegacyAuthSessions,
   persistAuthSession,
   readAuthSession,
 } from './authStorage';

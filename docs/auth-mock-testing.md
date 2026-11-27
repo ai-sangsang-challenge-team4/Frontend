@@ -16,7 +16,14 @@
 
 dev 프로필 계정: `parent@test.com`, `teacher@test.com`, `admin@test.com` / `Test1234!`. 로컬에서는 Vite 프록시(`VITE_API_BASE_URL=/api`, `VITE_API_PROXY_TARGET`)를 거치며, 프록시가 `Origin` 헤더를 제거합니다(백엔드 CORS는 Vercel Origin만 허용해 다른 Origin은 403).
 
-Mock 계정과 비밀번호, 발급 토큰 기록은 테스트를 위해 브라우저 저장소에 보관됩니다. 실제 서비스의 서버 인증이나 토큰 서명 검증을 대신하지 않습니다. 이전 버전에서 로그인한 세션에는 만료 정보와 발급 기록이 없으므로 한 번 다시 로그인해야 합니다.
+Mock 계정과 비밀번호는 테스트를 위해 `localStorage`에 보관됩니다. 실제 서비스는 서버에서 인증과 토큰 검증을 수행합니다.
+
+로그인 세션과 Mock 발급 토큰은 탭별 `sessionStorage`에 보관됩니다. 기존 로그인 세션은 정리되므로 업데이트 후 한 번 다시 로그인해야 합니다. 각 탭에서 새로고침해도 세션 만료 전까지 로그인 상태가 유지됩니다.
+
+### 라이브 시연
+
+- 같은 브라우저에서 새 탭이나 새 창을 두 개 열고 주소창에 서비스 주소를 각각 입력하세요. 한쪽은 학부모 계정으로, 다른 쪽은 교사 계정으로 로그인하세요.
+- 로그인된 학부모 탭에서 `window.open` 등으로 같은 사이트를 열어 새 탭에 `window.opener`가 있으면, 학부모 세션이 복사되어 교사 로그인 주소에서도 학부모 화면으로 이동할 수 있습니다. 새로 열린 탭에서 먼저 로그아웃한 뒤 교사 계정으로 로그인하세요.
 
 ## 자동 테스트
 
@@ -51,7 +58,8 @@ PLAYWRIGHT_BASE_URL=http://127.0.0.1:5175 npm run test:auth
 - 등록되지 않은 토큰 및 손상된 저장 데이터 제거
 - 사용자 조회 401 응답 시 인증 상태 초기화
 - 사용자 조회 503 응답 시 세션 보존 및 재시도
-- 다른 탭의 로그인·로그아웃 반영, 늦은 조회 응답 무시
+- 같은 브라우저에서 학부모·교사 탭의 로그인·새로고침·로그아웃 분리
+- 이전 `localStorage` 로그인 세션 제거
 - 회원가입 인증번호 요청 버튼·입력란·준비 중 안내 미표시, 이메일 형식 검증
 
 실패 시 `test-results/`에 화면 캡처와 trace가 남습니다. HTML 결과는 `npx playwright show-report`로 확인할 수 있습니다.
@@ -107,13 +115,13 @@ localStorage.removeItem('teacher-hub.auth-mock-settings');
 ```js
 for (const key of [
   'teacher-hub.auth-accounts',
-  'teacher-hub.auth-session',
-  'teacher-hub.auth-mock-sessions',
   'teacher-hub.auth-signup-code',
   'teacher-hub.auth-mock-settings',
 ]) {
   localStorage.removeItem(key);
 }
+sessionStorage.removeItem('teacher-hub.auth-session');
+sessionStorage.removeItem('teacher-hub.auth-mock-sessions');
 location.reload();
 ```
 

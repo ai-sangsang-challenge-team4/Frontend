@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { API_ERROR_COPY, configureApiClient } from '../../shared/api';
 import { Toast } from '../../shared/components/ui';
 import {
-  AUTH_SESSION_STORAGE_KEY,
   AuthApiError,
   clearAuthSession,
+  clearLegacyAuthSessions,
   getAuthErrorMessage,
   getCurrentUser,
   isUnauthorizedError,
@@ -58,7 +58,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return;
     }
 
-    // Ignore responses from a session superseded by logout or another tab.
+    // Ignore responses that arrive after logout or a newer auth request.
     const revision = ++requestRevision.current;
     if (blocking) {
       sessionRef.current = null;
@@ -92,24 +92,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [invalidateSession]);
 
   useEffect(() => {
+    clearLegacyAuthSessions();
     void restoreSession();
 
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key === AUTH_SESSION_STORAGE_KEY || event.key === null) {
-        void restoreSession();
-      }
-    };
     const handleFocus = () => { void restoreSession(false); };
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') handleFocus();
     };
 
-    window.addEventListener('storage', handleStorage);
     window.addEventListener('focus', handleFocus);
     document.addEventListener('visibilitychange', handleVisibility);
     return () => {
       requestRevision.current += 1;
-      window.removeEventListener('storage', handleStorage);
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleVisibility);
     };

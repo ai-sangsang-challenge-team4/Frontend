@@ -102,5 +102,5 @@ test('메인 하단에서 로그인 없이 약관 3종을 열람한다', async (
     await expect(trigger).toBeFocused();
   }
   await expect(page).toHaveURL(/\/$/);
-  expect(await page.evaluate(() => localStorage.getItem('teacher-hub.auth-session'))).toBeNull();
+  expect(await page.evaluate(() => sessionStorage.getItem('teacher-hub.auth-session'))).toBeNull();
 });

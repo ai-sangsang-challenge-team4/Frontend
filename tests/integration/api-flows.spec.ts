@@ -916,11 +916,11 @@ test('사용자 조회 5xx는 저장된 JWT로 우회하지 않고 재시도를 
   await setup(page, 'ADMIN', async () => false);
   await page.evaluate(() => {
     const key = 'teacher-hub.auth-session';
-    const session = JSON.parse(localStorage.getItem(key)!);
+    const session = JSON.parse(sessionStorage.getItem(key)!);
     const encode = (value: unknown) => btoa(JSON.stringify(value)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
     const claims = { sub: String(session.user.userId), email: session.user.email, role: session.user.role, exp: Math.floor(Date.now() / 1000) + 3600 };
     session.accessToken = `${encode({ alg: 'HS384' })}.${encode(claims)}.signature`;
-    localStorage.setItem(key, JSON.stringify(session));
+    sessionStorage.setItem(key, JSON.stringify(session));
   });
   let failMe = true;
   await page.route((url) => url.pathname === '/api/users/me', (route) => failMe

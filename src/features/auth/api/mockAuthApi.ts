@@ -10,8 +10,9 @@ import {
   type VerificationCodeResult,
 } from './authApiContract';
 import {
-  readStoredJson,
+  MOCK_ISSUED_SESSION_STORAGE_KEY,
   readAuthSession,
+  readStoredJson,
   removeStoredValue,
   writeStoredJson,
 } from './authStorage';
@@ -31,7 +32,6 @@ type MockSettings = {
 };
 
 const ACCOUNT_STORAGE_KEY = 'teacher-hub.auth-accounts';
-const ISSUED_SESSION_STORAGE_KEY = 'teacher-hub.auth-mock-sessions';
 const SIGNUP_VERIFICATION_STORAGE_KEY = 'teacher-hub.auth-signup-code';
 const SETTINGS_STORAGE_KEY = 'teacher-hub.auth-mock-settings';
 const MOCK_VERIFICATION_CODE = '123456';
@@ -65,10 +65,10 @@ async function login(input: LoginInput): Promise<AuthSession> {
     user: toUser(account),
   };
   const { user, ...tokens } = session;
-  writeStoredJson(ISSUED_SESSION_STORAGE_KEY, [
+  writeStoredJson(MOCK_ISSUED_SESSION_STORAGE_KEY, [
     ...readIssuedSessions().filter((entry) => entry.expiresAt > Date.now()),
     { ...tokens, userId: user.userId },
-  ]);
+  ], 'sessionStorage');
   return session;
 }
 
@@ -84,8 +84,9 @@ async function getCurrentUser(accessToken: string) {
 
 async function logout(accessToken: string) {
   await waitForRequest('logout');
-  writeStoredJson(ISSUED_SESSION_STORAGE_KEY,
+  writeStoredJson(MOCK_ISSUED_SESSION_STORAGE_KEY,
     readIssuedSessions().filter((entry) => entry.accessToken !== accessToken),
+    'sessionStorage',
   );
 }
 
@@ -216,7 +217,7 @@ function readAccounts(): AuthAccount[] {
 }
 
 function readIssuedSessions(): IssuedSession[] {
-  const stored = readStoredJson<unknown>(ISSUED_SESSION_STORAGE_KEY);
+  const stored = readStoredJson<unknown>(MOCK_ISSUED_SESSION_STORAGE_KEY, 'sessionStorage');
   if (!Array.isArray(stored)) return [];
   return stored.filter((entry): entry is IssuedSession =>
     entry && typeof entry === 'object' &&

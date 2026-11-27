@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
 
 async function login(page: Page, role: 'TEACHER' | 'PARENT' | 'ADMIN') {
-  if (page.url() !== 'about:blank') await page.evaluate(() => localStorage.removeItem('teacher-hub.auth-session'));
+  if (page.url() !== 'about:blank') await page.evaluate(() => sessionStorage.removeItem('teacher-hub.auth-session'));
   await page.goto(`/login?role=${role}`);
   await page.locator('input[name="email"]').fill(role === 'ADMIN' ? 'admin@teacherhub.local' : `${role.toLowerCase()}@example.com`);
   await page.locator('input[name="password"]').fill(role === 'ADMIN' ? 'admin1234' : 'password123');

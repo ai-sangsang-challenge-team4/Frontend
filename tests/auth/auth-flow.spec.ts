@@ -34,7 +34,7 @@ async function configureMock(page: Page, settings: MockSettings) {
 }
 
 async function readSession(page: Page): Promise<AuthSession | null> {
-  return page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? 'null'), SESSION_KEY);
+  return page.evaluate((key) => JSON.parse(sessionStorage.getItem(key) ?? 'null'), SESSION_KEY);
 }
 
 async function fillLogin(page: Page, email: string, password: string) {
@@ -98,7 +98,7 @@ for (const account of accounts) {
     await expect(page).toHaveURL(/\/login$/);
     expect(await readSession(page)).toBeNull();
     await expect.poll(() => page.evaluate(({ key, token }) => {
-      const sessions: { accessToken: string }[] = JSON.parse(localStorage.getItem(key) ?? '[]');
+      const sessions: { accessToken: string }[] = JSON.parse(sessionStorage.getItem(key) ?? '[]');
       return sessions.some((entry) => entry.accessToken === token);
     }, { key: ISSUED_KEY, token: session?.accessToken })).toBe(false);
     await page.goto(account.home);
@@ -199,8 +199,8 @@ test('만료된 세션은 동의 내역을 조회하지 못한다', async ({ pag
   const consentTab = page.getByRole('tab', { name: '약관 및 동의' });
   await consentTab.waitFor();
   await page.evaluate((key) => {
-    const sessions = JSON.parse(localStorage.getItem(key) ?? '[]');
-    localStorage.setItem(key, JSON.stringify(sessions.map((entry: object) => ({ ...entry, expiresAt: Date.now() - 1000 }))));
+    const sessions = JSON.parse(sessionStorage.getItem(key) ?? '[]');
+    sessionStorage.setItem(key, JSON.stringify(sessions.map((entry: object) => ({ ...entry, expiresAt: Date.now() - 1000 }))));
   }, ISSUED_KEY);
   await consentTab.click();
   await expect(page.getByText('세션이 만료되었습니다.', { exact: false })).toBeVisible();
@@ -273,7 +273,7 @@ test('로그아웃 서비스 오류가 발생해도 로컬 세션만 먼저 제�
   await expect(page).toHaveURL(/\/login$/);
   expect(await readSession(page)).toBeNull();
   await expect.poll(() => page.evaluate(({ key, token }) => {
-    const sessions: { accessToken: string }[] = JSON.parse(localStorage.getItem(key) ?? '[]');
+    const sessions: { accessToken: string }[] = JSON.parse(sessionStorage.getItem(key) ?? '[]');
     return sessions.some((entry) => entry.accessToken === token);
   }, { key: ISSUED_KEY, token: session?.accessToken })).toBe(true);
 });
@@ -291,16 +291,16 @@ test('응답 지연 중에는 로딩을 표시하고 중복 로그인 요청을 
   await expect(button.locator('.ui-button-spinner')).toHaveCSS('animation-duration', '0s');
   await page.locator('input[name="password"]').press('Enter');
   await expect(page).toHaveURL(/\/parent\/messages\/new$/);
-  expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? '[]').length, ISSUED_KEY)).toBe(1);
+  expect(await page.evaluate((key) => JSON.parse(sessionStorage.getItem(key) ?? '[]').length, ISSUED_KEY)).toBe(1);
 });
 
 test('저장된 사용자 역할 대신 토큰 조회 결과로 사용자 정보를 복원한다', async ({ page }) => {
   await loginAs(page, accounts[0]);
   await page.evaluate((key) => {
-    const session = JSON.parse(localStorage.getItem(key)!);
+    const session = JSON.parse(sessionStorage.getItem(key)!);
     session.user = { ...session.user, role: 'ADMIN', name: '변경된 캐시' };
     session.expiresAt += 60_000;
-    localStorage.setItem(key, JSON.stringify(session));
+    sessionStorage.setItem(key, JSON.stringify(session));
   }, SESSION_KEY);
   await page.goto('/admin');
   await expect(page).toHaveURL(/\/parent\/messages\/new$/);
@@ -347,9 +347,9 @@ test('사용 중 토큰이 만료되면 로그인으로 이동하고 일회성 �
 test('새로고침 시 만료된 토큰을 거절한다', async ({ page }) => {
   await loginAs(page, accounts[0]);
   await page.evaluate((key) => {
-    const sessions = JSON.parse(localStorage.getItem(key)!);
+    const sessions = JSON.parse(sessionStorage.getItem(key)!);
     for (const session of sessions) session.expiresAt = Date.now() - 1;
-    localStorage.setItem(key, JSON.stringify(sessions));
+    sessionStorage.setItem(key, JSON.stringify(sessions));
   }, ISSUED_KEY);
   await page.reload();
   await expect(page).toHaveURL(/\/login$/);
@@ -361,9 +361,9 @@ test('새로고침 시 만료된 토큰을 거절한다', async ({ page }) => {
 test('등록되지 않은 토큰을 거절한다', async ({ page }) => {
   await loginAs(page, accounts[0]);
   await page.evaluate((key) => {
-    const session = JSON.parse(localStorage.getItem(key)!);
+    const session = JSON.parse(sessionStorage.getItem(key)!);
     session.accessToken = 'unissued-token';
-    localStorage.setItem(key, JSON.stringify(session));
+    sessionStorage.setItem(key, JSON.stringify(session));
   }, SESSION_KEY);
   await page.reload();
   await expect(page).toHaveURL(/\/login$/);
@@ -375,7 +375,7 @@ test('등록되지 않은 토큰을 거절한다', async ({ page }) => {
 test('손상된 저장 데이터와 빈 토큰을 안전하게 제거한다', async ({ page }) => {
   for (const value of ['{invalid-json', '{"accessToken":"","refreshToken":"","expiresAt":0}', 'null']) {
     await page.goto('/login');
-    await page.evaluate(({ key, value }) => localStorage.setItem(key, value), { key: SESSION_KEY, value });
+    await page.evaluate(({ key, value }) => sessionStorage.setItem(key, value), { key: SESSION_KEY, value });
     await page.goto('/parent');
     await expect(page).toHaveURL(/\/login$/);
     await expect(page.getByRole('heading', { name: '로그인', exact: true })).toBeVisible();
@@ -412,35 +412,40 @@ test('사용자 조회의 401 응답은 인증 상태를 초기화하고 닫을 
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
-test('다른 탭의 로그아웃을 반영하고 늦은 사용자 조회가 세션을 되살리지 않는다', async ({ page, context }) => {
-  await page.clock.install();
+test('같은 브라우저의 학부모와 교사 탭은 로그인과 로그아웃이 서로 독립적이다', async ({ page, context }) => {
   await loginAs(page, accounts[0]);
-  const otherTab = await context.newPage();
-  await otherTab.goto('/parent');
-  await expect(otherTab.getByRole('heading', { name: '새 문의 작성', exact: true })).toBeVisible();
-  await configureMock(page, { delayMs: 1000 });
-  await otherTab.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await openAppMenuIfNeeded(page);
-  await page.getByRole('button', { name: '로그아웃', exact: true }).click();
-  await expect(page).toHaveURL(/\/login$/);
-  await expect(otherTab).toHaveURL(/\/login$/);
-  await expect(otherTab.getByRole('heading', { name: '로그인', exact: true })).toBeVisible();
-  await otherTab.clock.fastForward(1100);
-  await expect(otherTab).toHaveURL(/\/login$/);
-  expect(await readSession(otherTab)).toBeNull();
+  const teacherTab = await context.newPage();
+  await teacherTab.goto('/teacher');
+  await expect(teacherTab.getByRole('heading', { name: '로그인', exact: true })).toBeVisible();
+  await loginAs(teacherTab, accounts[1]);
+
+  await page.reload();
+  await teacherTab.reload();
+  await expect(page.getByRole('heading', { name: '새 문의 작성', exact: true })).toBeVisible();
+  await expect(teacherTab).toHaveURL(/\/teacher\/messages$/);
+  expect((await readSession(page))?.user.role).toBe('PARENT');
+  expect((await readSession(teacherTab))?.user.role).toBe('TEACHER');
+
+  await openAppMenuIfNeeded(teacherTab);
+  await teacherTab.getByRole('button', { name: '로그아웃', exact: true }).click();
+  await expect(teacherTab).toHaveURL(/\/login$/);
+  expect(await readSession(teacherTab)).toBeNull();
+  await page.reload();
+  await expect(page.getByRole('heading', { name: '새 문의 작성', exact: true })).toBeVisible();
+  expect((await readSession(page))?.user.role).toBe('PARENT');
 });
 
-test('다른 탭에서 로그인하면 새 사용자 역할을 반영한다', async ({ page, context }) => {
+test('기존 공유 저장소의 로그인 정보는 새 탭에 상속되지 않고 제거된다', async ({ page, context }) => {
   await loginAs(page, accounts[0]);
-  const otherTab = await context.newPage();
-  await otherTab.goto('/parent');
-  await openAppMenuIfNeeded(otherTab);
-  await expect(otherTab.getByRole('button', { name: '로그아웃', exact: true })).toBeVisible();
-  await otherTab.getByRole('button', { name: '로그아웃', exact: true }).click();
-  await expect(page).toHaveURL(/\/login$/);
-  await fillLogin(otherTab, accounts[1].email, accounts[1].password);
-  await otherTab.getByRole('button', { name: '로그인', exact: true }).click();
-  await expect(otherTab).toHaveURL(/\/teacher\/messages$/);
-  await expect(page).toHaveURL(/\/teacher\/messages$/);
-  expect((await readSession(page))?.user.role).toBe('TEACHER');
+  const keys = [SESSION_KEY, ISSUED_KEY];
+  await page.evaluate((keys) => {
+    for (const key of keys) localStorage.setItem(key, sessionStorage.getItem(key)!);
+  }, keys);
+
+  const newTab = await context.newPage();
+  await newTab.goto('/parent');
+  await expect(newTab).toHaveURL(/\/login$/);
+  expect(await newTab.evaluate((keys) => keys.map((key) => localStorage.getItem(key)), keys))
+    .toEqual([null, null]);
+  expect(await readSession(newTab)).toBeNull();
 });
