@@ -1,7 +1,7 @@
 import { ApiError, isAbortError, isApiError, isRiskAnalysisSafetyError, toServerInstant } from '../../shared/api';
 import type { DetectedFactorCode } from '../escalation/escalationTypes';
 import { formatServerMaskedText, requireMaskedText, type KnownNames } from '../pii/masking';
-import { COMPLAINT_TITLE_MAX_LENGTH, parentComplaintApi, type ComplaintRecipientResponse, type ParentFollowUpResponse, type RiskRevisionResponse, type RiskSummaryResponse } from './api/parentComplaintApi';
+import { parentComplaintApi, type ComplaintRecipientResponse, type ParentFollowUpResponse, type RiskRevisionResponse, type RiskSummaryResponse } from './api/parentComplaintApi';
 import { appendFollowUp, applyServerComplaintState, findSentSubmission } from './conversation';
 import { findSentMessage, storeSentMessage, type MessageDraft, type ServerComplaintDraft } from './messageDraft';
 import { OFFICIAL_MEANING_WARNING } from './parentMessageApi';
@@ -180,7 +180,7 @@ async function updateFollowUp(server: ServerComplaintDraft, content: string, sig
 
 // Not abortable: a server draft created after the parent left the analysis would otherwise stay on the server
 // unlinked (there is no delete API), so the caller keeps the result even when it no longer waits for it.
-export async function createServerDraft(draft: MessageDraft, target: ServerDraftTarget, names: KnownNames = [], checkedTitle?: string): Promise<ServerComplaintDraft> {
+export async function createServerDraft(draft: MessageDraft, target: ServerDraftTarget, names: KnownNames = []): Promise<ServerComplaintDraft> {
   const content = requireMaskedText(draft.body.trim(), names);
   const { studentId, teacherId, teacherName } = target;
   if (draft.threadId) {
@@ -191,10 +191,7 @@ export async function createServerDraft(draft: MessageDraft, target: ServerDraft
     return toFollowUpServerDraft(draft, target, saved);
   }
   if (!studentId) throw new Error('문의할 자녀를 선택해 주세요.');
-  const title = requireMaskedText(checkedTitle ?? draft.title.trim(), names);
-  if (title.length > COMPLAINT_TITLE_MAX_LENGTH) {
-    throw new Error(`마스킹한 제목이 ${COMPLAINT_TITLE_MAX_LENGTH}자 이내가 되도록 줄여 주세요.`);
-  }
+  const title = requireMaskedText(draft.title.trim(), names);
   const created = await parentComplaintApi.createDraft({ studentId, teacherId, title, content });
   return { studentId, teacherId, teacherName, complaintId: created.complaintId, title, content, analysisId: null };
 }
@@ -207,7 +204,6 @@ export async function analyzeServerDraft(
   persist: (server: ServerComplaintDraft) => void,
   signal: AbortSignal,
   names: KnownNames = [],
-  followUpMaskedContent?: string,
 ): Promise<{ server: ServerComplaintDraft; analysis: ParentMessageAnalysis }> {
   const content = requireMaskedText(draft.body.trim(), names);
   let server = draft.server;
@@ -229,7 +225,7 @@ export async function analyzeServerDraft(
 
   // /mask addresses the initial draft only. Additional-message analysis masks its own draft on the server.
   const masking = server.serverMessageId === undefined ? await parentComplaintApi.mask(server.complaintId, signal) : null;
-  const maskedContent = requireMaskedText(formatServerMaskedText(masking?.maskedContent ?? followUpMaskedContent ?? content), names);
+  const maskedContent = requireMaskedText(masking ? formatServerMaskedText(masking.maskedContent) : content, names);
   let summary: RiskSummaryResponse;
   try {
     summary = server.serverMessageId === undefined
@@ -285,9 +281,8 @@ export async function submitServerDraft(
   parentName?: string,
   onServerDraftUpdate?: (server: ServerComplaintDraft) => void,
   names: KnownNames = [],
-  preparedBody?: string,
 ): Promise<SentParentMessage> {
-  const existing = findSentSubmission(userId, draft, review, names, preparedBody);
+  const existing = findSentSubmission(userId, draft, review, names);
   if (existing) return existing;
   if (findSentSubmission(userId, draft, null)) {
     throw new ApiError({ code: 'PARENT_MESSAGE_CONTENT_MISMATCH', status: 409,
@@ -296,7 +291,7 @@ export async function submitServerDraft(
   let server = draft.server;
   if (!server) throw new Error('AI 분석을 먼저 진행해 주세요.');
   const selected = getSelectedMessage(draft.body, review);
-  const content = requireMaskedText(preparedBody ?? selected.text.trim(), names);
+  const content = requireMaskedText(selected.text.trim(), names);
   const validation = validateFinalMessage(selected.text, content);
   if (validation) throw new Error(validation);
   const originalBody = requireMaskedText(review.analysis.maskedContent ?? draft.body, names);

@@ -21,12 +21,17 @@ const serverMaskingLabels: Readonly<Record<string, string>> = {
   RESIDENT_ID: '주민등록번호',
   CLASS_STUDENT: '학생정보',
 };
-const publicMaskingLabels = ['이름', ...Object.values(serverMaskingLabels)].join('|');
+const maskingLabels = `\\[(?:이름|개인정보|${Object.values(serverMaskingLabels).join('|')})\\]`;
+const maskingLabelPattern = new RegExp(maskingLabels, 'g');
 
 // Analysis evidence can retain the indexed tokens sent to the model.
 export function formatServerMaskedText(text: string): string {
   return text.replace(/\[개인정보:([A-Z_]+):\d+\]/g, (_token, category: string) =>
     `[${serverMaskingLabels[category] ?? '개인정보'}]`);
+}
+
+export function countMaskingLabels(text: string): number {
+  return text.match(maskingLabelPattern)?.length ?? 0;
 }
 
 // Covers at least what the backend PiiMaskingServiceImpl masks, in the same order (resident number, email,
@@ -69,7 +74,7 @@ export function maskContactInfo(text: string, names?: KnownNames) {
     if (known.length > 0) {
       // Keep Korean particles and titles attached to the name. Leave existing masking markers intact.
       const pattern = new RegExp(
-        '\\[(?:' + publicMaskingLabels + ')\\]|(?<![\\p{L}\\p{M}\\p{N}])(' + known.join('|') +
+        maskingLabels + '|(?<![\\p{L}\\p{M}\\p{N}])(' + known.join('|') +
         ')(?=(?:' + NAME_SUFFIX + ')(?![\\p{L}\\p{M}\\p{N}]))', 'giu',
       );
       masked = masked.replace(pattern, (match, name?: string) => name === undefined ? match : maskName());
