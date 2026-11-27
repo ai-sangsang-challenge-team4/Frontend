@@ -31,7 +31,7 @@ export function PrivacyMaskingNotice({ result, onRetry, compact = false, inline 
     : inline ? '개인정보가 포함되지 않았는지 확인해 주세요.'
       : compact ? '개인정보를 확인해 주세요.' : '탐지된 개인정보가 없습니다.';
   const scope = checksClassmateNamesDuringAnalysis
-    ? `${privacyScope} 같은 학급 학생 이름은 AI 분석 후 ‘원문’에서 마스킹 결과를 확인할 수 있습니다.`
+    ? `${privacyScope} 작성 중에는 문맥으로 식별한 친구 이름도 가립니다. AI 분석 시에는 학급 명부를 확인합니다.`
     : privacyScope;
   return (
     <section aria-label="개인정보 마스킹 상태" className={`privacy-masking-notice${hasPersonalInfo ? ' has-personal-info' : ''}`}>

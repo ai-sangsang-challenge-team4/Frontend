@@ -48,9 +48,46 @@ export type KnownNames = readonly (string | undefined)[];
 
 const LABELED_NAME = /(?<![\p{L}\p{N}])((?:이름|성명)[ \t]*[:：][ \t]*)([가-힣]{2,5})(?![\p{L}\p{N}])/gu;
 const UNKNOWN_NAME_VALUES = new Set(['없음', '미상', '미정', '모름', '익명', '비공개', '미확인', '해당없음']);
-const NAME_SUFFIX = '이가|이는|이를|이랑|이도|이라고|이라는|입니다|이에요|라고|' +
+const NAME_PARTICLE_WITH_I = '이(?:가|는|를|랑|도|와|의|에게서?|한테서?|께서?|라고|라는)(?:도|는|만)?';
+const NAME_SUFFIX = `${NAME_PARTICLE_WITH_I}|입니다|이에요|라고|` +
   '(?:님이?|학생이?|선생님이?|보호자)?' +
   '(?:(?:에게서?|한테서?|께서?|으로|에서|처럼|보다|까지|부터|[이가은는을를의도과와랑로만])(?:도|는|만)?)?';
+const WORD_START = '(?<![\\p{L}\\p{M}\\p{N}])';
+const WORD_END = '(?![\\p{L}\\p{M}\\p{N}])';
+const GIVEN_NAME_WITH_PARTICLE = new RegExp(`${WORD_START}([가-힣]{2,4})(?=(?:${NAME_PARTICLE_WITH_I})${WORD_END})`, 'gu');
+const POSSIBLE_FULL_NAME = new RegExp(`${WORD_START}[가-힣]{3,5}${WORD_END}`, 'gu');
+const CLASSMATE_MENTION = new RegExp(
+  `${WORD_START}같은[ \\t]+(?:반|학급)[ \\t]+친구(?:인)?[ \\t]+([가-힣]{2,5})(?=(?:${NAME_PARTICLE_WITH_I})${WORD_END})`,
+  'gu',
+);
+const GENERIC_PERSON_WORDS = new Set(['어린', '어린이', '아이', '아동', '사람', '학생', '친구', '동생']);
+// Match the compound surnames and minimum given-name length used by the server.
+const COMPOUND_KOREAN_SURNAMES = new Set(['남궁', '독고', '동방', '망절', '사공', '서문', '선우', '제갈', '황보']);
+
+export function getStudentGivenName(studentName: string | undefined) {
+  const name = studentName?.trim();
+  if (!name || !/^[가-힣]{3,5}$/.test(name)) return undefined;
+  const surnameLength = COMPOUND_KOREAN_SURNAMES.has(name.slice(0, 2)) ? 2 : 1;
+  const givenName = name.slice(surnameLength);
+  return givenName.length >= 2 ? givenName : undefined;
+}
+
+export function maskDraftPreview(text: string, names: KnownNames) {
+  const previewNames = new Set(names);
+  const mentionedGivenNames = new Set(Array.from(text.matchAll(GIVEN_NAME_WITH_PARTICLE), (match) => match[1]));
+  // Corroborate a given name with an independent full-name mention or an explicit classmate reference.
+  for (const fullName of text.match(POSSIBLE_FULL_NAME) ?? []) {
+    const givenName = getStudentGivenName(fullName);
+    if (givenName && mentionedGivenNames.has(givenName) && !GENERIC_PERSON_WORDS.has(givenName)) {
+      previewNames.add(fullName);
+      previewNames.add(givenName);
+    }
+  }
+  for (const [, name] of text.matchAll(CLASSMATE_MENTION)) {
+    if (!GENERIC_PERSON_WORDS.has(name)) previewNames.add(name);
+  }
+  return maskContactInfo(text, [...previewNames]);
+}
 
 export function maskContactInfo(text: string, names?: KnownNames) {
   let count = 0;
@@ -74,8 +111,7 @@ export function maskContactInfo(text: string, names?: KnownNames) {
     if (known.length > 0) {
       // Keep Korean particles and titles attached to the name. Leave existing masking markers intact.
       const pattern = new RegExp(
-        maskingLabels + '|(?<![\\p{L}\\p{M}\\p{N}])(' + known.join('|') +
-        ')(?=(?:' + NAME_SUFFIX + ')(?![\\p{L}\\p{M}\\p{N}]))', 'giu',
+        `${maskingLabels}|${WORD_START}(${known.join('|')})(?=(?:${NAME_SUFFIX})${WORD_END})`, 'giu',
       );
       masked = masked.replace(pattern, (match, name?: string) => name === undefined ? match : maskName());
     }
