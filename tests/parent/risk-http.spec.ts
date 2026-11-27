@@ -168,6 +168,76 @@ async function analyze(page: Page) {
   await expect(page).toHaveURL(/\/review$/);
 }
 
+test('작성 중 미리보기에서 AI 분석 없이 같은 반 이름을 마스킹해 저장한다', async ({ page }) => {
+  const calls = await setup(page, { noRevision: true });
+  const editor = page.getByLabel('문의 내용', { exact: true });
+  await editor.fill('같은 반 김가람 학생의 이야기를 들었습니다.');
+  await page.route('**/api/complaints/42/mask', async (route) => {
+    expect(route.request().postData()).toBeNull();
+    calls.push('POST /complaints/42/mask');
+    const updated = calls.includes('PATCH /complaints/42');
+    await route.fulfill({ json: {
+      complaintId: 42, contentVersion: updated ? 2 : 1,
+      maskedContent: updated ? '같은 반 [제3자 학생명] 학생과 상담을 요청합니다.' : '같은 반 [제3자 학생명] 학생의 이야기를 들었습니다.',
+    } });
+  });
+
+  const privacy = page.getByRole('region', { name: '개인정보 마스킹 상태', exact: true });
+  const preview = privacy.locator('.privacy-masking-preview p');
+  const openPreview = () => privacy.getByText('마스킹 결과 보기', { exact: true }).click();
+  const savePreview = privacy.getByRole('button', { name: '초안 저장하고 마스킹 확인', exact: true });
+  const writeCalls = () => calls.filter((call) => /^(POST|PATCH) \/complaints/.test(call));
+
+  await openPreview();
+  expect(writeCalls()).toEqual([]);
+  await savePreview.click();
+  await expect(preview).toContainText('같은 반 [제3자 학생명] 학생의 이야기를 들었습니다.');
+  await expect(editor).toHaveValue('같은 반 김가람 학생의 이야기를 들었습니다.');
+  expect(writeCalls()).toEqual(['POST /complaints', 'POST /complaints/42/mask']);
+
+  await page.reload();
+  await openPreview();
+  await expect(preview).toContainText('[제3자 학생명] 학생의 이야기를 들었습니다.');
+  expect(writeCalls()).toHaveLength(2);
+  await editor.fill('같은 반 이서빈 학생과 상담을 요청합니다.');
+  await expect(preview).toHaveCount(0);
+  await savePreview.click();
+  await expect(preview).toContainText('같은 반 [제3자 학생명] 학생과 상담을 요청합니다.');
+  expect(writeCalls()).toEqual(['POST /complaints', 'POST /complaints/42/mask', 'PATCH /complaints/42', 'POST /complaints/42/mask']);
+
+  await page.getByRole('button', { name: 'AI 분석 시작', exact: true }).click();
+  await expect(page).toHaveURL(/\/review$/);
+  expect(writeCalls().slice(4)).toEqual(['POST /complaints/42/mask', 'POST /complaints/42/risk-analysis']);
+});
+
+test('미리보기 마스킹이 실패해도 작성 내용을 유지하고 같은 초안에서 다시 확인한다', async ({ page }) => {
+  const calls = await setup(page, { maskFailure: true });
+  const original = '같은 반 김가람 학생의 이야기를 들었습니다.';
+  const editor = page.getByLabel('문의 내용', { exact: true });
+  await editor.fill(original);
+  const privacy = page.getByRole('region', { name: '개인정보 마스킹 상태', exact: true });
+  await privacy.getByText('마스킹 결과 보기', { exact: true }).click();
+  const save = privacy.getByRole('button', { name: '초안 저장하고 마스킹 확인', exact: true });
+  const title = page.getByLabel('문의 제목', { exact: true });
+  await title.fill('');
+  await save.click();
+  await expect(title).toBeFocused();
+  expect(calls).not.toContain('POST /complaints');
+  await title.fill('HTTP 분석 확인');
+  await save.click();
+  await expect(privacy.getByRole('alert')).toBeVisible();
+  await expect(editor).toHaveValue(original);
+
+  const masked = '같은 반 [제3자 학생명] 학생의 이야기를 들었습니다.';
+  await page.route('**/api/complaints/42/mask', (route) => route.fulfill({
+    json: { complaintId: 42, contentVersion: 1, maskedContent: masked },
+  }));
+  await save.click();
+  await expect(privacy.locator('.privacy-masking-preview p')).toContainText(masked);
+  expect(calls.filter((call) => call === 'POST /complaints')).toHaveLength(1);
+  expect(calls).not.toContain('POST /complaints/42/risk-analysis');
+});
+
 test('같은 학급 학생 이름은 초안 저장 후 서버 마스킹 결과에서 확인한다', async ({ page }) => {
   await setup(page, { studentName: '김하늘', noRevision: true });
   const paths: string[] = [];
@@ -949,7 +1019,7 @@ async function checkInformationTooltip(page: Page, label: string, content: strin
 test('입력창 아래의 안내는 분석 전후에 유지되고 입력 잠금 조건을 보존한다', async ({ page }, testInfo) => {
   const calls = await setup(page);
   const notice = page.locator('#parent-message-analysis-description');
-  const noticeText = 'AI 분석 후 내용을 확인하고 전송할 수 있어요. 분석 시작 후 자녀·문의 대상·제목은 변경할 수 없으며, 문의 내용은 계속 수정할 수 있습니다.';
+  const noticeText = 'AI 분석 후 내용을 확인하고 전송할 수 있어요. 초안이 서버에 저장되면 자녀·문의 대상·제목이 확정되며, 문의 내용은 계속 수정할 수 있습니다.';
   const analyzeButton = page.getByRole('button', { name: 'AI 분석 시작', exact: true });
   await expect(notice).toHaveText(noticeText);
   await expect(analyzeButton).toHaveAccessibleDescription(noticeText);
@@ -1005,7 +1075,7 @@ test('입력창 아래의 안내는 분석 전후에 유지되고 입력 잠금 
     expect(layout.button.left - layout.save.right).toBeLessThanOrEqual(12);
     expect(layout.save.top).toBeCloseTo(layout.button.top, 0);
     expect(layout.save.bottom).toBeCloseTo(layout.button.bottom, 0);
-    await checkInformationTooltip(page, 'AI 분석 안내', '분석 시작 후 자녀·문의 대상·제목은 변경할 수 없으며, 문의 내용은 계속 수정할 수 있습니다.',
+    await checkInformationTooltip(page, 'AI 분석 안내', '초안이 서버에 저장되면 자녀·문의 대상·제목이 확정되며, 문의 내용은 계속 수정할 수 있습니다.',
       testInfo.project.name === 'mobile', [375, 1440].includes(width) ? testInfo.outputPath(`analysis-tooltip-${width}.png`) : undefined);
   }
   await page.locator('.parent-write-form').screenshot({ path: testInfo.outputPath('parent-locked-fields-desktop.png') });
@@ -1085,7 +1155,7 @@ test('새 문의의 자녀·대상·제목·내용은 같은 시작선에 표시
     expect(geometry.analyze.right).toBeCloseTo(geometry.form.right, 0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     if ([375, 768, 1024, 1440].includes(width)) {
-      await checkInformationTooltip(page, '개인정보 확인 범위', '전화번호·이메일·주민등록번호와 확인된 학부모·자녀·교사 이름을 자동으로 가립니다. ‘이름:’ 또는 ‘성명:’으로 표시한 한글 이름도 가립니다. 다른 이름이나 주소는 직접 확인해 주세요. 같은 학급 학생 이름은 AI 분석 후 ‘원문’에서 마스킹 결과를 확인할 수 있습니다.',
+      await checkInformationTooltip(page, '개인정보 확인 범위', '전화번호·이메일·주민등록번호와 확인된 학부모·자녀·교사 이름을 자동으로 가립니다. ‘이름:’ 또는 ‘성명:’으로 표시한 한글 이름도 가립니다. 다른 이름이나 주소는 직접 확인해 주세요. 같은 학급 학생 이름은 초안을 저장하면 마스킹 결과에서 확인할 수 있습니다.',
         testInfo.project.name === 'mobile', [375, 1440].includes(width) ? testInfo.outputPath(`privacy-tooltip-${width}.png`) : undefined);
     }
   }
