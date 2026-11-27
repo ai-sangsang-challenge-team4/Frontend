@@ -5,12 +5,15 @@ import { listServerChildren, toServerRecipients, type ServerChild, type ServerRe
 
 const none = () => Promise.resolve([]);
 
-// Keep linked-child names available for a locked initial draft. Its teacher is already fixed, so the
-// teacher list can stop independently. Mock mode and follow-ups load neither list.
-export function useServerRecipients(enabled: boolean, studentId: number | undefined, recipientsEnabled = enabled) {
-  const children = useApiRequest<ServerChild[]>(useCallback((signal: AbortSignal) => (
+export function useServerChildren(enabled: boolean) {
+  return useApiRequest<ServerChild[]>(useCallback((signal: AbortSignal) => (
     enabled ? listServerChildren(signal) : none()
   ), [enabled]));
+}
+
+// A locked draft can still need its child's name even when the teacher is fixed.
+export function useServerRecipients(enabled: boolean, studentId: number | undefined, recipientsEnabled = enabled) {
+  const children = useServerChildren(enabled);
   const recipients = useApiRequest<ServerRecipient[]>(useCallback((signal: AbortSignal) => (
     enabled && recipientsEnabled && studentId ? parentComplaintApi.listRecipients(studentId, signal).then(toServerRecipients) : none()
   ), [enabled, recipientsEnabled, studentId]));

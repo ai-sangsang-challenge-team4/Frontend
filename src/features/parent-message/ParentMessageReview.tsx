@@ -7,13 +7,14 @@ import { useAuth } from '../auth';
 import { getApiErrorMessage, isApiError, isRiskAnalysisSafetyError } from '../../shared/api';
 import { Accordion, Badge, Button, EmptyState, InformationTooltip, Modal, Tabs, TextareaField, Toast } from '../../shared/components/ui';
 import { parentMessageApiMode } from './api/parentComplaintApi';
-import { clearMessageDraft, findSentMessage, mockConnectedTeachers, readMessageDraft, saveMessageDraft, type MessageDraft } from './messageDraft';
+import { clearMessageDraft, findSentMessage, getDraftStudentName, getParentMessageNames, mockConnectedTeachers, readMessageDraft, saveMessageDraft, type MessageDraft } from './messageDraft';
 import { ParentMessageHeader } from './ParentMessageHeader';
 import { ParentRiskAnalysisDetails } from './ParentRiskAnalysisDetails';
 import { createMockAnalysis, sendParentMessage } from './parentMessageApi';
 import { findSentSubmission, findSentSubmissionById, getDraftPath } from './conversation';
 import { submitServerDraft } from './serverComplaint';
 import { useServerRevision } from './useServerRevision';
+import { useServerChildren } from './useServerRecipients';
 import { checkPersonalInfo, MaskingError, PrivacyMaskingNotice } from '../pii';
 import {
   createMessageReview,
@@ -75,10 +76,12 @@ function HighlightedMessage({ text, risks, onSelect }: {
 }
 
 export function ParentMessageReview({ userId, messageId }: { userId: number; messageId: string }) {
+  const { user } = useAuth();
   const [initial] = useState(() => {
     try {
       const draft = readMessageDraft(userId, messageId);
-      return { draft, sent: draft ? findSentSubmission(userId, draft) : findSentSubmissionById(userId, messageId), error: null };
+      const sent = draft ? findSentSubmission(userId, draft, draft.review, getParentMessageNames(draft, user)) : findSentSubmissionById(userId, messageId);
+      return { draft, sent, error: null };
     } catch {
       return { draft: null, sent: null, error: '문의 정보를 불러오지 못했습니다. 다시 시도해 주세요.' };
     }
@@ -109,10 +112,16 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
   const location = useLocation();
   // Every inquiry in HTTP mode has a server draft before it can be reviewed or sent.
   const isServer = parentMessageApiMode === 'http' && Boolean(draft.server);
+  const studentId = draft.server?.studentId ?? draft.studentId;
+  const savedStudentName = getDraftStudentName(draft, user);
+  const children = useServerChildren(isServer && studentId !== undefined && !savedStudentName);
+  const studentName = savedStudentName || children.data?.find((child) => child.studentId === studentId)?.studentName.trim();
+  const needsStudentName = isServer && studentId !== undefined && !studentName;
+  const names = getParentMessageNames({ ...draft, studentName }, user);
   const [review, setReview] = useState<MessageReview>(() => {
     const restored = draft.review ?? createMessageReview(isServer
       ? { status: 'failed', revisedText: null, risks: [], meaningWarning: null }
-      : createMockAnalysis(maskContactInfo(draft.body).text));
+      : createMockAnalysis(maskContactInfo(draft.body, names).text));
     return restored.analysis.revisedText === draft.body ? { ...restored, source: 'ORIGINAL' } : restored;
   });
   const [isEditingOriginal, setIsEditingOriginal] = useState(review.originalEdit !== null);
@@ -131,8 +140,13 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
   const serverDraft = useRef(draft.server);
   const dismissNotice = useCallback(() => setNotice(null), []);
   const selected = getSelectedMessage(draft.body, review);
-  const masked = maskContactInfo(selected.text.trim());
-  const privacyPreview = maskContactInfo(`제목: ${draft.title}\n\n내용: ${selected.text.trim()}`);
+  const masked = maskContactInfo(selected.text.trim(), names);
+  const maskedTitle = maskContactInfo(draft.title.trim(), names);
+  // Earlier follow-up drafts stored a masked copy under server.title. The draft's title comes from the thread.
+  const savedTitle = isServer ? (draft.threadId ? draft.title : draft.server?.title) : undefined;
+  const savedTitleHasPersonalInfo = savedTitle !== undefined && maskContactInfo(savedTitle, names).count > 0;
+  const confirmationMaskCount = masked.count + (draft.threadId || savedTitleHasPersonalInfo ? 0 : maskedTitle.count);
+  const privacyPreview = maskContactInfo(`제목: ${draft.title}\n\n내용: ${selected.text.trim()}`, names);
   const teacher = draft.server
     ? { label: `${draft.server.teacherName} 선생님` } : mockConnectedTeachers.find((item) => item.value === draft.teacherId);
   // A previously edited/selected AI draft remains the user's text even if generation is unavailable.
@@ -163,22 +177,23 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
   }, [revision.analysis]);
 
   useEffect(() => {
-    if (!isServer || isSending || sendPending.current || submissionComplete.current) return;
+    if (!isServer || needsStudentName || isSending || sendPending.current || submissionComplete.current) return;
     try {
-      saveMessageDraft(userId, { ...draft, server: serverDraft.current, status: 'PARENT_REVIEW', review });
+      saveMessageDraft(userId, { ...draft, studentName, server: serverDraft.current, status: 'PARENT_REVIEW', review });
       setStorageSyncFailed(false);
     } catch {
       setStorageSyncFailed(true);
     }
-  }, [draft, isServer, isSending, review, userId]);
+  }, [draft, isServer, isSending, needsStudentName, review, studentName, userId]);
 
   useEffect(() => () => sendController.current?.abort(), []);
 
   function persistReview() {
-    saveMessageDraft(userId, { ...draft, server: serverDraft.current, status: 'PARENT_REVIEW', review });
+    saveMessageDraft(userId, { ...draft, studentName, server: serverDraft.current, status: 'PARENT_REVIEW', review });
   }
 
   function handleSave() {
+    if (needsStudentName) return;
     const validation = validateFinalMessage(selected.text);
     setError(validation);
     if (validation) return;
@@ -192,7 +207,8 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
   }
 
   function handleOpenDialog(mode: 'preview' | 'confirm') {
-    const validation = validateFinalMessage(selected.text);
+    if (needsStudentName) return;
+    const validation = validateFinalMessage(selected.text, masked.text);
     setError(validation);
     if (validation) {
       document.getElementById('parent-review-editor')?.focus();
@@ -202,7 +218,7 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
       setNotice('연결된 선생님을 확인한 후 다시 작성해 주세요.');
       return;
     }
-    if (checkPersonalInfo(selected.text).status === 'failed') {
+    if (checkPersonalInfo(selected.text, names).status === 'failed') {
       setMaskingFailed(true);
       return;
     }
@@ -211,7 +227,7 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
   }
 
   async function handleSend() {
-    if (sendPending.current) return;
+    if (sendPending.current || needsStudentName) return;
     sendPending.current = true;
     setNotice(null);
     setIsSending(true);
@@ -220,11 +236,11 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
     try {
       persistReview();
       const sent = isServer
-        ? await submitServerDraft(userId, { ...draft, server: serverDraft.current }, review, controller.signal, user?.name, (next) => {
+        ? await submitServerDraft(userId, { ...draft, studentName, server: serverDraft.current }, review, controller.signal, user?.name, (next) => {
           serverDraft.current = next;
-          saveMessageDraft(userId, { ...draft, server: next, status: 'PARENT_REVIEW', review });
-        })
-        : await sendParentMessage(userId, draft, review, controller.signal, user?.name);
+          saveMessageDraft(userId, { ...draft, studentName, server: next, status: 'PARENT_REVIEW', review });
+        }, names)
+        : await sendParentMessage(userId, draft, review, controller.signal, user?.name, names);
       if (controller.signal.aborted) return;
       submissionComplete.current = true;
       let stored = true;
@@ -270,6 +286,7 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
   }
 
   function handleBack() {
+    if (needsStudentName) return;
     try {
       persistReview();
       if (draft.threadId && location.state?.inlineFollowUp) {
@@ -320,7 +337,7 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
         ) : (
           <div aria-label="원문 내용" className="parent-review-original" tabIndex={0}>
             {/* The analysis evidence comes from the masked text, so the highlights are placed on it. */}
-            <HighlightedMessage onSelect={selectRisk} risks={review.analysis.risks} text={review.analysis.maskedContent ?? maskContactInfo(draft.body).text} />
+            <HighlightedMessage onSelect={selectRisk} risks={review.analysis.risks} text={review.analysis.maskedContent ?? maskContactInfo(draft.body, names).text} />
           </div>
         )}
         {!isEditable && error ? <p className="ui-field-error" role="alert">{error}</p> : null}
@@ -354,6 +371,12 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
     <>
       <ParentMessageHeader title={draft.threadId ? '추가 문의하기' : '새 문의 작성'} onBack={handleBack} />
       <main className="layout-main parent-review-main">
+        {needsStudentName ? <div className="parent-review-analysis-notice">
+          {children.isLoading ? <p role="status">자녀 정보를 불러오고 있어요.</p> : <>
+            <p role="alert">{getApiErrorMessage(children.error, '자녀 이름을 확인하지 못했어요.')}</p>
+            <Button onClick={children.retry} size="sm" variant="outline">다시 시도</Button>
+          </>}
+        </div> : null}
         <section aria-label="문의 문장 선택" className="parent-review-editor">
           <Tabs
             ariaLabel="전송할 문의 문장"
@@ -416,7 +439,7 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
           ? <ParentRiskAnalysisDetails analysis={review.analysis} analysisId={draft.server.analysisId} /> : null}
 
         <PrivacyMaskingNotice
-          onRetry={() => setMaskingFailed(checkPersonalInfo(selected.text).status === 'failed')}
+          onRetry={() => setMaskingFailed(checkPersonalInfo(selected.text, names).status === 'failed')}
           result={maskingFailed ? { status: 'failed', text: null, count: null } : { status: 'ready', ...privacyPreview }}
         />
 
@@ -452,10 +475,10 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
         ) : null}
 
         <div className="parent-write-actions parent-review-actions">
-          <Button leftIcon={<Save size={22} />} onClick={handleSave} size="lg" variant="outline">임시저장</Button>
+          <Button disabled={needsStudentName} leftIcon={<Save size={22} />} onClick={handleSave} size="lg" variant="outline">임시저장</Button>
           <div className="parent-review-send-actions">
-            <Button disabled={maskingFailed} leftIcon={<Eye size={22} />} onClick={() => handleOpenDialog('preview')} size="lg" variant="outline">미리보기</Button>
-            <Button disabled={maskingFailed} leftIcon={<Send size={22} />} onClick={() => handleOpenDialog('confirm')} size="lg">전송하기</Button>
+            <Button disabled={needsStudentName || maskingFailed} leftIcon={<Eye size={22} />} onClick={() => handleOpenDialog('preview')} size="lg" variant="outline">미리보기</Button>
+            <Button disabled={needsStudentName || maskingFailed} leftIcon={<Send size={22} />} onClick={() => handleOpenDialog('confirm')} size="lg">전송하기</Button>
           </div>
         </div>
       </main>
@@ -474,10 +497,13 @@ function MessageReviewEditor({ draft, userId }: { draft: MessageDraft; userId: n
         </div> : null}
         <dl className="parent-review-preview-meta">
           <dt>문의 대상</dt><dd>{teacher?.label}</dd>
-          <dt>문의 제목</dt><dd>{maskContactInfo(draft.title).text}</dd>
+          <dt>문의 제목</dt><dd>{savedTitle ?? maskedTitle.text}</dd>
           <dt>선택 문장</dt><dd>{selectionLabels[selected.selectionType]}</dd>
         </dl>
-        {privacyPreview.count > 0 ? <p className="parent-review-meaning-notice">전화번호·이메일·주민등록번호 {privacyPreview.count}건을 가린 문장으로 전송합니다.</p> : null}
+        {savedTitleHasPersonalInfo ? <p className="parent-review-meaning-notice">{draft.threadId
+          ? '기존 문의 제목이 그대로 유지됩니다.' : '서버에 저장된 제목이 그대로 전송됩니다.'}{' '}
+          제목에서 개인정보를 가리려면 새 문의를 작성해 주세요.</p> : null}
+        {confirmationMaskCount > 0 ? <p className="parent-review-meaning-notice">개인정보 {confirmationMaskCount}건을 가린 문장으로 전송합니다.</p> : null}
         {dialog === 'confirm' && analyzedOnSend ? <p className="parent-review-meaning-notice">AI 검토를 받은 내용과 달라 전송할 때 한 번 더 분석합니다. 전송이 조금 늦어질 수 있습니다.</p> : null}
         <p className="parent-review-preview-body">{masked.text}</p>
       </Modal>

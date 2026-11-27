@@ -1,4 +1,5 @@
 import type { RiskFactorStatus } from '../../shared/types';
+import { formatServerMaskedText } from '../pii/masking';
 import type { RiskDetection } from './api/parentComplaintTypes';
 
 export function detectionState(state: RiskFactorStatus | undefined, detected?: boolean): RiskFactorStatus {
@@ -11,7 +12,8 @@ export function detectionState(state: RiskFactorStatus | undefined, detected?: b
 export function detectionEvidence(detection: RiskDetection | null): string[] {
   if (!detection) return [];
   return (detection.evidenceSpans ? detection.evidenceSpans.map((span) => span.text) : detection.evidences ?? [])
-    .filter((text) => text.trim());
+    .filter((text) => text.trim())
+    .map(formatServerMaskedText);
 }
 
 export function detectionConfidence(confidence: number | null | undefined) {

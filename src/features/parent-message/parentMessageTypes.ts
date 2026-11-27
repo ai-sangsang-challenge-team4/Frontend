@@ -122,9 +122,10 @@ export function getSelectedMessage(original: string, review: MessageReview) {
   return { text, selectionType };
 }
 
-export function validateFinalMessage(text: string) {
+export function validateFinalMessage(text: string, maskedText?: string) {
   if (!text.trim()) return '전송할 문의 내용을 입력해 주세요.';
   if (text.length > MESSAGE_MAX_LENGTH) return `문의 내용은 ${MESSAGE_MAX_LENGTH}자 이내로 작성해 주세요.`;
+  if (maskedText && maskedText.length > MESSAGE_MAX_LENGTH) return `마스킹한 내용이 ${MESSAGE_MAX_LENGTH}자 이내가 되도록 줄여 주세요.`;
   return null;
 }
 

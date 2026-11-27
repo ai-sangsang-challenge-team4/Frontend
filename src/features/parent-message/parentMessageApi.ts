@@ -1,6 +1,6 @@
 import { findSentMessage, mockConnectedTeachers, storeSentMessage, type MessageDraft } from './messageDraft';
 import { appendFollowUp, findSentSubmission } from './conversation';
-import { requireMaskedText } from '../pii/masking';
+import { requireMaskedText, type KnownNames } from '../pii/masking';
 import {
   getSelectedMessage,
   validateFinalMessage,
@@ -90,9 +90,9 @@ export function createMockAnalysis(original: string): ParentMessageAnalysis {
   };
 }
 
-export async function analyzeParentMessage(draft: MessageDraft, signal: AbortSignal) {
+export async function analyzeParentMessage(draft: MessageDraft, signal: AbortSignal, names: KnownNames = []) {
   // Stop before analysis if the privacy check fails, including when there is no detected PII.
-  const maskedBody = requireMaskedText(draft.body);
+  const maskedBody = requireMaskedText(draft.body, names);
   const settings = readMockSettings();
   await waitForMockResponse(settings.analysisDelayMs, signal);
   if (settings.failAnalysis || !navigator.onLine) throw new Error('AI 분석을 완료하지 못했습니다.');
@@ -105,24 +105,25 @@ export async function sendParentMessage(
   review: MessageReview,
   signal: AbortSignal,
   parentName?: string,
+  names: KnownNames = [],
 ): Promise<SentParentMessage> {
   let existing;
   try {
-    existing = findSentSubmission(userId, draft);
+    existing = findSentSubmission(userId, draft, review, names);
   } catch {
     throw new Error('문의 내역을 확인하지 못했습니다. 다시 시도해 주세요.');
   }
   if (existing) return existing;
   if (draft.threadId && !findSentMessage(userId, draft.threadId)) throw new Error('기존 문의를 찾을 수 없습니다.');
   const selected = getSelectedMessage(draft.body, review);
-  const error = validateFinalMessage(selected.text);
+  // Check the final selection again: the user may have edited it since analysis.
+  const maskedBody = requireMaskedText(selected.text.trim(), names);
+  const error = validateFinalMessage(selected.text, maskedBody);
   if (error) throw new Error(error);
   const teacher = mockConnectedTeachers.find((item) => item.value === draft.teacherId);
   if (!teacher || !draft.title.trim()) throw new Error('문의 대상과 제목을 다시 확인해 주세요.');
-  // Check the final selection again: the user may have edited it since analysis.
-  const maskedBody = requireMaskedText(selected.text.trim());
-  const maskedTitle = requireMaskedText(draft.title.trim());
-  const maskedOriginalBody = requireMaskedText(draft.body);
+  const maskedTitle = requireMaskedText(draft.title.trim(), names);
+  const maskedOriginalBody = requireMaskedText(draft.body, names);
   const settings = readMockSettings();
   await waitForMockResponse(settings.sendDelayMs, signal);
   if (settings.failSend || !navigator.onLine) throw new Error('문의를 전송하지 못했습니다. 연결 상태를 확인한 후 다시 시도해 주세요.');

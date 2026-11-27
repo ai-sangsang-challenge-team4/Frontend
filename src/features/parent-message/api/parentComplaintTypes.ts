@@ -100,7 +100,7 @@ export type RiskRevisionSuggestion = {
   reason: string;
 };
 
-// Detected tags only. Evidence and suggestions are masked by the server.
+// Detected tags only. Evidence is masked, while the server restores original details in verified suggestions.
 export type RiskFinding = {
   code: DetectedFactorCode;
   evidences: string[];

@@ -3,6 +3,7 @@ import type { ComplaintStatus, RiskLevel as ApiRiskLevel, WaitingFor } from '../
 import type { DetectedFactorCode, HistoryEvent, TeacherRiskResponse } from '../escalation/escalationTypes';
 import { getDetectedFactorEvidence, getDetectedFactorState, historyEventLabel } from '../escalation/escalationRules';
 import { formatMessageDate } from '../parent-message/conversation';
+import { formatServerMaskedText } from '../pii/masking';
 import { riskCategories, type RiskClassification } from '../risk-analysis';
 import type {
   ComplaintListItem,
@@ -178,7 +179,11 @@ function toClassifications(risk: TeacherRiskResponse): RiskClassification[] {
     const factor = detected.get(code);
     // The original viewer highlights evidence by exact text match, so only one span can be carried.
     return factor
-      ? { code, status: getDetectedFactorState(factor), evidenceSpan: getDetectedFactorEvidence(factor)[0] ?? '', rationale: factor.reason }
+      ? {
+        code, status: getDetectedFactorState(factor),
+        evidenceSpan: getDetectedFactorEvidence(factor)[0] ?? '',
+        rationale: factor.reason == null ? undefined : formatServerMaskedText(factor.reason),
+      }
       : { code, status: 'ABSENT' };
   });
 }
