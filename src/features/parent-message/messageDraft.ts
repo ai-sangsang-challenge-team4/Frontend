@@ -38,6 +38,11 @@ export type MessageDraft = {
   savedAt?: string;
 };
 
+export function getDraftStudentName(draft: MessageDraft, user: User | null) {
+  const studentId = draft.server?.studentId ?? draft.studentId;
+  return user?.students?.find((student) => student.studentId === studentId)?.name.trim() || draft.studentName?.trim();
+}
+
 export function getParentMessageNames(draft: MessageDraft, user: User | null) {
   return [
     user?.name,

@@ -271,6 +271,54 @@ test('이미 서버에 저장한 제목의 개인정보와 전송될 제목을 �
   await expect(dialog).not.toContainText('개인정보 1건을 가린 문장으로 전송합니다.');
 });
 
+test('추가 문의 확인창은 이전 초안에 가려진 제목이 있어도 기존 문의 제목을 표시한다', async ({ page }) => {
+  await setup(page, { followUp: true, noRevision: true });
+  const title = 'Demo Student 상담 010-1234-5678';
+  await page.evaluate((storedTitle) => {
+    const content = '상담 시간을 알려 주세요.';
+    localStorage.setItem('teacher-hub.parent-message-draft.101', JSON.stringify({
+      messageId: 'legacy-follow-up-title', teacherId: '20', studentName: 'Demo Student', threadId: 'thread-local',
+      title: storedTitle, body: content, status: 'PARENT_REVIEW',
+      server: { complaintId: 42, serverMessageId: 101, teacherId: 20, teacherName: 'Demo Teacher',
+        title: 'Demo Student 상담 [전화번호]', content, analysisId: 8 },
+    }));
+  }, title);
+  await page.goto('/parent/messages/legacy-follow-up-title/review');
+  await page.getByRole('button', { name: '전송하기', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '문의를 전송할까요?', exact: true });
+  await expect(dialog).toContainText(title);
+  await expect(dialog).toContainText('제목에서 개인정보를 가리려면 새 문의를 작성해 주세요.');
+  await expect(dialog).not.toContainText('건을 가린 문장으로 전송합니다.');
+});
+
+test('기존 검토 초안에 자녀 이름이 없으면 조회 후 이름을 가린 확인창을 표시한다', async ({ page }) => {
+  await setup(page, { noRevision: true });
+  let finishLookup!: () => void;
+  const lookup = new Promise<void>((resolve) => { finishLookup = resolve; });
+  await page.route('**/api/users/me', async (route) => { await lookup; await route.fallback(); });
+  await page.evaluate(() => {
+    const content = 'Demo Student 상담을 요청합니다.';
+    localStorage.setItem('teacher-hub.parent-message-draft.101', JSON.stringify({
+      messageId: 'legacy-child-review', teacherId: '20', title: '기존 초안', body: content, status: 'PARENT_REVIEW',
+      server: { complaintId: 42, studentId: 10, teacherId: 20, teacherName: 'Demo Teacher', title: '기존 초안', content, analysisId: 7 },
+    }));
+  });
+  await page.goto('/parent/messages/legacy-child-review/review');
+  const send = page.getByRole('button', { name: '전송하기', exact: true });
+  try {
+    await expect(send).toBeDisabled();
+    await expect(page.getByRole('button', { name: '임시저장', exact: true })).toBeDisabled();
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('teacher-hub.parent-message-draft.101')!).review)).toBeUndefined();
+  } finally {
+    finishLookup();
+  }
+  await send.click();
+  const dialog = page.getByRole('dialog', { name: '문의를 전송할까요?', exact: true });
+  await expect(dialog).toContainText('[이름] 상담을 요청합니다.');
+  await expect(dialog).not.toContainText('Demo Student');
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('teacher-hub.parent-message-draft.101')!).studentName)).toBe('Demo Student');
+});
+
 test('통합 카드의 상세 아코디언은 키보드로 열리고 내부 펼침 상태를 보존한다', async ({ page }, testInfo) => {
   await setup(page, { summary: { aiAnalysisStatus: 'COMPLETED', riskLevel: 'EMERGENCY' } });
   await analyze(page);
@@ -436,14 +484,18 @@ test('분석 후 작성 화면과 새로고침에서도 선택한 자녀 이름�
   expect(calls.filter((call) => call === 'POST /complaints')).toHaveLength(1);
 });
 
-test('이름 없이 저장된 초안도 조회 실패를 재시도해 학생 ID에 맞는 이름으로 복원한다', async ({ page }) => {
-  await setup(page);
+test('기존 초안은 자녀 이름 조회 중과 실패 상태에서 저장·분석을 막고 재시도 후 마스킹한다', async ({ page }) => {
+  const calls = await setup(page, { noRevision: true });
   let failChildren = true;
-  await page.route((url) => url.pathname === '/api/users/me', (route) => failChildren
-    ? route.fulfill({ status: 503, json: { code: 'INTERNAL_SERVER_ERROR' } })
-    : route.fulfill({ json: { userId: 101, email: 'parent@example.com', name: '학부모', role: 'PARENT', students: [
+  let finishLookup!: () => void;
+  const lookup = new Promise<void>((resolve) => { finishLookup = resolve; });
+  await page.route((url) => url.pathname === '/api/users/me', async (route) => {
+    await lookup;
+    return failChildren ? route.fulfill({ status: 503, json: { code: 'INTERNAL_SERVER_ERROR' } })
+      : route.fulfill({ json: { userId: 101, email: 'parent@example.com', name: '학부모', role: 'PARENT', students: [
       { studentId: 10, name: '김하나', studentNo: '1' }, { studentId: 11, name: '김두리', studentNo: '2' },
-    ] } }));
+    ] } });
+  });
   await page.evaluate(() => localStorage.setItem('teacher-hub.parent-message-draft.101', JSON.stringify({
     messageId: 'legacy-child-draft', teacherId: '20', title: '기존 초안', body: '작성한 문의입니다.', status: 'DRAFT',
     server: { complaintId: 42, studentId: 11, teacherId: 20, teacherName: 'Demo Teacher',
@@ -451,9 +503,22 @@ test('이름 없이 저장된 초안도 조회 실패를 재시도해 학생 ID�
   })));
   await page.goto('/parent/messages/new?draft=legacy-child-draft');
   const child = page.getByLabel('자녀', { exact: true });
+  const save = page.getByRole('button', { name: '임시저장', exact: true });
+  const analyzeButton = page.getByRole('button', { name: 'AI 분석 시작', exact: true });
+  await page.getByLabel('문의 내용', { exact: true }).fill('김두리 학생 상담을 요청합니다.');
+  try {
+    await expect(save).toBeDisabled();
+    await expect(analyzeButton).toBeDisabled();
+    await page.locator('.parent-write-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+    expect(calls).not.toContain('PATCH /complaints/42');
+  } finally {
+    finishLookup();
+  }
   await expect(child).toBeDisabled();
   const retry = page.locator('#parent-message-studentId-helper').getByRole('button', { name: '다시 시도', exact: true });
   await expect(retry).toBeVisible();
+  await expect(save).toBeDisabled();
+  await expect(analyzeButton).toBeDisabled();
   failChildren = false;
   await retry.click();
   await expect(child.locator('option:checked')).toHaveText('김두리');
@@ -461,6 +526,12 @@ test('이름 없이 저장된 초안도 조회 실패를 재시도해 학생 ID�
   await expect(child).toBeDisabled();
   await expect(page.getByLabel('문의 대상', { exact: true })).toBeDisabled();
   await expect(page.getByLabel('문의 제목', { exact: true })).toHaveAttribute('readonly', '');
+  await save.click();
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('teacher-hub.parent-message-draft.101')!).studentName)).toBe('김두리');
+  const update = page.waitForRequest((request) => request.method() === 'PATCH' && new URL(request.url()).pathname === '/api/complaints/42');
+  await analyzeButton.click();
+  expect((await update).postDataJSON()).toEqual({ content: '[이름] 학생 상담을 요청합니다.' });
+  await expect(page).toHaveURL(/\/review$/);
 });
 
 test('비동기 수정안이 도착해도 원문에서 작성한 내용과 선택한 탭을 유지한다', async ({ page }) => {

@@ -7,7 +7,7 @@ import { Accordion, Button, EmptyState, InformationTooltip, Select, TextareaFiel
 import { useAuth } from '../auth';
 import { COMPLAINT_TITLE_MAX_LENGTH, parentComplaintApi, parentMessageApiMode } from './api/parentComplaintApi';
 import {
-  findSentMessage, getParentMessageNames, mockConnectedTeachers, readMessageDraft, readMessageDrafts, saveMessageDraft,
+  findSentMessage, getDraftStudentName, getParentMessageNames, mockConnectedTeachers, readMessageDraft, readMessageDrafts, saveMessageDraft,
   type MessageDraft, type ServerComplaintDraft,
 } from './messageDraft';
 import { ParentMessageHeader } from './ParentMessageHeader';
@@ -86,11 +86,12 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
   // nor while its creation is still running after the parent left the analysis.
   const serverLocked = isServer && (isServerFollowUp || Boolean(draft.server) || isCreatingServerDraft);
   const studentId = draft.server?.studentId ?? draft.studentId;
-  const { children, recipients } = useServerRecipients(isServer && !isServerFollowUp, studentId, !draft.server);
+  const { children, recipients } = useServerRecipients(isServer && (!isServerFollowUp || studentId !== undefined), studentId, !isServerFollowUp && !draft.server);
   const retryRecipients = recipients.retry;
   const recipient = recipients.data?.find((item) => String(item.teacherId) === draft.teacherId);
   const teacherName = draft.server?.teacherName ?? initial.thread?.teacherName ?? recipient?.teacherName ?? draft.teacherName;
-  const studentName = children.data?.find((child) => child.studentId === studentId)?.studentName ?? draft.studentName;
+  const studentName = children.data?.find((child) => child.studentId === studentId)?.studentName.trim() || getDraftStudentName(draft, user);
+  const needsStudentName = isServer && studentId !== undefined && !studentName;
   const names = getParentMessageNames({ ...draft, studentName, teacherName }, user);
   const teacherOptions = isServerFollowUp && initial.thread ? [{ value: initial.thread.teacherId, label: initial.thread.teacherName }]
     : !isServer ? mockConnectedTeachers
@@ -315,6 +316,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
   }
 
   function handleSaveDraft() {
+    if (needsStudentName) return;
     if (!draft.title.trim() && !draft.body.trim()) {
       setNotice('임시저장할 제목이나 내용을 입력해 주세요.');
       return;
@@ -332,6 +334,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
   }
 
   function handleCollapse() {
+    if (needsStudentName) return;
     try {
       // Preserve the exact draft, including any existing analysis and server version.
       // Closing before the initial server read finishes must not hide that server draft
@@ -348,7 +351,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
 
   function handleAnalyze(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
-    if (analysisPending.current || blocked) return;
+    if (analysisPending.current || blocked || needsStudentName) return;
     const nextErrors: FieldErrors = {};
     if (isServer && !isServerFollowUp && !studentId) nextErrors.studentId = '문의할 자녀를 선택해 주세요.';
     const teacher = teacherOptions.find((option) => option.value === draft.teacherId);
@@ -390,7 +393,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
     }
     try {
       const nextDraft = withRecipientNames({
-        ...draft, title: draft.title.trim(), body: draft.body.trim(), status: 'DRAFT',
+        ...draft, title: threadId ? draft.title : draft.title.trim(), body: draft.body.trim(), status: 'DRAFT',
       });
       saveMessageDraft(userId, nextDraft);
       setSavedBody(nextDraft.body);
@@ -445,8 +448,8 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
       : '분석 결과를 확인한 뒤 문의를 전송할 수 있습니다.';
   const analysisDescriptionId = 'parent-message-analysis-description';
   const childHelper = children.isLoading ? '자녀 정보를 불러오고 있어요.'
-      : children.error ? <>{getApiErrorMessage(children.error, '자녀 정보를 불러오지 못했어요.')} <button className="parent-write-retry" onClick={children.retry} type="button">다시 시도</button></>
-        : serverLocked ? undefined
+    : children.error || needsStudentName ? <>{getApiErrorMessage(children.error, '자녀 이름을 확인하지 못했어요.')} <button className="parent-write-retry" onClick={children.retry} type="button">다시 시도</button></>
+      : serverLocked ? undefined
         : childOptions.length === 0 ? '확인된 자녀 정보가 없습니다. 학교에 학생 연결을 요청해 주세요.' : undefined;
   const teacherHelper = !isServer ? (teacherOptions.length === 0 ? '연결된 선생님이 없습니다. 학교에 교사 연결을 요청해 주세요.' : undefined)
     : !studentId ? undefined
@@ -464,13 +467,14 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
       <Content className={embedded ? 'parent-inline-composer' : 'layout-main parent-write-main'} aria-busy={isAnalyzing}>
         {embedded ? <div className="parent-inline-composer-heading">
           <h2>추가 문의 작성</h2>
-          <Button className="parent-inline-composer-collapse" variant="ghost" disabled={isAnalyzing}
+          <Button className="parent-inline-composer-collapse" variant="ghost" disabled={isAnalyzing || needsStudentName}
             aria-label="추가 문의 입력창 접기" aria-expanded={true} aria-controls="parent-inline-follow-up"
             title="입력창 접기 (작성 내용은 임시저장됩니다)" onClick={handleCollapse} rightIcon={<ChevronUp size={18} />}>
             접기
           </Button>
           <p id={analysisDescriptionId}>기존 대화에 이어서 작성합니다. 문의 대상과 제목은 그대로 유지됩니다.</p>
         </div> : null}
+        {isServerFollowUp && needsStudentName ? <p role="status">{childHelper}</p> : null}
         {blocked ? <p className="parent-inline-composer-blocked" role="status">현재 문의 상태에서는 추가 문의를 진행할 수 없습니다. 작성한 내용은 임시저장할 수 있어요.</p> : null}
         {isAnalyzing ? (
           <section className="parent-analysis" aria-label="메시지 분석 중">
@@ -562,8 +566,8 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
                     : draftEdits.current > 0 ? '저장되지 않은 변경사항' : '아직 저장하지 않음'}
                 </p> : null}
                 <div className="parent-write-actions">
-                  <Button className="parent-write-save" leftIcon={<Save size={18} />} onClick={handleSaveDraft} size="md" variant="outline">임시저장</Button>
-                  <Button aria-describedby={analysisDescriptionId} className="parent-write-analyze" disabled={blocked || teacherOptions.length === 0 || maskingFailed}
+                  <Button className="parent-write-save" disabled={needsStudentName} leftIcon={<Save size={18} />} onClick={handleSaveDraft} size="md" variant="outline">임시저장</Button>
+                  <Button aria-describedby={analysisDescriptionId} className="parent-write-analyze" disabled={blocked || needsStudentName || teacherOptions.length === 0 || maskingFailed}
                     leftIcon={<Send size={18} />} size="md" type="submit">AI 분석 시작</Button>
                 </div>
               </div>

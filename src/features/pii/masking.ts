@@ -42,9 +42,9 @@ export type KnownNames = readonly (string | undefined)[];
 
 const LABELED_NAME = /(?<![\p{L}\p{N}])((?:이름|성명)[ \t]*[:：][ \t]*)([가-힣]{2,5})(?![\p{L}\p{N}])/gu;
 const UNKNOWN_NAME_VALUES = new Set(['없음', '미상', '미정', '모름', '익명', '비공개', '미확인', '해당없음']);
-const NAME_SUFFIX = '이가|이는|이를|이랑|이도|이라고|이라는|입니다|이에요|' +
+const NAME_SUFFIX = '이가|이는|이를|이랑|이도|이라고|이라는|입니다|이에요|라고|' +
   '(?:님이?|학생이?|선생님이?|보호자)?' +
-  '(?:(?:에게서?|한테서?|께서?|으로|에서|처럼|보다|까지|부터|[이가은는을를의도과와랑로])(?:도|는|만)?)?';
+  '(?:(?:에게서?|한테서?|께서?|으로|에서|처럼|보다|까지|부터|[이가은는을를의도과와랑로만])(?:도|는|만)?)?';
 
 export function maskContactInfo(text: string, names?: KnownNames) {
   let count = 0;

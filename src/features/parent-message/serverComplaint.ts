@@ -135,7 +135,7 @@ export function toFollowUpServerDraft(draft: MessageDraft, target: ServerDraftTa
   return {
     studentId: target.studentId, teacherId: target.teacherId, teacherName: target.teacherName,
     complaintId: response.complaintId, serverMessageId: response.messageId,
-    title: requireMaskedText(draft.title.trim()), content: response.content,
+    title: draft.title, content: response.content,
     contentVersion: response.contentVersion, analysisId: null,
   };
 }
@@ -183,7 +183,6 @@ async function updateFollowUp(server: ServerComplaintDraft, content: string, sig
 // Not abortable: a server draft created after the parent left the analysis would otherwise stay on the server
 // unlinked (there is no delete API), so the caller keeps the result even when it no longer waits for it.
 export async function createServerDraft(draft: MessageDraft, target: ServerDraftTarget, names: KnownNames = []): Promise<ServerComplaintDraft> {
-  const title = requireMaskedText(draft.title.trim(), names);
   const content = requireMaskedText(draft.body.trim(), names);
   const { studentId, teacherId, teacherName } = target;
   if (draft.threadId) {
@@ -194,6 +193,7 @@ export async function createServerDraft(draft: MessageDraft, target: ServerDraft
     return toFollowUpServerDraft(draft, target, saved);
   }
   if (!studentId) throw new Error('문의할 자녀를 선택해 주세요.');
+  const title = requireMaskedText(draft.title.trim(), names);
   const created = await parentComplaintApi.createDraft({ studentId, teacherId, title, content });
   return { studentId, teacherId, teacherName, complaintId: created.complaintId, title, content, analysisId: null };
 }

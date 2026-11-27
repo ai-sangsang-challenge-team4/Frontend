@@ -10,6 +10,9 @@ test('학부모 문의에서 확인된 이름과 명시한 성명을 가리고 �
   });
   expect(maskContactInfo(result.text, names)).toEqual({ text: result.text, count: 0 });
   expect(maskContactInfo('김민수상담실과 김민수를', names)).toEqual({ text: '김민수상담실과 [이름]를', count: 1 });
+  expect(maskContactInfo('김민수만 참석합니다. 김민수라고 합니다. 김민수상담실에 문의합니다.', names)).toEqual({
+    text: '[이름]만 참석합니다. [이름]라고 합니다. 김민수상담실에 문의합니다.', count: 2,
+  });
   expect(maskContactInfo('성명: 이영희')).toEqual({ text: '성명: 이영희', count: 0 });
 });
 
