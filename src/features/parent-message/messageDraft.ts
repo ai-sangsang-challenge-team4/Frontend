@@ -6,9 +6,8 @@ import { RISK_EXPRESSION_KINDS, type MessageReview, type SentParentMessage } fro
 // comparing the AI revision before sending.
 export type MessageDraftStep = 'DRAFT' | 'PARENT_REVIEW';
 
-// The server DRAFT behind a local draft (VITE_MESSAGE_API=http). Title, student, and teacher are fixed once
-// it exists because PATCH /complaints/{id} only changes the content. Follow-ups keep their own serverMessageId
-// and do not need a separate student selection.
+// The server DRAFT behind a local draft (VITE_MESSAGE_API=http). Student and teacher are fixed once
+// it exists. Follow-ups keep their own serverMessageId and do not need a separate student selection.
 export type ServerComplaintDraft = {
   complaintId: number;
   studentId?: number;

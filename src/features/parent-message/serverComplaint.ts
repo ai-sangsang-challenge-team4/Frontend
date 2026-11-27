@@ -233,6 +233,22 @@ export async function analyzeServerDraft(
     const saved = await updateFollowUp(server, content, signal);
     server = { ...server, content: saved.content, contentVersion: saved.contentVersion };
     persist(server);
+  } else {
+    const title = requireMaskedText(draft.title.trim(), names);
+    if (title !== server.title) {
+      await parentComplaintApi.updateDraft(server.complaintId, { content, title }, signal);
+      if (server.content !== content) {
+        server = { ...server, content };
+        persist(server);
+      }
+      // The draft update response acknowledges the request without returning the saved title.
+      const saved = await parentComplaintApi.getComplaint(server.complaintId, signal);
+      if (saved.title !== title) {
+        throw new ApiError({ code: 'DRAFT_TITLE_NOT_SAVED', status: 409, message: '서버에서 제목 변경이 확인되지 않았습니다.' });
+      }
+      server = { ...server, title };
+      persist(server);
+    }
   }
 
   // /mask addresses the initial draft only. Additional-message analysis masks its own draft on the server.

@@ -4,7 +4,7 @@ import type { ParentConversationResponse, RiskDetectorResponse, RiskRevisionResp
 const body = '상담 시간을 알려 주세요. 010-1234-5678';
 const maskedContent = '상담 시간을 알려 주세요. [전화번호]';
 const privacyScopeTooltip = '전화번호·이메일·주민등록번호와 확인된 학부모·자녀·교사 이름을 자동으로 가립니다.';
-const savedDraftTooltip = '마스킹 결과를 확인하거나 분석을 시작하면 서버 초안이 생성되어 자녀·문의 대상·제목이 확정됩니다. 문의 내용은 계속 수정할 수 있습니다.';
+const savedDraftTooltip = '서버 초안이 생성되면 자녀·문의 대상이 확정됩니다. 제목은 AI 분석을 시작할 때 확정됩니다.';
 const detector: RiskDetectorResponse = {
   analysisId: 7,
   results: [{ code: 'THREAT', finalState: 'BOUNDARY',
@@ -27,11 +27,12 @@ async function setup(page: Page, options: {
   findingsResponse?: Partial<RiskRevisionResponse>;
   analysisErrorCode?: string; sendErrorCode?: string; noRevision?: boolean;
   lifecycle?: { status: 'OPEN' | 'ANSWERED' | 'CLOSED'; waitingFor?: 'PARENT' | 'TEACHER'; closeConflict?: boolean };
-  uncachedFollowUp?: boolean; cachedAnswered?: boolean; studentName?: string;
+  uncachedFollowUp?: boolean; cachedAnswered?: boolean; studentName?: string; supportsTitleUpdate?: boolean;
 } = {}) {
   const calls: string[] = [];
   const studentName = options.studentName ?? 'Demo Student';
   let content = maskedContent;
+  let savedTitle = thread.title;
   let savedFollowUp = false;
   let sendAttempts = 0;
   let complaintStatus: ParentConversationResponse['status'] = options.lifecycle?.status ?? (options.followUp ? 'ANSWERED' : 'OPEN');
@@ -60,15 +61,21 @@ async function setup(page: Page, options: {
       case 'GET /users/me': json = { userId: 101, email: 'parent@example.com', name: 'Demo Parent', role: 'PARENT', students: [{ studentId: 10, name: studentName, studentNo: '1' }] }; break;
       case 'GET /complaints/recipients': json = [{ teacherId: 20, teacherName: 'Demo Teacher', homeroomTeacher: true }]; break;
       case 'GET /complaints/42': json = {
-        complaintId: 42, title: thread.title, teacherName: thread.teacherName, content: thread.finalBody,
+        complaintId: 42, title: savedTitle, teacherName: thread.teacherName, content: thread.finalBody,
         studentId: 10, studentName, parentName: 'Demo Parent', riskLevel: null,
         status: complaintStatus, waitingFor: waitingFor(), createdAt: thread.sentAt, updatedAt: followUpSentAt ?? thread.sentAt,
       }; break;
       case 'POST /complaints':
         expect(request.postDataJSON().content).not.toContain('010-1234-5678');
         content = request.postDataJSON().content;
+        savedTitle = request.postDataJSON().title;
         json = { complaintId: 42, status: 'DRAFT', waitingFor: 'NONE' }; break;
-      case 'PATCH /complaints/42': content = request.postDataJSON().content; json = { message: '수정됨' }; break;
+      case 'PATCH /complaints/42': {
+        const draft = request.postDataJSON();
+        content = draft.content;
+        if (options.supportsTitleUpdate && draft.title !== undefined) savedTitle = draft.title;
+        json = { message: '수정됨' }; break;
+      }
       case 'POST /complaints/42/mask':
         expect(request.postData()).toBeNull();
         status = options.maskFailure ? 500 : 200;
@@ -226,7 +233,7 @@ test('작성 미리보기에서 서버가 같은 반 학생 이름을 가리고 
   expect((await create).postDataJSON().content).toBe('김서윤이 [이름]이 서윤이');
   await expect(preview).toContainText(masked);
   await expect(privacy).toContainText('3건 마스킹');
-  await expect(title).not.toBeEditable();
+  await expect(title).toBeEditable();
   await expect(editor).toHaveValue(original);
   expect(writes()).toEqual(['POST /complaints', 'POST /complaints/42/mask']);
 
@@ -246,6 +253,43 @@ test('작성 미리보기에서 서버가 같은 반 학생 이름을 가리고 
   expect((await update).postDataJSON()).toEqual({ content: edited });
   await expect(page.getByRole('heading', { name: '전송 완료', exact: true })).toBeVisible();
 });
+
+for (const supportsTitleUpdate of [true, false]) {
+  test(`작성 중 제목은 편집할 수 있고 분석은 서버 제목 확인 후 시작한다 (${supportsTitleUpdate ? '저장 성공' : '제목 미저장'})`, async ({ page }) => {
+    const calls = await setup(page, { noRevision: true, supportsTitleUpdate });
+    const title = page.getByLabel('문의 제목', { exact: true });
+    await page.getByLabel('문의 내용', { exact: true }).fill(body);
+    const privacy = page.getByRole('region', { name: '개인정보 마스킹 상태', exact: true });
+    await privacy.getByText('마스킹 결과 보기', { exact: true }).click();
+    const preview = privacy.locator('.privacy-masking-preview p');
+    await expect(preview).toContainText(maskedContent);
+    await expect(title).toBeEditable();
+
+    const editedTitle = 'Demo Student 상담 일정 확인';
+    const expectedTitle = '[이름] 상담 일정 확인';
+    await title.fill(editedTitle);
+    await expect(preview).toContainText(`제목: ${expectedTitle}`);
+    await expect(preview).toContainText(maskedContent);
+    expect(calls.filter((call) => call === 'POST /complaints/42/mask')).toHaveLength(1);
+    expect(calls).not.toContain('PATCH /complaints/42');
+
+    const update = page.waitForRequest((request) => request.method() === 'PATCH' && new URL(request.url()).pathname === '/api/complaints/42');
+    await page.getByRole('button', { name: 'AI 분석 시작', exact: true }).click();
+    expect((await update).postDataJSON()).toEqual({ title: expectedTitle, content: maskedContent });
+    if (supportsTitleUpdate) {
+      await expect(page).toHaveURL(/\/review$/);
+      expect(calls.indexOf('GET /complaints/42')).toBeLessThan(calls.indexOf('POST /complaints/42/risk-analysis'));
+      await page.getByRole('button', { name: '전송하기', exact: true }).click();
+      await expect(page.getByRole('dialog', { name: '문의를 전송할까요?' })).toContainText(expectedTitle);
+    } else {
+      await expect(page.getByText('서버에서 제목 변경이 확인되지 않았습니다.', { exact: true })).toBeVisible();
+      await expect(title).toHaveValue(editedTitle);
+      await expect(title).toBeEditable();
+      expect(calls).not.toContain('POST /complaints/42/risk-analysis');
+    }
+    expect(calls.filter((call) => call === 'POST /complaints')).toHaveLength(1);
+  });
+}
 
 test('서버가 복원한 수정안을 표시하고 분석 근거의 내부 토큰은 가린다', async ({ page }) => {
   const original = '이도윤 학생이 상담 시간을 알려 달라고 했습니다.';

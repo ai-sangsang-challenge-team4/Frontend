@@ -109,9 +109,10 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
   useEffect(() => {
     if (embedded) document.getElementById('parent-message-body')?.focus();
   }, [embedded]);
-  // Title, child, and teacher cannot change once the server draft exists (PATCH only takes the content),
-  // nor while its creation is still running after the parent left the analysis.
+  // The child and recipient are fixed while creating and using the server draft.
   const serverLocked = isServer && (isServerFollowUp || Boolean(draft.server) || isCreatingServerDraft);
+  const titleLocked = Boolean(threadId || (isServer && (draft.review || draft.server?.analysisId != null ||
+    (isCreatingServerDraft && !previewRequest.current))));
   const studentId = draft.server?.studentId ?? draft.studentId;
   const { children, recipients } = useServerRecipients(isServer && (!isServerFollowUp || studentId !== undefined), studentId, !isServerFollowUp && !draft.server);
   const retryRecipients = recipients.retry;
@@ -132,13 +133,13 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
   const supportsServerPreview = isServer && !threadId;
   const previewTitle = draft.title.trim();
   const previewBody = draft.body.trim();
-  const previewKey = JSON.stringify([studentId, draft.teacherId, previewTitle, previewBody]);
+  const previewKey = JSON.stringify([studentId, draft.teacherId, previewBody]);
   const previewTarget = useMemo(() => draft.server ?? (studentId && recipient && {
     studentId, teacherId: recipient.teacherId, teacherName: recipient.teacherName,
   }), [draft.server, recipient, studentId]);
-  const hasPreviewFields = Boolean(previewTarget && previewTitle && previewBody && !needsStudentName);
+  const hasPreviewFields = Boolean(previewTarget && (draft.server || previewTitle) && previewBody && !needsStudentName);
   const canRequestPreview = hasPreviewFields &&
-    maskContactInfo(previewTitle, names).text.length <= COMPLAINT_TITLE_MAX_LENGTH &&
+    (Boolean(draft.server) || maskContactInfo(previewTitle, names).text.length <= COMPLAINT_TITLE_MAX_LENGTH) &&
     maskContactInfo(previewBody, names).text.length <= MESSAGE_MAX_LENGTH;
   const composerKey = location.state?.composerKey ?? location.key;
   const resumeDraft = useCallback((next: MessageDraft) => {
@@ -146,7 +147,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
   }, [composerKey, draftId, navigate, threadId]);
 
   useEffect(() => {
-    if (!supportsServerPreview || !previewOpen || !previewTarget || !canRequestPreview || blocked || isAnalyzing || editingTitle ||
+    if (!supportsServerPreview || !previewOpen || !previewTarget || !canRequestPreview || blocked || isAnalyzing || (!draft.server && editingTitle) ||
       maskingFailed || previewRequest.current || serverPreview?.key === previewKey) return;
 
     // An open preview follows the latest text. Finish one write at a time and discard older results in the UI.
@@ -320,7 +321,10 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
             }
           }
           stopAnalyzing();
-          if (isRiskAnalysisSafetyError(failure)) {
+          if (isApiError(failure) && failure.code === 'DRAFT_TITLE_NOT_SAVED') {
+            setErrors({ title: failure.message });
+            window.requestAnimationFrame(() => document.getElementById('parent-message-title')?.focus());
+          } else if (isRiskAnalysisSafetyError(failure)) {
             setErrors({ body: getApiErrorMessage(failure) });
           } else if (isApiError(failure) && failure.code === 'INVALID_COMPLAINT_RECIPIENT') {
             setErrors({ teacherId: getApiErrorMessage(failure) });
@@ -445,7 +449,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
     }
     if (!draft.title.trim()) nextErrors.title = '문의 제목을 입력해 주세요.';
     if (draft.title.trim().length > COMPLAINT_TITLE_MAX_LENGTH) nextErrors.title = `문의 제목은 ${COMPLAINT_TITLE_MAX_LENGTH}자 이내로 작성해 주세요.`;
-    else if (!draft.server && !threadId && maskContactInfo(draft.title.trim(), names).text.length > COMPLAINT_TITLE_MAX_LENGTH) {
+    else if (!titleLocked && maskContactInfo(draft.title.trim(), names).text.length > COMPLAINT_TITLE_MAX_LENGTH) {
       nextErrors.title = `마스킹한 제목이 ${COMPLAINT_TITLE_MAX_LENGTH}자 이내가 되도록 줄여 주세요.`;
     }
     if (!draft.body.trim()) nextErrors.body = '문의 내용을 입력해 주세요.';
@@ -526,7 +530,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
     ? '추가 문의는 기존 문의의 대상과 제목을 그대로 사용합니다. 이어서 전달할 내용을 작성해 주세요.'
     : 'AI 분석 후 내용을 확인하고 전송할 수 있어요.';
   const analysisDetail = threadId ? undefined
-    : isServer ? '마스킹 결과를 확인하거나 분석을 시작하면 서버 초안이 생성되어 자녀·문의 대상·제목이 확정됩니다. 문의 내용은 계속 수정할 수 있습니다.'
+    : isServer ? '서버 초안이 생성되면 자녀·문의 대상이 확정됩니다. 제목은 AI 분석을 시작할 때 확정됩니다.'
       : '분석 결과를 확인한 뒤 문의를 전송할 수 있습니다.';
   const currentPreview = serverPreview?.key === previewKey ? serverPreview : null;
   const titlePreview = maskContactInfo(draft.title, names);
@@ -536,7 +540,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
       : maskDraftPreview(`제목: ${draft.title}\n내용: ${draft.body}`, names);
   const previewStatus = !hasPreviewFields ? '학급 명부를 확인하려면 자녀·문의 대상·제목·내용을 입력해 주세요.'
     : !canRequestPreview ? '가린 제목과 내용을 입력 한도 이내로 줄여 주세요.'
-      : editingTitle && !serverLocked ? '제목 입력을 마치면 마스킹 결과를 확인합니다.'
+      : editingTitle && !draft.server ? '제목 입력을 마치면 마스킹 결과를 확인합니다.'
         : currentPreview?.status === 'failed' ? currentPreview.message
           : currentPreview?.status === 'ready' ? (privacyPreview.count === 0 ? '가릴 개인정보를 찾지 못했습니다.' : undefined)
             : '개인정보를 확인하고 있습니다.';
@@ -627,8 +631,8 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
                 aria-describedby={analysisDescriptionId}
                 id="parent-message-title" label="문의 제목" maxLength={COMPLAINT_TITLE_MAX_LENGTH} name="title"
                 onChange={(event) => updateField('title', event.target.value)}
-                onFocus={() => { if (!serverLocked) setEditingTitle(true); }} onBlur={() => setEditingTitle(false)}
-                placeholder="문의 제목을 입력해 주세요." readOnly={Boolean(threadId) || serverLocked} required value={draft.title} />
+                onFocus={() => { if (!titleLocked) setEditingTitle(true); }} onBlur={() => setEditingTitle(false)}
+                placeholder="문의 제목을 입력해 주세요." readOnly={titleLocked} required value={draft.title} />
               </> : null}
               <TextareaField containerClassName="parent-write-field parent-write-body" error={errors.body}
                 id="parent-message-body" label={embedded ? <>문의 내용 <span aria-hidden="true">*</span></> : '문의 내용'} maxLength={MESSAGE_MAX_LENGTH} name="body"

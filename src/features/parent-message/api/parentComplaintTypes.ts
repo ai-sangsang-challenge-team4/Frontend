@@ -26,9 +26,10 @@ export type ComplaintResponse = {
   waitingFor: WaitingFor;
 };
 
-// PATCH /complaints/{id}. Only the content of a DRAFT; the title cannot change after creation.
+// A changed title is sent at analysis time when supported by the draft update API.
 export type ComplaintDraftUpdateRequest = {
   content: string;
+  title?: string;
 };
 
 // PATCH /complaints/{id} and POST /complaints/{id}/send answer { message } instead of a DTO.
