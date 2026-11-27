@@ -25,7 +25,7 @@ type FieldErrors = Partial<Record<FieldName, string>>;
 type ServerPreview = { key: string } & (
   | { status: 'loading' }
   | { status: 'failed'; message: string }
-  | { status: 'ready'; text: string }
+  | { status: 'ready'; complaintId: number; text: string }
 );
 
 const ANALYSIS_FAILED_MESSAGE = 'AI 분석을 완료하지 못했어요. 작성한 내용은 유지됩니다. 잠시 후 다시 시도해 주세요.';
@@ -93,15 +93,19 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
   const [previewOpen, setPreviewOpen] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [serverPreview, setServerPreview] = useState<ServerPreview | null>(null);
-  const previewRequest = useRef<AbortController | null>(null);
-  useEffect(() => () => previewRequest.current?.abort(), []);
+  const previewRequest = useRef<{ controller: AbortController; completion: Promise<ServerComplaintDraft | undefined> } | null>(null);
+  useEffect(() => () => previewRequest.current?.controller.abort(), []);
   const [canReloadServerDraft, setCanReloadServerDraft] = useState(false);
   const [notice, setNotice] = useState<string | null>(location.state?.draftSaved ? '문의가 임시저장되었습니다.' : null);
   const analysisPending = useRef(false);
   const draftEdits = useRef(0);
   const reloadAttempt = useRef(0);
   useEffect(() => () => { reloadAttempt.current += 1; }, []);
-  const analysisInput = useRef<{ target: ServerDraftTarget | null; names: ReturnType<typeof getParentMessageNames> }>({ target: null, names: [] });
+  const analysisInput = useRef<{
+    target: ServerDraftTarget | null;
+    names: ReturnType<typeof getParentMessageNames>;
+    pendingPreview?: Promise<ServerComplaintDraft | undefined>;
+  }>({ target: null, names: [] });
   const creationKey = `${userId}:${draft.messageId}`;
   const [isCreatingServerDraft, setIsCreatingServerDraft] = useState(() => pendingCreations.has(creationKey));
   const loadingTitle = useRef<HTMLParagraphElement>(null);
@@ -134,6 +138,8 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
   const previewTitle = draft.title.trim();
   const previewBody = draft.body.trim();
   const previewKey = JSON.stringify([studentId, draft.teacherId, previewBody]);
+  const currentPreview = serverPreview?.key === previewKey &&
+    (serverPreview.status !== 'ready' || serverPreview.complaintId === draft.server?.complaintId) ? serverPreview : null;
   const previewTarget = useMemo(() => draft.server ?? (studentId && recipient && {
     studentId, teacherId: recipient.teacherId, teacherName: recipient.teacherName,
   }), [draft.server, recipient, studentId]);
@@ -147,20 +153,20 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
   }, [composerKey, draftId, navigate, threadId]);
 
   useEffect(() => {
-    if (!supportsServerPreview || !previewOpen || !previewTarget || !canRequestPreview || blocked || isAnalyzing || (!draft.server && editingTitle) ||
-      maskingFailed || previewRequest.current || serverPreview?.key === previewKey) return;
+    if (!supportsServerPreview || !previewOpen || !previewTarget || !canRequestPreview || blocked || isAnalyzing || isCreatingServerDraft || (!draft.server && editingTitle) ||
+      maskingFailed || previewRequest.current || currentPreview) return;
 
     // An open preview follows the latest text. Finish one write at a time and discard older results in the UI.
     const timer = window.setTimeout(() => {
       if (analysisPending.current || previewRequest.current) return;
       const controller = new AbortController();
-      previewRequest.current = controller;
       setServerPreview({ key: previewKey, status: 'loading' });
       const next = { ...draft, studentName, teacherName };
       let latestServer = draft.server;
       const persistServer = (server: ServerComplaintDraft | undefined) => {
         latestServer = server;
-        saveMessageDraft(userId, { ...next, server, review: server ? next.review : undefined });
+        const saved = readMessageDraft(userId, next.messageId) ?? next;
+        saveMessageDraft(userId, { ...saved, server, review: server ? saved.review : undefined });
       };
       const load = async () => {
         try {
@@ -175,29 +181,34 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
           const masking = await maskInitialDraft(latestServer, content, persistServer, controller.signal, names);
           controller.signal.throwIfAborted();
           persistServer({ ...masking.server, contentVersion: masking.contentVersion });
-          setServerPreview({ key: previewKey, status: 'ready', text: masking.text });
+          if (!analysisPending.current) {
+            setServerPreview({ key: previewKey, status: 'ready', complaintId: masking.server.complaintId, text: masking.text });
+          }
         } catch (error) {
-          if (controller.signal.aborted) return;
+          if (controller.signal.aborted) return latestServer;
           if (isApiError(error) && error.code === 'COMPLAINT_NOT_FOUND') {
             try { persistServer(undefined); } catch { /* The form still drops the missing server link. */ }
           }
-          setServerPreview({ key: previewKey, status: 'failed', message: '마스킹 결과를 불러오지 못했습니다. 미리보기를 다시 열어 주세요.' });
+          if (!analysisPending.current) {
+            setServerPreview({ key: previewKey, status: 'failed', message: '마스킹 결과를 불러오지 못했습니다. 미리보기를 다시 열어 주세요.' });
+          }
         } finally {
           previewRequest.current = null;
           if (!controller.signal.aborted) {
             setIsCreatingServerDraft(false);
-            if (latestServer !== draft.server) setDraft((current) => ({
+            if (!analysisPending.current && latestServer !== draft.server) setDraft((current) => ({
               ...current, server: latestServer, studentName, teacherName,
               review: latestServer ? current.review : undefined,
             }));
           }
         }
+        return latestServer;
       };
-      void load();
+      previewRequest.current = { controller, completion: Promise.resolve().then(load) };
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [blocked, canRequestPreview, draft, editingTitle, isAnalyzing, maskingFailed, names, previewBody, previewKey, previewOpen, previewTarget,
-    resumeDraft, serverPreview, studentName, supportsServerPreview, teacherName, userId]);
+  }, [blocked, canRequestPreview, currentPreview, draft, editingTitle, isAnalyzing, isCreatingServerDraft, maskingFailed, names,
+    previewBody, previewKey, previewOpen, previewTarget, resumeDraft, studentName, supportsServerPreview, teacherName, userId]);
 
   // Recover a saved server follow-up when there is no browser draft (e.g. after changing devices).
   useEffect(() => {
@@ -233,17 +244,17 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
   // Opened again while an earlier composer's creation is still running: link its result when it arrives.
   useEffect(() => {
     const pending = pendingCreations.get(creationKey);
-    if (!pending || draft.server) return;
+    if (!pending) return;
     let active = true;
     pending.then((server) => {
-      if (active) setDraft((previous) => previous.server ? previous : { ...previous, server });
+      if (active && !analysisPending.current) setDraft((previous) => ({ ...previous, server }));
     }, () => undefined).finally(() => {
       if (active) setIsCreatingServerDraft(false);
     });
     return () => {
       active = false;
     };
-  }, [creationKey, draft.server]);
+  }, [creationKey]);
 
   useEffect(() => {
     if (!isAnalyzing) return;
@@ -256,9 +267,10 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
     if (!embedded) window.scrollTo({ top: 0, behavior: 'instant' });
 
     const controller = new AbortController();
-    const { target, names } = analysisInput.current;
+    const { target, names, pendingPreview } = analysisInput.current;
     let latestServer = draft.server;
     let creationFailed = false;
+    let createdDraft = false;
     // Keeps the server draft in the form when the analysis stops early, so a retry reuses it.
     const keepServerDraft = () => {
       if (latestServer === draft.server) return;
@@ -271,35 +283,43 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
     };
     const persistServer = (server: ServerComplaintDraft) => {
       latestServer = server;
-      saveMessageDraft(userId, { ...draft, server });
+      if (!controller.signal.aborted) saveMessageDraft(userId, { ...draft, server });
     };
     const analyze = async () => {
       let analysis: ParentMessageAnalysis;
       try {
         if (isServer) {
           if (!target) throw new Error(ANALYSIS_FAILED_MESSAGE);
-          let current = draft;
-          if (!current.server) {
+          if (pendingPreview) {
+            latestServer = await pendingPreview;
+            controller.signal.throwIfAborted();
+          }
+          const pendingCreation = pendingCreations.get(creationKey);
+          if (pendingCreation) {
+            latestServer = await pendingCreation.catch(() => latestServer);
+            controller.signal.throwIfAborted();
+          }
+          const current = { ...draft, server: latestServer };
+          analysis = (await analyzeServerDraft(current, target, persistServer, controller.signal, names, async (next, recipient) => {
             // Leaving the analysis does not cancel the creation; a new attempt waits for the same one.
             setIsCreatingServerDraft(true);
             try {
-              latestServer = await getOrCreateServerDraft(userId, draft, target, names);
+              const server = await getOrCreateServerDraft(userId, next, recipient, names);
+              createdDraft = true;
+              return server;
             } catch (failure) {
               creationFailed = true;
               throw failure;
             } finally {
               setIsCreatingServerDraft(false);
             }
-            current = { ...draft, server: latestServer };
-            controller.signal.throwIfAborted();
-          }
-          analysis = (await analyzeServerDraft(current, target, persistServer, controller.signal, names)).analysis;
+          })).analysis;
         } else {
           analysis = await analyzeParentMessage(draft, controller.signal, names);
         }
       } catch (failure) {
         if (controller.signal.aborted) {
-          keepServerDraft();
+          if (!analysisPending.current) keepServerDraft();
           return;
         }
         if (failure instanceof MaskingError) {
@@ -311,7 +331,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
           analysis = { status: 'failed', revisedText: null, risks: [], meaningWarning: null };
         } else {
           // Without a stored analysis the server refuses to submit, so the parent stays on the form to retry.
-          if (isApiError(failure) && failure.code === 'COMPLAINT_NOT_FOUND') {
+          if (!createdDraft && isApiError(failure) && failure.code === 'COMPLAINT_NOT_FOUND') {
             // The stored link is dropped too, so reopening the draft does not retry the missing complaint.
             latestServer = undefined;
             try {
@@ -321,10 +341,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
             }
           }
           stopAnalyzing();
-          if (isApiError(failure) && failure.code === 'DRAFT_TITLE_NOT_SAVED') {
-            setErrors({ title: failure.message });
-            window.requestAnimationFrame(() => document.getElementById('parent-message-title')?.focus());
-          } else if (isRiskAnalysisSafetyError(failure)) {
+          if (isRiskAnalysisSafetyError(failure)) {
             setErrors({ body: getApiErrorMessage(failure) });
           } else if (isApiError(failure) && failure.code === 'INVALID_COMPLAINT_RECIPIENT') {
             setErrors({ teacherId: getApiErrorMessage(failure) });
@@ -341,7 +358,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
         }
       }
       if (controller.signal.aborted) {
-        keepServerDraft();
+        if (!analysisPending.current) keepServerDraft();
         return;
       }
       try {
@@ -355,7 +372,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
     void analyze();
 
     return () => controller.abort();
-  }, [blocked, draft, embedded, isAnalyzing, isServer, isServerFollowUp, navigate, retryRecipients, userId]);
+  }, [blocked, creationKey, draft, embedded, isAnalyzing, isServer, isServerFollowUp, navigate, retryRecipients, userId]);
 
   async function reloadServerFollowUp() {
     const thread = initial.thread;
@@ -440,7 +457,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
 
   function handleAnalyze(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
-    if (analysisPending.current || previewRequest.current || blocked || needsStudentName) return;
+    if (analysisPending.current || blocked || needsStudentName) return;
     const nextErrors: FieldErrors = {};
     if (isServer && !isServerFollowUp && !studentId) nextErrors.studentId = '문의할 자녀를 선택해 주세요.';
     const teacher = teacherOptions.find((option) => option.value === draft.teacherId);
@@ -491,10 +508,11 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
         ? { complaintId: initial.thread.serverComplaintId, teacherId: Number(initial.thread.teacherId), teacherName: initial.thread.teacherName }
         : studentId && recipient
         ? { studentId, teacherId: recipient.teacherId, teacherName: recipient.teacherName } : null);
-      analysisInput.current = { target, names };
+      analysisInput.current = { target, names, pendingPreview: previewRequest.current?.completion };
       analysisPending.current = true;
       setMaskingFailed(false);
       setPreviewOpen(false);
+      setServerPreview(null);
       setEditingTitle(false);
       setNotice(null);
       setDraft(nextDraft);
@@ -532,7 +550,6 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
   const analysisDetail = threadId ? undefined
     : isServer ? '서버 초안이 생성되면 자녀·문의 대상이 확정됩니다. 제목은 AI 분석을 시작할 때 확정됩니다.'
       : '분석 결과를 확인한 뒤 문의를 전송할 수 있습니다.';
-  const currentPreview = serverPreview?.key === previewKey ? serverPreview : null;
   const titlePreview = maskContactInfo(draft.title, names);
   const privacyPreview = currentPreview?.status === 'ready'
     ? { text: `제목: ${titlePreview.text}\n내용: ${currentPreview.text}`, count: titlePreview.count + countMaskingLabels(currentPreview.text) }
@@ -671,7 +688,7 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
                 </p> : null}
                 <div className="parent-write-actions">
                   <Button className="parent-write-save" disabled={needsStudentName || serverPreview?.status === 'loading'} leftIcon={<Save size={18} />} onClick={handleSaveDraft} size="md" variant="outline">임시저장</Button>
-                  <Button aria-describedby={analysisDescriptionId} className="parent-write-analyze" disabled={blocked || needsStudentName || teacherOptions.length === 0 || maskingFailed || serverPreview?.status === 'loading'}
+                  <Button aria-describedby={analysisDescriptionId} className="parent-write-analyze" disabled={blocked || needsStudentName || teacherOptions.length === 0 || maskingFailed}
                     leftIcon={<Send size={18} />} size="md" type="submit">AI 분석 시작</Button>
                 </div>
               </div>

@@ -26,10 +26,9 @@ export type ComplaintResponse = {
   waitingFor: WaitingFor;
 };
 
-// A changed title is sent at analysis time when supported by the draft update API.
+// PATCH /complaints/{id} updates only the body of an existing draft.
 export type ComplaintDraftUpdateRequest = {
   content: string;
-  title?: string;
 };
 
 // PATCH /complaints/{id} and POST /complaints/{id}/send answer { message } instead of a DTO.

@@ -27,12 +27,13 @@ async function setup(page: Page, options: {
   findingsResponse?: Partial<RiskRevisionResponse>;
   analysisErrorCode?: string; sendErrorCode?: string; noRevision?: boolean;
   lifecycle?: { status: 'OPEN' | 'ANSWERED' | 'CLOSED'; waitingFor?: 'PARENT' | 'TEACHER'; closeConflict?: boolean };
-  uncachedFollowUp?: boolean; cachedAnswered?: boolean; studentName?: string; supportsTitleUpdate?: boolean;
+  uncachedFollowUp?: boolean; cachedAnswered?: boolean; studentName?: string;
 } = {}) {
   const calls: string[] = [];
   const studentName = options.studentName ?? 'Demo Student';
   let content = maskedContent;
-  let savedTitle = thread.title;
+  let nextComplaintId = 42;
+  const initialDrafts = new Map<number, { title: string; content: string }>();
   let savedFollowUp = false;
   let sendAttempts = 0;
   let complaintStatus: ParentConversationResponse['status'] = options.lifecycle?.status ?? (options.followUp ? 'ANSWERED' : 'OPEN');
@@ -48,6 +49,8 @@ async function setup(page: Page, options: {
     const request = route.request();
     const path = new URL(request.url()).pathname.replace('/api', '');
     const key = `${request.method()} ${path}`;
+    const complaintId = Number(path.split('/')[2]);
+    const initialDraft = initialDrafts.get(complaintId);
     calls.push(key);
     let json: unknown;
     let status = 200;
@@ -60,31 +63,40 @@ async function setup(page: Page, options: {
       }; break;
       case 'GET /users/me': json = { userId: 101, email: 'parent@example.com', name: 'Demo Parent', role: 'PARENT', students: [{ studentId: 10, name: studentName, studentNo: '1' }] }; break;
       case 'GET /complaints/recipients': json = [{ teacherId: 20, teacherName: 'Demo Teacher', homeroomTeacher: true }]; break;
-      case 'GET /complaints/42': json = {
-        complaintId: 42, title: savedTitle, teacherName: thread.teacherName, content: thread.finalBody,
+      case 'GET /complaints/42':
+      case 'GET /complaints/43': json = {
+        complaintId, title: initialDraft?.title ?? thread.title, teacherName: thread.teacherName,
+        content: initialDraft?.content ?? thread.finalBody,
         studentId: 10, studentName, parentName: 'Demo Parent', riskLevel: null,
         status: complaintStatus, waitingFor: waitingFor(), createdAt: thread.sentAt, updatedAt: followUpSentAt ?? thread.sentAt,
       }; break;
-      case 'POST /complaints':
-        expect(request.postDataJSON().content).not.toContain('010-1234-5678');
-        content = request.postDataJSON().content;
-        savedTitle = request.postDataJSON().title;
-        json = { complaintId: 42, status: 'DRAFT', waitingFor: 'NONE' }; break;
-      case 'PATCH /complaints/42': {
+      case 'POST /complaints': {
         const draft = request.postDataJSON();
+        expect(draft.content).not.toContain('010-1234-5678');
+        const id = nextComplaintId++;
         content = draft.content;
-        if (options.supportsTitleUpdate && draft.title !== undefined) savedTitle = draft.title;
+        initialDrafts.set(id, { title: draft.title, content });
+        json = { complaintId: id, status: 'DRAFT', waitingFor: 'NONE' }; break;
+      }
+      case 'PATCH /complaints/42':
+      case 'PATCH /complaints/43': {
+        const draft = request.postDataJSON();
+        expect(draft).toEqual({ content: expect.any(String) });
+        content = draft.content;
+        if (initialDraft) initialDrafts.set(complaintId, { ...initialDraft, content });
         json = { message: '수정됨' }; break;
       }
       case 'POST /complaints/42/mask':
+      case 'POST /complaints/43/mask':
         expect(request.postData()).toBeNull();
         status = options.maskFailure ? 500 : 200;
-        json = options.maskFailure ? { code: 'INTERNAL_SERVER_ERROR' } : { complaintId: 42, contentVersion: 1, maskedContent: content }; break;
+        json = options.maskFailure ? { code: 'INTERNAL_SERVER_ERROR' } : { complaintId, contentVersion: 1, maskedContent: initialDraft?.content ?? content }; break;
       case 'POST /complaints/42/risk-analysis':
+      case 'POST /complaints/43/risk-analysis':
       case 'POST /complaints/42/messages/101/risk-analysis':
         status = options.analysisErrorCode ? 500 : 200;
         json = options.analysisErrorCode ? { code: options.analysisErrorCode, message: 'Internal Java exception' }
-          : { analysisId: options.followUp ? 8 : 7, complaintId: 42, riskScore: 30, riskLevel: 'HIGH', ...options.summary }; break;
+          : { analysisId: options.followUp ? 8 : 7, complaintId, riskScore: 30, riskLevel: 'HIGH', ...options.summary }; break;
       case 'GET /risk-analyses/7/findings':
       case 'GET /risk-analyses/8/findings': json = {
         findings: options.finding ? [{ code: 'THREAT', evidences: ['상담 시간을 알려 주세요.'], revisionSuggestions: [] }] : [],
@@ -121,7 +133,8 @@ async function setup(page: Page, options: {
         }
         json = status === 500 ? { code: options.sendErrorCode ?? 'INTERNAL_SERVER_ERROR' }
           : { ...followUp(), status: 'SENT', waitingFor: 'TEACHER', sentAt: followUpSentAt, ...options.submission }; break;
-      case 'GET /complaints/42/messages': {
+      case 'GET /complaints/42/messages':
+      case 'GET /complaints/43/messages': {
         const messages: ParentConversationResponse['messages'] = options.lifecycle ? [
           { messageId: 1, type: 'PARENT_INQUIRY', senderRole: 'PARENT', senderName: 'Demo Parent', content: thread.finalBody,
             status: 'READ', sentAt: thread.sentAt, readAt: null },
@@ -130,7 +143,7 @@ async function setup(page: Page, options: {
         ] : [];
         if (options.lifecycle && followUpSentAt) messages.push({ messageId: 101, type: 'PARENT_INQUIRY', senderRole: 'PARENT',
           senderName: 'Demo Parent', content, status: 'SENT', sentAt: followUpSentAt, readAt: null });
-        json = { complaintId: 42, status: complaintStatus, waitingFor: waitingFor(), messages };
+        json = { complaintId, status: complaintStatus, waitingFor: waitingFor(), messages };
         break;
       }
       case 'POST /complaints/42/close':
@@ -142,6 +155,7 @@ async function setup(page: Page, options: {
           : { complaintId: 42, status: complaintStatus, waitingFor: waitingFor() };
         break;
       case 'POST /complaints/42/send':
+      case 'POST /complaints/43/send':
         status = options.sendErrorCode ? 500 : 200;
         json = options.sendErrorCode ? { code: options.sendErrorCode } : { message: '제출됨', ...options.submission }; break;
       default: throw new Error(`Unexpected request: ${key}`);
@@ -254,40 +268,133 @@ test('작성 미리보기에서 서버가 같은 반 학생 이름을 가리고 
   await expect(page.getByRole('heading', { name: '전송 완료', exact: true })).toBeVisible();
 });
 
-for (const supportsTitleUpdate of [true, false]) {
-  test(`작성 중 제목은 편집할 수 있고 분석은 서버 제목 확인 후 시작한다 (${supportsTitleUpdate ? '저장 성공' : '제목 미저장'})`, async ({ page }) => {
-    const calls = await setup(page, { noRevision: true, supportsTitleUpdate });
+const serverPreviewText = '상담 시간을 알려 주세요. [전화번호] [제3자 학생명]';
+
+async function openServerPreview(page: Page, calls: string[]) {
+  await page.route('**/api/complaints/42/mask', async (route) => {
+    calls.push('POST /complaints/42/mask');
+    await route.fulfill({ json: { complaintId: 42, contentVersion: 1, maskedContent: serverPreviewText } });
+  }, { times: 1 });
+  const privacy = page.getByRole('region', { name: '개인정보 마스킹 상태', exact: true });
+  await privacy.getByText('마스킹 결과 보기', { exact: true }).click();
+  const preview = privacy.locator('.privacy-masking-preview p');
+  await expect(preview).toContainText(serverPreviewText);
+  return preview;
+}
+
+test('제목만 바꾸면 서버 본문 미리보기를 유지하고 마스킹한 제목이 같으면 초안을 재사용한다', async ({ page }) => {
+  const calls = await setup(page, { noRevision: true });
+  const title = page.getByLabel('문의 제목', { exact: true });
+  const editor = page.getByLabel('문의 내용', { exact: true });
+  await title.fill('상담 010-1234-5678');
+  await editor.fill(body);
+  const preview = await openServerPreview(page, calls);
+
+  await page.clock.install();
+  await title.fill('Demo Student 상담 일정 확인');
+  await expect(preview).toContainText('제목: [이름] 상담 일정 확인');
+  await expect(preview).toContainText(serverPreviewText);
+  await title.fill('상담 010-9876-5432');
+  await editor.focus();
+  await page.clock.runFor(400);
+  await expect(preview).toContainText('제목: 상담 [전화번호]');
+  await expect(preview).toContainText(serverPreviewText);
+  const writes = () => calls.filter((call) => /^(POST|PATCH) \/complaints/.test(call));
+  expect(writes()).toEqual(['POST /complaints', 'POST /complaints/42/mask']);
+
+  await page.getByRole('button', { name: 'AI 분석 시작', exact: true }).click();
+  await expect(page).toHaveURL(/\/review$/);
+  expect(writes().slice(2)).toEqual(['POST /complaints/42/mask', 'POST /complaints/42/risk-analysis']);
+});
+
+test('제목이 달라지면 진행 중인 미리보기를 마친 후 최신 본문으로 새 초안을 분석하고 전송한다', async ({ page }) => {
+  const calls = await setup(page, { noRevision: true });
+  const title = page.getByLabel('문의 제목', { exact: true });
+  const editor = page.getByLabel('문의 내용', { exact: true });
+  await editor.fill(body);
+  const preview = await openServerPreview(page, calls);
+
+  let startMask!: () => void;
+  let releaseMask!: () => void;
+  const maskStarted = new Promise<void>((resolve) => { startMask = resolve; });
+  const maskGate = new Promise<void>((resolve) => { releaseMask = resolve; });
+  await page.route('**/api/complaints/42/mask', async (route) => {
+    startMask();
+    await maskGate;
+    await route.fallback();
+  });
+  try {
+    await editor.fill('저장 중인 이전 본문입니다.');
+    await maskStarted;
+    await title.fill('Demo Student 상담 일정 확인');
+    await editor.fill('최신 일정은 010-1234-5678로 연락해 주세요.');
+    await expect(preview).toHaveCount(0);
+    const create = page.waitForRequest((request) => request.method() === 'POST' && new URL(request.url()).pathname === '/api/complaints');
+    const start = page.getByRole('button', { name: 'AI 분석 시작', exact: true });
+    await expect(start).toBeEnabled();
+    await start.evaluate((element) => {
+      const button = element as HTMLButtonElement;
+      button.click();
+      button.click();
+    });
+    await expect(page.getByRole('region', { name: '메시지 분석 중', exact: true })).toBeVisible();
+    expect(calls.filter((call) => call === 'POST /complaints')).toHaveLength(1);
+    releaseMask();
+
+    expect((await create).postDataJSON()).toEqual({
+      studentId: 10, teacherId: 20, title: '[이름] 상담 일정 확인', content: '최신 일정은 [전화번호]로 연락해 주세요.',
+    });
+    await expect(page).toHaveURL(/\/review$/);
+    expect(calls.filter((call) => /^(POST|PATCH) \/complaints/.test(call))).toEqual([
+      'POST /complaints', 'POST /complaints/42/mask', 'PATCH /complaints/42', 'POST /complaints/42/mask',
+      'POST /complaints', 'POST /complaints/43/mask', 'POST /complaints/43/risk-analysis',
+    ]);
+    await expect(page.getByLabel('원문 내용', { exact: true })).toHaveText('최신 일정은 [전화번호]로 연락해 주세요.');
+    await page.getByRole('button', { name: '전송하기', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: '문의를 전송할까요?', exact: true });
+    await expect(dialog).toContainText('[이름] 상담 일정 확인');
+    await dialog.getByRole('button', { name: '확인 후 전송', exact: true }).click();
+    await expect(page.getByRole('heading', { name: '전송 완료', exact: true })).toBeVisible();
+    expect(calls.filter((call) => call.endsWith('/send'))).toEqual(['POST /complaints/43/send']);
+    expect(calls.some((call) => call.startsWith('DELETE '))).toBe(false);
+  } finally {
+    releaseMask();
+  }
+});
+
+for (const failure of ['mask', 'risk-analysis']) {
+  test(`새 초안의 ${failure} 요청이 실패해도 입력과 새 문의 ID를 보존해 재시도한다`, async ({ page }) => {
+    const calls = await setup(page, { noRevision: true });
     const title = page.getByLabel('문의 제목', { exact: true });
-    await page.getByLabel('문의 내용', { exact: true }).fill(body);
-    const privacy = page.getByRole('region', { name: '개인정보 마스킹 상태', exact: true });
-    await privacy.getByText('마스킹 결과 보기', { exact: true }).click();
-    const preview = privacy.locator('.privacy-masking-preview p');
-    await expect(preview).toContainText(maskedContent);
-    await expect(title).toBeEditable();
+    const editor = page.getByLabel('문의 내용', { exact: true });
+    await editor.fill(body);
+    await openServerPreview(page, calls);
 
     const editedTitle = 'Demo Student 상담 일정 확인';
-    const expectedTitle = '[이름] 상담 일정 확인';
     await title.fill(editedTitle);
-    await expect(preview).toContainText(`제목: ${expectedTitle}`);
-    await expect(preview).toContainText(maskedContent);
-    expect(calls.filter((call) => call === 'POST /complaints/42/mask')).toHaveLength(1);
-    expect(calls).not.toContain('PATCH /complaints/42');
+    const endpoint = `/complaints/43/${failure}`;
+    await page.route(`**/api${endpoint}`, async (route) => {
+      calls.push(`POST ${endpoint}`);
+      const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('teacher-hub.parent-message-draft.101')!));
+      expect(saved).toMatchObject({
+        title: editedTitle, body, server: { complaintId: 43, title: '[이름] 상담 일정 확인' },
+      });
+      await route.fulfill({ status: 500, json: { code: 'INTERNAL_SERVER_ERROR' } });
+    }, { times: 1 });
+    const start = page.getByRole('button', { name: 'AI 분석 시작', exact: true });
+    await start.click();
+    await expect(page.getByRole('alert').filter({ hasText: /잠시 후/ })).toBeVisible();
+    await expect(title).toHaveValue(editedTitle);
+    await expect(editor).toHaveValue(body);
 
-    const update = page.waitForRequest((request) => request.method() === 'PATCH' && new URL(request.url()).pathname === '/api/complaints/42');
-    await page.getByRole('button', { name: 'AI 분석 시작', exact: true }).click();
-    expect((await update).postDataJSON()).toEqual({ title: expectedTitle, content: maskedContent });
-    if (supportsTitleUpdate) {
-      await expect(page).toHaveURL(/\/review$/);
-      expect(calls.indexOf('GET /complaints/42')).toBeLessThan(calls.indexOf('POST /complaints/42/risk-analysis'));
-      await page.getByRole('button', { name: '전송하기', exact: true }).click();
-      await expect(page.getByRole('dialog', { name: '문의를 전송할까요?' })).toContainText(expectedTitle);
-    } else {
-      await expect(page.getByText('서버에서 제목 변경이 확인되지 않았습니다.', { exact: true })).toBeVisible();
-      await expect(title).toHaveValue(editedTitle);
-      await expect(title).toBeEditable();
-      expect(calls).not.toContain('POST /complaints/42/risk-analysis');
-    }
-    expect(calls.filter((call) => call === 'POST /complaints')).toHaveLength(1);
+    await page.reload();
+    await expect(title).toHaveValue(editedTitle);
+    await expect(editor).toHaveValue(body);
+    await start.click();
+    await expect(page).toHaveURL(/\/review$/);
+    expect(calls.filter((call) => call === 'POST /complaints')).toHaveLength(2);
+    expect(calls.filter((call) => call === `POST ${endpoint}`)).toHaveLength(2);
+    expect(calls).not.toContain('POST /complaints/42/risk-analysis');
   });
 }
 
@@ -689,7 +796,7 @@ test('기존 초안은 자녀 이름 조회 중과 실패 상태에서 저장·�
   await expect(child).toHaveValue('11');
   await expect(child).toBeDisabled();
   await expect(page.getByLabel('문의 대상', { exact: true })).toBeDisabled();
-  await expect(page.getByLabel('문의 제목', { exact: true })).toHaveAttribute('readonly', '');
+  await expect(page.getByLabel('문의 제목', { exact: true })).toBeEditable();
   await save.click();
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('teacher-hub.parent-message-draft.101')!).studentName)).toBe('김두리');
   const update = page.waitForRequest((request) => request.method() === 'PATCH' && new URL(request.url()).pathname === '/api/complaints/42');
