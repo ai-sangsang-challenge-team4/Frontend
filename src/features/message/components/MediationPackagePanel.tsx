@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { getApiErrorMessage } from '../../../shared/api';
 import { Accordion, Button, Modal } from '../../../shared/components/ui';
 import { formatEscalationTime, historyEventLabel } from '../../escalation/escalationRules';
+import { formatServerMaskedText } from '../../pii/masking';
 import type { HistoryEventType } from '../../../shared/types';
 import { MediationPackageUnconfirmedError, teacherInboxApi, type MediationPackageResponse } from '../api/teacherInboxApi';
 import type { BoardThread, EvidencePackageCreateResult } from '../types';
@@ -93,7 +94,11 @@ export function MediationPackagePanel({ thread, onCreate }: {
           </section>) },
           { id: 'analyses', title: `위험 분석 ${detail.content.analyses.length}건`, content: detail.content.analyses.map((analysis) => <section key={analysis.analysisId}>
             <h3>{({ LOW: '일반', MEDIUM: '주의', HIGH: '높음', EMERGENCY: '긴급' } as Record<string, string>)[analysis.riskLevel] ?? '위험도 확인 필요'} · {analysis.riskScore}점</h3>
-            {analysis.riskTags.map((tag) => <div key={tag.code}><h3>{tag.name}</h3><p>{tag.evidence}</p><p>{tag.reason}</p></div>)}
+            {analysis.riskTags.map((tag) => <div key={tag.code}>
+              <h3>{tag.name}</h3>
+              <p>{formatServerMaskedText(tag.evidence ?? '')}</p>
+              <p>{formatServerMaskedText(tag.reason ?? '')}</p>
+            </div>)}
           </section>) },
           { id: 'history', title: '처리 기록', content: <>
             {!detail.content.responseHistory.logComplete ? <p role="status">일부 처리 기록이 누락되어 있습니다.</p> : null}

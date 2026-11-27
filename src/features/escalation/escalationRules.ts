@@ -1,6 +1,7 @@
 import type { StatusChipStatus } from '../../shared/components/ui';
 import { toServerInstant } from '../../shared/api';
 import type { EscalationStatus, HistoryEventType, RiskFactorStatus, RiskLevel, RiskReviewStatus } from '../../shared/types';
+import { formatServerMaskedText } from '../pii/masking';
 import type { DetectedFactor } from './escalationTypes';
 
 export function getDetectedFactorState(factor: DetectedFactor): RiskFactorStatus {
@@ -14,8 +15,8 @@ export function getDetectedFactorState(factor: DetectedFactor): RiskFactorStatus
 
 export function getDetectedFactorEvidence(factor: DetectedFactor): string[] {
   // An explicitly empty span list must not revive an older evidence string.
-  if (factor.evidenceSpans) return factor.evidenceSpans.map((span) => span.text).filter((text) => text.trim());
-  return factor.evidence?.trim() ? [factor.evidence] : [];
+  const evidence = factor.evidenceSpans?.map((span) => span.text) ?? (factor.evidence ? [factor.evidence] : []);
+  return evidence.filter((text) => text.trim()).map(formatServerMaskedText);
 }
 
 export const escalationStatusLabel: Record<EscalationStatus, string> = {

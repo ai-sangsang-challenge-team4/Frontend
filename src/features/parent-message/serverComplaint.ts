@@ -1,6 +1,6 @@
 import { ApiError, isAbortError, isApiError, isRiskAnalysisSafetyError, toServerInstant } from '../../shared/api';
 import type { DetectedFactorCode } from '../escalation/escalationTypes';
-import { requireMaskedText, type KnownNames } from '../pii/masking';
+import { formatServerMaskedText, requireMaskedText, type KnownNames } from '../pii/masking';
 import { parentComplaintApi, type ComplaintRecipientResponse, type ParentFollowUpResponse, type RiskRevisionResponse, type RiskSummaryResponse } from './api/parentComplaintApi';
 import { appendFollowUp, applyServerComplaintState, findSentSubmission } from './conversation';
 import { findSentMessage, storeSentMessage, type MessageDraft, type ServerComplaintDraft } from './messageDraft';
@@ -59,6 +59,9 @@ function expressionLines(text: string) {
 
 // One expression per evidence line, plus suggestion lines that are not among the evidence.
 export function toServerAnalysis(revision: RiskRevisionResponse, maskedContent: string, tagNames: RiskTagNames = {}): ParentMessageAnalysis {
+  if ((!revision.revisionStatus || revision.revisionStatus === 'COMPLETED') && revision.finalRevision?.content.includes('[개인정보:')) {
+    revision = { ...revision, revisionStatus: 'UNAVAILABLE' };
+  }
   // The status is authoritative: pending or unavailable output must not revive a stale revision.
   if (revision.revisionStatus && revision.revisionStatus !== 'COMPLETED') {
     revision = {
@@ -69,13 +72,19 @@ export function toServerAnalysis(revision: RiskRevisionResponse, maskedContent: 
   const risks: RiskExpression[] = revision.findings.flatMap((finding) => {
     const tag = riskTags[finding.code];
     if (!tag) return [];
+    const suggestions = finding.revisionSuggestions.map((suggestion) => ({
+      ...suggestion,
+      originalExpression: formatServerMaskedText(suggestion.originalExpression),
+      suggestedExpression: formatServerMaskedText(suggestion.suggestedExpression),
+      reason: formatServerMaskedText(suggestion.reason),
+    }));
     const excerpts = [...new Set([
-      ...finding.evidences.flatMap(expressionLines),
-      ...finding.revisionSuggestions.flatMap((suggestion) => expressionLines(suggestion.originalExpression)),
+      ...finding.evidences.flatMap((evidence) => expressionLines(formatServerMaskedText(evidence))),
+      ...suggestions.flatMap((suggestion) => expressionLines(suggestion.originalExpression)),
     ])];
     return (excerpts.length > 0 ? excerpts : ['']).map((excerpt, index) => {
-      const suggestion = finding.revisionSuggestions.find((item) => expressionLines(item.originalExpression).includes(excerpt))
-        ?? (excerpts.length <= 1 ? finding.revisionSuggestions[0] : undefined);
+      const suggestion = suggestions.find((item) => expressionLines(item.originalExpression).includes(excerpt))
+        ?? (excerpts.length <= 1 ? suggestions[0] : undefined);
       return {
         id: `${finding.code}-${index}`,
         kind: tag.kind,
@@ -86,14 +95,15 @@ export function toServerAnalysis(revision: RiskRevisionResponse, maskedContent: 
       };
     });
   });
-  const revised = revision.finalRevision?.content.trim() || null;
+  const revised = revision.finalRevision?.content ?? '';
+  const revisedTrimmed = revised.trim();
   return {
     status: 'ready',
     revisionStatus: revision.revisionStatus,
     // An omitted field preserves the previous result. An explicit null clears it.
     ...(revision.emergencyOverride !== undefined ? { emergencyOverride: revision.emergencyOverride } : {}),
-    revisedText: revised && revised !== maskedContent ? revised : null,
-    revisionReason: revision.finalRevision?.reason?.trim() || null,
+    revisedText: revisedTrimmed && revisedTrimmed !== maskedContent ? revised : null,
+    revisionReason: formatServerMaskedText(revision.finalRevision?.reason ?? '').trim() || null,
     risks,
     meaningWarning: revision.findings.some((finding) => finding.code === 'LEGAL') ? OFFICIAL_MEANING_WARNING : null,
   };
@@ -217,7 +227,7 @@ export async function analyzeServerDraft(
 
   // /mask addresses the initial draft only. Additional-message analysis masks its own draft on the server.
   const masking = server.serverMessageId === undefined ? await parentComplaintApi.mask(server.complaintId, signal) : null;
-  const maskedContent = requireMaskedText(masking?.maskedContent ?? content, names);
+  const maskedContent = requireMaskedText(masking ? formatServerMaskedText(masking.maskedContent) : content, names);
   let summary: RiskSummaryResponse;
   try {
     summary = server.serverMessageId === undefined

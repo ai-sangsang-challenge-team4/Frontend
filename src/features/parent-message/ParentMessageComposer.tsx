@@ -482,7 +482,10 @@ export function ParentMessageComposer({ userId, threadId, draftId, fresh = false
             </div>
             <div className="parent-analysis-privacy">
               <LockKeyhole aria-hidden="true" size={24} />
-              <p>전화번호·이메일·주민등록번호를 가린 문장으로 AI 분석을 진행하고 있습니다. 분석이 끝나면 전송할 내용을 직접 확인할 수 있습니다.</p>
+              <p>{isServer
+                ? 'AI 분석 전 학생명, 교사명, 같은 학급의 제3자 학생명, 전화번호, 이메일, 주민등록번호, 학번, 교직원번호를 가린 문장을 사용합니다.'
+                : '전화번호·이메일·주민등록번호와 확인된 이름을 가린 문장으로 AI 분석을 진행하고 있습니다.'}{' '}
+                분석이 끝나면 전송할 내용을 직접 확인할 수 있습니다.</p>
             </div>
             {embedded ? <Button onClick={handleBack} variant="outline">문의 작성으로 돌아가기</Button> : null}
           </section>

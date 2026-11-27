@@ -3,7 +3,7 @@ import type { ParentConversationResponse, RiskDetectorResponse, RiskRevisionResp
 
 const body = '상담 시간을 알려 주세요. 010-1234-5678';
 const maskedContent = '상담 시간을 알려 주세요. [전화번호]';
-const detector = {
+const detector: RiskDetectorResponse = {
   analysisId: 7,
   results: [{ code: 'THREAT', finalState: 'BOUNDARY',
     rule: { state: 'ABSENT', confidence: 0, evidenceSpans: [] },
@@ -166,6 +166,52 @@ async function analyze(page: Page) {
   await page.getByRole('button', { name: 'AI 분석 시작', exact: true }).click();
   await expect(page).toHaveURL(/\/review$/);
 }
+
+test('서버가 복원한 수정안을 표시하고 분석 근거의 내부 토큰은 가린다', async ({ page }) => {
+  const original = '이도윤 학생이 상담 시간을 알려 달라고 했습니다.';
+  const revision = '이도윤 학생과 상담할 수 있는 시간을 안내해 주세요.';
+  const evidence = '[개인정보:THIRD_PARTY_STUDENT_NAME:1] 학생이 상담 시간을 알려 달라고 했습니다.';
+  await setup(page, {
+    findingsResponse: {
+      revisionStatus: 'COMPLETED',
+      finalRevision: { content: revision, reason: '요청을 정리했습니다.' },
+      findings: [{ code: 'THREAT', evidences: [evidence], revisionSuggestions: [] }],
+    },
+    detector: { ...detector, results: [{ ...detector.results[0], llm: {
+      state: 'BOUNDARY', confidence: 0.65, evidenceSpans: [{ text: evidence, start: 0, end: evidence.length }],
+    } }] },
+  });
+  await page.route('**/api/complaints/42/mask', async (route) => {
+    await expect(page.getByRole('region', { name: '메시지 분석 중', exact: true })).toContainText(
+      'AI 분석 전 학생명, 교사명, 같은 학급의 제3자 학생명, 전화번호, 이메일, 주민등록번호, 학번, 교직원번호를 가린 문장을 사용합니다.',
+    );
+    await route.fulfill({ json: {
+      complaintId: 42, contentVersion: 1, maskedContent: '[제3자 학생명] 학생이 상담 시간을 알려 달라고 했습니다.',
+    } });
+  });
+  await page.getByLabel('문의 내용', { exact: true }).fill(original);
+  await page.getByRole('button', { name: 'AI 분석 시작', exact: true }).click();
+  await expect(page.getByLabel('AI 초안 내용', { exact: true })).toHaveValue(revision);
+
+  await page.getByRole('tab', { name: '원문', exact: true }).click();
+  await expect(page.getByLabel('원문 내용', { exact: true }).locator('mark')).toContainText('[제3자 학생명]');
+  const results = page.getByRole('region', { name: '위험 분석 결과', exact: true });
+  await results.getByRole('button', { name: '상세 탐지 결과 더보기', exact: true }).click();
+  await results.getByRole('button', { name: '서버에서 관리하는 협박 명칭 경계', exact: true }).click();
+  await expect(results.locator('blockquote')).toContainText('[제3자 학생명]');
+  await expect(page.locator('main')).not.toContainText('[개인정보:');
+});
+
+test('완료 응답의 수정안에 내부 토큰이 남으면 기존 수정안 실패 상태를 표시한다', async ({ page }) => {
+  await setup(page, { findingsResponse: {
+    revisionStatus: 'COMPLETED',
+    finalRevision: { content: '연락처는 [개인정보:PHONE:1]입니다.', reason: null },
+  } });
+  await analyze(page);
+  await expect(page.getByRole('status', { name: 'AI 수정안 상태' })).toContainText('AI 수정안을 제공하지 못했습니다.');
+  await expect(page.getByRole('tab', { name: 'AI 초안', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '전송하기', exact: true })).toBeEnabled();
+});
 
 test('작성한 이름을 미리보기와 문의 생성 및 전송 요청에서 가린다', async ({ page }) => {
   await setup(page, { noRevision: true });

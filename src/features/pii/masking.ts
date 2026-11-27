@@ -9,6 +9,25 @@ export class MaskingError extends Error {
   }
 }
 
+const serverMaskingLabels: Readonly<Record<string, string>> = {
+  STUDENT_NAME: '학생명',
+  THIRD_PARTY_STUDENT_NAME: '제3자 학생명',
+  TEACHER_NAME: '교사명',
+  ADDITIONAL_NAME: '사용자명',
+  STUDENT_ID: '학번',
+  TEACHER_ID: '교직원번호',
+  PHONE: '전화번호',
+  EMAIL: '이메일',
+  RESIDENT_ID: '주민등록번호',
+  CLASS_STUDENT: '학생정보',
+};
+
+// Analysis evidence can retain the indexed tokens sent to the model.
+export function formatServerMaskedText(text: string): string {
+  return text.replace(/\[개인정보:([A-Z_]+):\d+\]/g, (_token, category: string) =>
+    `[${serverMaskingLabels[category] ?? '개인정보'}]`);
+}
+
 // Covers at least what the backend PiiMaskingServiceImpl masks, in the same order (resident number, email,
 // phone), because the server stores the text it receives and shows it to the teacher; its own masking only
 // covers the copy sent to the LLM. The phone pattern also accepts "." separators, +82 mobile prefixes other

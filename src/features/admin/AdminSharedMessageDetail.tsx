@@ -11,6 +11,7 @@ import {
   getAdminEscalationRisk,
 } from '../escalation/api';
 import { apiRiskTone, formatEscalationTime, getDetectedFactorEvidence, getDetectedFactorState, historyEventLabel } from '../escalation/escalationRules';
+import { formatServerMaskedText } from '../pii/masking';
 import { RiskAnalysisNotice } from '../risk-analysis/RiskAnalysisNotice';
 import { AiRiskLabel } from '../risk-analysis/AiRiskLabel';
 import { AiJudgmentNotice } from '../safety/AiJudgmentNotice';
@@ -259,7 +260,7 @@ function toRiskFactorItem(factor: DetectedFactor, index: number) {
     content: (
       <div className="board-risk-factor-detail">
         <strong>판단 이유</strong>
-        <p>{factor.reason || (state === 'UNKNOWN'
+        <p>{factor.reason ? formatServerMaskedText(factor.reason) : (state === 'UNKNOWN'
           ? '이 항목의 분류 결과를 확인하지 못했습니다.'
           : state === 'ABSENT' ? '이 위험 요소는 탐지되지 않았습니다.' : '판단 이유가 제공되지 않았습니다.')}</p>
         {state === 'PRESENT' || state === 'BOUNDARY' ? (
