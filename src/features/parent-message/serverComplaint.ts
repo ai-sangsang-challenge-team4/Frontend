@@ -220,11 +220,12 @@ export async function analyzeServerDraft(
   persist: (server: ServerComplaintDraft) => void,
   signal: AbortSignal,
   names: KnownNames = [],
+  createDraft = createServerDraft,
 ): Promise<{ server: ServerComplaintDraft; analysis: ParentMessageAnalysis }> {
   const content = requireMaskedText(draft.body.trim(), names);
   let server = draft.server;
-  if (!server) {
-    server = await createServerDraft(draft, target, names);
+  if (!server || (!draft.threadId && requireMaskedText(draft.title.trim(), names) !== server.title)) {
+    server = await createDraft(draft, target, names);
     persist(server);
     signal.throwIfAborted();
   }

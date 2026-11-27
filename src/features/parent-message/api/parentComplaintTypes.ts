@@ -26,7 +26,7 @@ export type ComplaintResponse = {
   waitingFor: WaitingFor;
 };
 
-// PATCH /complaints/{id}. Only the content of a DRAFT; the title cannot change after creation.
+// PATCH /complaints/{id} updates only the body of an existing draft.
 export type ComplaintDraftUpdateRequest = {
   content: string;
 };
